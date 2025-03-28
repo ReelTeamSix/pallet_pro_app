@@ -1,0 +1,8 @@
+This is a placeholder for the icon.png file.
+
+In a real-world scenario, you would:
+1. Convert the SVG file to PNG using a tool like Inkscape, ImageMagick, or an online converter
+2. Place the PNG file in this directory
+3. Run `flutter pub run flutter_launcher_icons` to generate the app icons
+
+For now, you would need to manually create a PNG file from the SVG and place it here.
