@@ -31,6 +31,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     redirect: notifier._redirectLogic,
     routes: notifier._routes,
+    // Track navigation events to update current path without causing circular deps
+    observers: [
+      RouteObserver(),
+      // Custom observer to track current route
+      notifier._routeObserver,
+    ],
   );
 });
 
@@ -44,6 +50,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   bool _isBiometricAuthShowing = false;
   bool _wasResumed = false;
   bool _isNotifying = false;
+  bool _isOnSettingsScreen = false;
   DateTime _lastNotification = DateTime.now();
   // Add a timestamp to track when app started
   final DateTime _appStartTime = DateTime.now();
@@ -52,8 +59,17 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   // Timer to force periodic checks for splash timeout
   Timer? _splashTimeoutTimer;
 
+  // Create a route observer to track current screen
+  final _routeObserver = _RouterObserver();
+  
   @override
   void build() {
+    // Add callback to update settings screen flag
+    _routeObserver.onRouteChanged = (String path) {
+      _isOnSettingsScreen = path == '/settings';
+      debugPrint('RouterNotifier: Route changed to $path, isOnSettingsScreen: $_isOnSettingsScreen');
+    };
+    
     // Listen to both auth and user settings providers.
     // When either changes significantly (loading state, error, data presence),
     // notify the GoRouter to re-evaluate the redirect.
@@ -111,6 +127,17 @@ class RouterNotifier extends Notifier<void> implements Listenable {
         notifyListeners(); 
       });
       return;
+    }
+
+    // Ignore UserSettings changes if within settings context - use a cached location value
+    // rather than trying to access router (which causes circular dependency)
+    if (providerName == 'UserSettingsController') {
+      // Store path based on router lifecycle events rather than reading router directly
+      // If this is a settings update and we're on the settings screen, don't trigger a refresh
+      if (_isOnSettingsScreen) {
+        debugPrint('RouterNotifier: Ignoring UserSettings change while on settings screen');
+        return;
+      }
     }
 
     if (isLoading != wasLoading || hasError != hadError || hasValue != hadValue) {
@@ -276,7 +303,16 @@ class RouterNotifier extends Notifier<void> implements Listenable {
             GoRoute(
               path: '/settings',
               name: 'settings',
-              builder: (context, state) => const SettingsScreen(),
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const SettingsScreen(),
+                // Add a fade transition for smoother experience
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                // Use shorter duration for better responsiveness
+                transitionDuration: const Duration(milliseconds: 250),
+              ),
             ),
             // Add more routes here as needed
           ],
@@ -789,5 +825,61 @@ class BiometricAuthScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Custom route observer to track navigation events without circular dependencies.
+class _RouterObserver extends NavigatorObserver {
+  /// Callback to notify when routes change
+  Function(String path)? onRouteChanged;
+  
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _updateCurrentRoute(route);
+    super.didPush(route, previousRoute);
+  }
+  
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (newRoute != null) {
+      _updateCurrentRoute(newRoute);
+    }
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+  }
+  
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (previousRoute != null) {
+      _updateCurrentRoute(previousRoute);
+    }
+    super.didPop(route, previousRoute);
+  }
+  
+  void _updateCurrentRoute(Route<dynamic> route) {
+    // Extract path from route
+    final String? path = _extractPathFromRoute(route);
+    
+    if (path != null && onRouteChanged != null) {
+      onRouteChanged!(path);
+    }
+  }
+  
+  String? _extractPathFromRoute(Route<dynamic> route) {
+    // Try to extract GoRoute path
+    if (route.settings.name != null) {
+      return route.settings.name;
+    }
+    
+    // For go_router pages, extract from RouteMatchList if possible
+    final settings = route.settings;
+    if (settings is Page) {
+      final key = settings.key;
+      if (key is ValueKey<String> && key.value.startsWith('/')) {
+        return key.value;
+      }
+    }
+    
+    // Fallback to settings.name which might be null
+    return route.settings.name;
   }
 }

@@ -60,92 +60,242 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
 
   /// Updates the user settings.
   Future<void> updateUserSettings(UserSettings settings) async {
-    state = const AsyncValue.loading();
+    // Instead of setting to loading, optimize by using AsyncValue.guard
+    final currentSettings = state.valueOrNull;
     
-    try {
+    // Use AsyncValue.guard to handle errors while preserving state
+    state = await AsyncValue.guard(() async {
       final updatedSettings = await _userSettingsRepository.updateUserSettings(settings);
-      state = AsyncValue.data(updatedSettings);
-    } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
-      rethrow;
-    }
+      // Return combined settings - keep current state values and only update what changed
+      return updatedSettings;
+    });
   }
 
   /// Updates whether the user has completed onboarding.
   Future<void> updateHasCompletedOnboarding(bool hasCompleted) async {
-    state = const AsyncValue.loading();
-    
-    try {
-      final updatedSettings = await _userSettingsRepository.updateHasCompletedOnboarding(hasCompleted);
-      state = AsyncValue.data(updatedSettings);
-    } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
-      rethrow;
+    // Use optimistic updates to avoid full loading state
+    final currentSettings = state.valueOrNull;
+    if (currentSettings != null) {
+      // Apply optimistic update
+      final optimisticSettings = currentSettings.copyWith(
+        hasCompletedOnboarding: hasCompleted
+      );
+      
+      // Set immediately to optimistic value (bypasses loading state)
+      state = AsyncValue.data(optimisticSettings);
+      
+      try {
+        // Perform update in background
+        final updatedSettings = await _userSettingsRepository.updateHasCompletedOnboarding(hasCompleted);
+        // Update with server value (usually same as optimistic, but using server value to be safe)
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        // On error, revert to previous settings
+        state = AsyncValue.data(currentSettings);
+        // Also report the error via AsyncValue.error but don't store in state
+        final _ = AsyncValue<UserSettings?>.error(e, stackTrace);
+        rethrow;
+      }
+    } else {
+      // Fall back to old behavior if no current settings
+      state = const AsyncValue.loading();
+      try {
+        final updatedSettings = await _userSettingsRepository.updateHasCompletedOnboarding(hasCompleted);
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        state = AsyncValue.error(e, stackTrace);
+        rethrow;
+      }
     }
   }
 
   /// Updates whether to use dark mode.
   Future<void> updateUseDarkMode(bool useDarkMode) async {
-    state = const AsyncValue.loading();
-    
-    try {
-      final updatedSettings = await _userSettingsRepository.updateUseDarkMode(useDarkMode);
-      state = AsyncValue.data(updatedSettings);
-    } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
-      rethrow;
+    // Use optimistic updates pattern
+    final currentSettings = state.valueOrNull;
+    if (currentSettings != null) {
+      // Apply optimistic update
+      final optimisticSettings = currentSettings.copyWith(
+        useDarkMode: useDarkMode
+      );
+      
+      // Set immediately to optimistic value
+      state = AsyncValue.data(optimisticSettings);
+      
+      try {
+        // Perform update in background
+        final updatedSettings = await _userSettingsRepository.updateUseDarkMode(useDarkMode);
+        // Update with server value
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        // On error, revert to previous settings
+        state = AsyncValue.data(currentSettings);
+        // Report error but don't store in state
+        final _ = AsyncValue<UserSettings?>.error(e, stackTrace);
+        rethrow;
+      }
+    } else {
+      // Fall back to old behavior if no current settings
+      state = const AsyncValue.loading();
+      try {
+        final updatedSettings = await _userSettingsRepository.updateUseDarkMode(useDarkMode);
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        state = AsyncValue.error(e, stackTrace);
+        rethrow;
+      }
     }
   }
 
   /// Updates whether to use biometric authentication.
   Future<void> updateUseBiometricAuth(bool useBiometricAuth) async {
-    state = const AsyncValue.loading();
-    
-    try {
-      final updatedSettings = await _userSettingsRepository.updateUseBiometricAuth(useBiometricAuth);
-      state = AsyncValue.data(updatedSettings);
-    } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
-      rethrow;
+    // Use optimistic updates pattern
+    final currentSettings = state.valueOrNull;
+    if (currentSettings != null) {
+      // Apply optimistic update
+      final optimisticSettings = currentSettings.copyWith(
+        useBiometricAuth: useBiometricAuth
+      );
+      
+      // Set immediately to optimistic value
+      state = AsyncValue.data(optimisticSettings);
+      
+      try {
+        // Perform update in background
+        final updatedSettings = await _userSettingsRepository.updateUseBiometricAuth(useBiometricAuth);
+        // Update with server value
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        // On error, revert to previous settings
+        state = AsyncValue.data(currentSettings);
+        // Report error but don't store in state
+        final _ = AsyncValue<UserSettings?>.error(e, stackTrace);
+        rethrow;
+      }
+    } else {
+      // Fall back to old behavior if no current settings
+      state = const AsyncValue.loading();
+      try {
+        final updatedSettings = await _userSettingsRepository.updateUseBiometricAuth(useBiometricAuth);
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        state = AsyncValue.error(e, stackTrace);
+        rethrow;
+      }
     }
   }
 
   /// Updates the cost allocation method.
   Future<void> updateCostAllocationMethod(CostAllocationMethod method) async {
-    state = const AsyncValue.loading();
-    
-    try {
-      final updatedSettings = await _userSettingsRepository.updateCostAllocationMethod(method);
-      state = AsyncValue.data(updatedSettings);
-    } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
-      rethrow;
+    // Use optimistic updates pattern
+    final currentSettings = state.valueOrNull;
+    if (currentSettings != null) {
+      // Apply optimistic update
+      final optimisticSettings = currentSettings.copyWith(
+        costAllocationMethod: method
+      );
+      
+      // Set immediately to optimistic value
+      state = AsyncValue.data(optimisticSettings);
+      
+      try {
+        // Perform update in background
+        final updatedSettings = await _userSettingsRepository.updateCostAllocationMethod(method);
+        // Update with server value
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        // On error, revert to previous settings
+        state = AsyncValue.data(currentSettings);
+        // Report error but don't store in state
+        final _ = AsyncValue<UserSettings?>.error(e, stackTrace);
+        rethrow;
+      }
+    } else {
+      // Fall back to old behavior if no current settings
+      state = const AsyncValue.loading();
+      try {
+        final updatedSettings = await _userSettingsRepository.updateCostAllocationMethod(method);
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        state = AsyncValue.error(e, stackTrace);
+        rethrow;
+      }
     }
   }
 
   /// Updates whether to show break-even price.
   Future<void> updateShowBreakEvenPrice(bool showBreakEvenPrice) async {
-    state = const AsyncValue.loading();
-    
-    try {
-      final updatedSettings = await _userSettingsRepository.updateShowBreakEvenPrice(showBreakEvenPrice);
-      state = AsyncValue.data(updatedSettings);
-    } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
-      rethrow;
+    // Use optimistic updates pattern
+    final currentSettings = state.valueOrNull;
+    if (currentSettings != null) {
+      // Apply optimistic update
+      final optimisticSettings = currentSettings.copyWith(
+        showBreakEvenPrice: showBreakEvenPrice
+      );
+      
+      // Set immediately to optimistic value
+      state = AsyncValue.data(optimisticSettings);
+      
+      try {
+        // Perform update in background
+        final updatedSettings = await _userSettingsRepository.updateShowBreakEvenPrice(showBreakEvenPrice);
+        // Update with server value
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        // On error, revert to previous settings
+        state = AsyncValue.data(currentSettings);
+        // Report error but don't store in state
+        final _ = AsyncValue<UserSettings?>.error(e, stackTrace);
+        rethrow;
+      }
+    } else {
+      // Fall back to old behavior if no current settings
+      state = const AsyncValue.loading();
+      try {
+        final updatedSettings = await _userSettingsRepository.updateShowBreakEvenPrice(showBreakEvenPrice);
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        state = AsyncValue.error(e, stackTrace);
+        rethrow;
+      }
     }
   }
 
   /// Updates the stale threshold in days.
   Future<void> updateStaleThresholdDays(int days) async {
-    state = const AsyncValue.loading();
-    
-    try {
-      final updatedSettings = await _userSettingsRepository.updateStaleThresholdDays(days);
-      state = AsyncValue.data(updatedSettings);
-    } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
-      rethrow;
+    // Use optimistic updates pattern
+    final currentSettings = state.valueOrNull;
+    if (currentSettings != null) {
+      // Apply optimistic update
+      final optimisticSettings = currentSettings.copyWith(
+        staleThresholdDays: days
+      );
+      
+      // Set immediately to optimistic value
+      state = AsyncValue.data(optimisticSettings);
+      
+      try {
+        // Perform update in background
+        final updatedSettings = await _userSettingsRepository.updateStaleThresholdDays(days);
+        // Update with server value
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        // On error, revert to previous settings
+        state = AsyncValue.data(currentSettings);
+        // Report error but don't store in state
+        final _ = AsyncValue<UserSettings?>.error(e, stackTrace);
+        rethrow;
+      }
+    } else {
+      // Fall back to old behavior if no current settings
+      state = const AsyncValue.loading();
+      try {
+        final updatedSettings = await _userSettingsRepository.updateStaleThresholdDays(days);
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        state = AsyncValue.error(e, stackTrace);
+        rethrow;
+      }
     }
   }
 
@@ -156,32 +306,80 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
     double? monthlyGoal,
     double? yearlyGoal,
   }) async {
-    state = const AsyncValue.loading();
-    
-    try {
-      final updatedSettings = await _userSettingsRepository.updateSalesGoals(
-        dailyGoal: dailyGoal,
-        weeklyGoal: weeklyGoal,
-        monthlyGoal: monthlyGoal,
-        yearlyGoal: yearlyGoal,
+    // Use optimistic updates pattern
+    final currentSettings = state.valueOrNull;
+    if (currentSettings != null) {
+      // Apply optimistic update
+      final optimisticSettings = currentSettings.copyWith(
+        dailySalesGoal: dailyGoal ?? currentSettings.dailySalesGoal,
+        weeklySalesGoal: weeklyGoal ?? currentSettings.weeklySalesGoal,
+        monthlySalesGoal: monthlyGoal ?? currentSettings.monthlySalesGoal,
+        yearlySalesGoal: yearlyGoal ?? currentSettings.yearlySalesGoal,
       );
-      state = AsyncValue.data(updatedSettings);
-    } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
-      rethrow;
+      
+      // Set immediately to optimistic value
+      state = AsyncValue.data(optimisticSettings);
+      
+      try {
+        // Perform update in background
+        final updatedSettings = await _userSettingsRepository.updateSalesGoals(
+          dailyGoal: dailyGoal,
+          weeklyGoal: weeklyGoal,
+          monthlyGoal: monthlyGoal,
+          yearlyGoal: yearlyGoal,
+        );
+        // Update with server value
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        // On error, revert to previous settings
+        state = AsyncValue.data(currentSettings);
+        // Report error but don't store in state
+        final _ = AsyncValue<UserSettings?>.error(e, stackTrace);
+        rethrow;
+      }
+    } else {
+      // Fall back to old behavior if no current settings
+      state = const AsyncValue.loading();
+      try {
+        final updatedSettings = await _userSettingsRepository.updateSalesGoals(
+          dailyGoal: dailyGoal,
+          weeklyGoal: weeklyGoal,
+          monthlyGoal: monthlyGoal,
+          yearlyGoal: yearlyGoal,
+        );
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        state = AsyncValue.error(e, stackTrace);
+        rethrow;
+      }
     }
   }
 
   /// Refreshes the user settings.
   Future<void> refreshSettings() async {
     debugPrint('UserSettingsController.refreshSettings: Starting refresh');
-    state = const AsyncValue.loading();
+    
+    // Keep track of current settings to avoid unnecessary loading state
+    final currentSettings = state.valueOrNull;
+    
+    // Only go to loading state if we don't have settings yet
+    if (currentSettings == null) {
+      state = const AsyncValue.loading();
+    }
     
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         debugPrint('UserSettingsController.refreshSettings: Attempt $attempt');
         final settings = await _userSettingsRepository.getUserSettings();
-        state = AsyncValue.data(settings);
+        
+        // Compare with previous settings to minimize state changes
+        if (currentSettings == null || !_areSettingsEqual(currentSettings, settings)) {
+          debugPrint('UserSettingsController.refreshSettings: Settings changed, updating state');
+          state = AsyncValue.data(settings);
+        } else {
+          debugPrint('UserSettingsController.refreshSettings: Settings unchanged, keeping current state');
+        }
+        
         debugPrint('UserSettingsController.refreshSettings: Success on attempt $attempt');
         return;
       } catch (e, stackTrace) {
@@ -189,8 +387,12 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
         
         if (attempt == 3) {
           // Only set error state and rethrow on the last attempt
+          // And only if we don't have current settings
           debugPrint('UserSettingsController.refreshSettings: All attempts failed');
-          state = AsyncValue.error(e, stackTrace);
+          
+          if (currentSettings == null) {
+            state = AsyncValue.error(e, stackTrace);
+          }
           rethrow;
         }
         
@@ -198,5 +400,20 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
         await Future.delayed(Duration(milliseconds: 500 * attempt));
       }
     }
+  }
+  
+  /// Helper to compare settings for equality to avoid unnecessary updates
+  bool _areSettingsEqual(UserSettings a, UserSettings b) {
+    return a.userId == b.userId &&
+           a.hasCompletedOnboarding == b.hasCompletedOnboarding &&
+           a.useDarkMode == b.useDarkMode &&
+           a.useBiometricAuth == b.useBiometricAuth &&
+           a.costAllocationMethod == b.costAllocationMethod &&
+           a.showBreakEvenPrice == b.showBreakEvenPrice &&
+           a.staleThresholdDays == b.staleThresholdDays &&
+           a.dailySalesGoal == b.dailySalesGoal &&
+           a.weeklySalesGoal == b.weeklySalesGoal &&
+           a.monthlySalesGoal == b.monthlySalesGoal &&
+           a.yearlySalesGoal == b.yearlySalesGoal;
   }
 }
