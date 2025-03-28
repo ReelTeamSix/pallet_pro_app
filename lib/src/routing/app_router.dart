@@ -180,19 +180,9 @@ class RouterNotifier extends Notifier<GoRouter> implements Listenable {
   
   /// Determines if biometric authentication should be shown.
   bool _shouldShowBiometricAuth() {
-    // Temporarily disable biometric auth until we fix the issues
-    return false;
-    
-    /* Original implementation - commented out until fixed
     // Skip on web
     if (kIsWeb) {
       return false;
-    }
-    
-    // For testing purposes, we'll always show biometric auth when the app is resumed
-    // in debug mode on mobile platforms
-    if (kDebugMode && _wasResumed && (Platform.isAndroid || Platform.isIOS)) {
-      return true;
     }
     
     // Skip if not resumed or already showing biometric auth
@@ -216,8 +206,13 @@ class RouterNotifier extends Notifier<GoRouter> implements Listenable {
       return false;
     }
     
+    // Check if biometric auth is available on this device
+    final biometricService = ref.read(biometricServiceProvider);
+    if (!biometricService.isBiometricAvailableSync()) {
+      return false;
+    }
+    
     return true;
-    */
   }
 }
 

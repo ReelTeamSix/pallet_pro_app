@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pallet_pro_app/src/app.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
+import 'package:pallet_pro_app/src/features/auth/data/services/biometric_service.dart';
 
 /// The Supabase instance for the application.
 final supabase = Supabase.instance.client;
@@ -21,6 +22,10 @@ Future<void> main() async {
     anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
     debug: false,
   );
+  
+  // Pre-check biometric availability
+  final biometricService = BiometricService();
+  await biometricService.isBiometricAvailable();
 
   // Run the app wrapped in a ProviderScope for Riverpod
   runApp(

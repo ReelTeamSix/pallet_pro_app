@@ -14,11 +14,21 @@ class BiometricService {
   }) : _localAuth = localAuth ?? LocalAuthentication();
 
   final LocalAuthentication _localAuth;
+  
+  // Cache for biometric availability
+  bool? _isBiometricAvailableCache;
+
+  /// Checks if biometric authentication is available (synchronous version).
+  /// This uses a cached value if available, otherwise returns false.
+  bool isBiometricAvailableSync() {
+    return _isBiometricAvailableCache ?? false;
+  }
 
   /// Checks if biometric authentication is available.
   Future<bool> isBiometricAvailable() async {
     // Skip on web platform
     if (kIsWeb) {
+      _isBiometricAvailableCache = false;
       return false;
     }
 
@@ -28,24 +38,28 @@ class BiometricService {
       final isDeviceSupported = await _localAuth.isDeviceSupported();
       
       if (!canCheckBiometrics || !isDeviceSupported) {
+        _isBiometricAvailableCache = false;
         return false;
       }
       
       // Check available biometrics
       final availableBiometrics = await _localAuth.getAvailableBiometrics();
       
+      bool isAvailable = false;
       if (Platform.isIOS) {
-        return availableBiometrics.contains(BiometricType.face) || 
-               availableBiometrics.contains(BiometricType.fingerprint);
+        isAvailable = availableBiometrics.contains(BiometricType.face) || 
+                     availableBiometrics.contains(BiometricType.fingerprint);
       } else if (Platform.isAndroid) {
-        return availableBiometrics.contains(BiometricType.fingerprint) ||
-               availableBiometrics.contains(BiometricType.strong) ||
-               availableBiometrics.contains(BiometricType.weak);
+        isAvailable = availableBiometrics.contains(BiometricType.fingerprint) ||
+                     availableBiometrics.contains(BiometricType.strong) ||
+                     availableBiometrics.contains(BiometricType.weak);
       }
       
-      return false;
+      _isBiometricAvailableCache = isAvailable;
+      return isAvailable;
     } catch (e) {
       debugPrint('Error checking biometric availability: $e');
+      _isBiometricAvailableCache = false;
       return false;
     }
   }

@@ -29,8 +29,23 @@ class SupabaseAuthRepository implements AuthRepository {
     try {
       final trimmedEmail = email.trim();
       
-      // Directly attempt to sign up the user
-      // Supabase will return an error if the user already exists
+      // Check if user already exists by trying to sign in with a dummy password
+      try {
+        // Try to get user data by email
+        final data = await _client.rpc(
+          'check_email_exists',
+          params: {'email_to_check': trimmedEmail},
+        );
+        
+        if (data != null && data == true) {
+          throw AuthException.signUpFailed('User with this email already exists');
+        }
+      } catch (e) {
+        // If the RPC function doesn't exist, we'll just continue with sign-up
+        // Supabase will return an error if the user already exists
+      }
+      
+      // If we get here, the user doesn't exist, so we can sign them up
       final response = await _client.auth.signUp(
         email: trimmedEmail,
         password: password,

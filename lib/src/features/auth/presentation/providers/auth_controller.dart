@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/features/auth/data/providers/auth_repository_provider.dart';
 import 'package:pallet_pro_app/src/features/auth/data/repositories/auth_repository.dart';
+import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 
 /// Provider for the [AuthController].
@@ -67,6 +68,11 @@ class AuthController extends AsyncNotifier<User?> {
       
       // For email confirmation flow, the user might be null until confirmed
       state = AsyncValue.data(response.user);
+      
+      // Force refresh user settings to ensure they're created for the new user
+      if (response.user != null) {
+        await ref.read(userSettingsControllerProvider.notifier).refreshSettings();
+      }
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
       rethrow;
