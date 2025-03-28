@@ -39,13 +39,35 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
 
     try {
       final biometricService = ref.read(biometricServiceProvider);
+      
+      // First check if biometrics are actually available
+      final isAvailable = await biometricService.isBiometricAvailable();
+      debugPrint('BiometricAuthScreen: Biometrics available: $isAvailable');
+      
+      if (!isAvailable) {
+        // In debug mode, provide a bypass to home screen
+        if (const bool.fromEnvironment('dart.vm.product') == false) {
+          debugPrint('BiometricAuthScreen: Debug mode - bypassing biometric auth');
+          if (mounted) {
+            // Go directly to home
+            context.go('/home');
+          }
+          return;
+        } else {
+          throw FeatureNotAvailableException.platformNotSupported('Biometric authentication');
+        }
+      }
+      
+      // Try to authenticate
       final success = await biometricService.authenticate();
       
       if (mounted) {
         if (success) {
           // Authentication successful, navigate to home
+          debugPrint('BiometricAuthScreen: Authentication successful, navigating to home');
           context.go('/home');
         } else {
+          debugPrint('BiometricAuthScreen: Authentication failed');
           setState(() {
             _errorMessage = 'Authentication failed. Please try again.';
             _isAuthenticating = false;
@@ -53,7 +75,27 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
         }
       }
     } catch (e) {
+      debugPrint('BiometricAuthScreen: Authentication error: $e');
+      
       if (mounted) {
+        // In debug mode, provide a bypass even with errors
+        if (const bool.fromEnvironment('dart.vm.product') == false) {
+          debugPrint('BiometricAuthScreen: Debug mode - bypassing biometric auth after error');
+          // Show error for a moment
+          setState(() {
+            _errorMessage = 'Debug mode: ${e is AppException ? e.message : e.toString()}';
+            _isAuthenticating = true;
+          });
+          
+          // After brief delay, navigate to home
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              context.go('/home');
+            }
+          });
+          return;
+        }
+        
         setState(() {
           _errorMessage = e is AppException ? e.message : e.toString();
           _isAuthenticating = false;

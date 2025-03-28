@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
 import 'package:pallet_pro_app/src/features/settings/data/providers/user_settings_repository_provider.dart';
@@ -19,6 +20,7 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
     try {
       return await _userSettingsRepository.getUserSettings();
     } catch (e) {
+      debugPrint('UserSettingsController.build error: $e');
       // Return null if there's an error (e.g., user not authenticated)
       return null;
     }
@@ -140,14 +142,29 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
 
   /// Refreshes the user settings.
   Future<void> refreshSettings() async {
+    debugPrint('UserSettingsController.refreshSettings: Starting refresh');
     state = const AsyncValue.loading();
     
-    try {
-      final settings = await _userSettingsRepository.getUserSettings();
-      state = AsyncValue.data(settings);
-    } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
-      rethrow;
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        debugPrint('UserSettingsController.refreshSettings: Attempt $attempt');
+        final settings = await _userSettingsRepository.getUserSettings();
+        state = AsyncValue.data(settings);
+        debugPrint('UserSettingsController.refreshSettings: Success on attempt $attempt');
+        return;
+      } catch (e, stackTrace) {
+        debugPrint('UserSettingsController.refreshSettings: Error on attempt $attempt: $e');
+        
+        if (attempt == 3) {
+          // Only set error state and rethrow on the last attempt
+          debugPrint('UserSettingsController.refreshSettings: All attempts failed');
+          state = AsyncValue.error(e, stackTrace);
+          rethrow;
+        }
+        
+        // Wait before retrying
+        await Future.delayed(Duration(milliseconds: 500 * attempt));
+      }
     }
   }
 }

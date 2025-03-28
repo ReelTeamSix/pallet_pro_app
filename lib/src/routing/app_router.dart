@@ -8,11 +8,13 @@ import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/features/auth/data/providers/biometric_service_provider.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/biometric_auth_screen.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/screens/biometric_setup_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/login_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/signup_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/inventory_screen.dart';
 import 'package:pallet_pro_app/src/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
+import 'package:pallet_pro_app/src/features/settings/presentation/screens/settings_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// The router provider.
@@ -99,6 +101,11 @@ class RouterNotifier extends Notifier<GoRouter> implements Listenable {
           builder: (context, state) => const OnboardingScreen(),
         ),
         GoRoute(
+          path: '/biometric-setup',
+          name: 'biometric-setup',
+          builder: (context, state) => const BiometricSetupScreen(),
+        ),
+        GoRoute(
           path: '/biometric-auth',
           name: 'biometric-auth',
           builder: (context, state) => const BiometricAuthScreen(),
@@ -111,6 +118,11 @@ class RouterNotifier extends Notifier<GoRouter> implements Listenable {
               name: 'home',
               builder: (context, state) => const InventoryScreen(),
             ),
+            GoRoute(
+              path: '/settings',
+              name: 'settings',
+              builder: (context, state) => const SettingsScreen(),
+            ),
             // Add more routes here as needed
           ],
         ),
@@ -118,13 +130,17 @@ class RouterNotifier extends Notifier<GoRouter> implements Listenable {
 
   /// The redirect logic for the application.
   String? _redirectLogic(BuildContext context, GoRouterState state) {
+    debugPrint('RouterNotifier: Redirect check for ${state.matchedLocation}');
     final user = Supabase.instance.client.auth.currentUser;
     final isLoggedIn = user != null;
+    debugPrint('RouterNotifier: isLoggedIn=$isLoggedIn, userId=${user?.id}');
+    
     final isSplash = state.matchedLocation == '/splash';
     final isLoginRoute =
         state.matchedLocation == '/login' || state.matchedLocation == '/signup';
     final isOnboardingRoute = state.matchedLocation == '/onboarding';
     final isBiometricAuthRoute = state.matchedLocation == '/biometric-auth';
+    final isBiometricSetupRoute = state.matchedLocation == '/biometric-setup';
 
     // If the user is on the splash screen, wait for a moment
     // (the splash screen will navigate away after initialization)
@@ -134,16 +150,52 @@ class RouterNotifier extends Notifier<GoRouter> implements Listenable {
 
     // If the user is not logged in, redirect to login
     if (!isLoggedIn) {
+      debugPrint('RouterNotifier: Not logged in, redirecting to login');
       return isLoginRoute ? null : '/login';
     }
 
     // If the user is logged in but on a login route, redirect to home
     if (isLoggedIn && isLoginRoute) {
+      debugPrint('RouterNotifier: Logged in but on login route, redirecting to home');
       return '/home';
     }
 
+    // Bypass user settings checks for home route if we just came from onboarding
+    final currentPath = state.matchedLocation;
+    if (currentPath == '/home' && state.queryParameters['fromOnboarding'] == 'true') {
+      debugPrint('RouterNotifier: Direct navigation from onboarding to home, bypassing settings checks');
+      return null;
+    }
+    
+    // Check the user settings to determine the next steps
+    final userSettingsAsync = ref.read(userSettingsControllerProvider);
+    
+    if (!userSettingsAsync.hasValue || userSettingsAsync.value == null) {
+      debugPrint('RouterNotifier: No user settings available, may be loading');
+      
+      // If settings are still loading or unavailable, don't redirect yet
+      if (isOnboardingRoute || isBiometricSetupRoute || isBiometricAuthRoute) {
+        debugPrint('RouterNotifier: On special route, not redirecting');
+        return null;
+      }
+      
+      // For other routes, try to go to onboarding
+      if (!isOnboardingRoute) {
+        debugPrint('RouterNotifier: Redirecting to onboarding as settings are not loaded');
+        return '/onboarding';
+      }
+      
+      return null;
+    }
+    
+    // Now we have user settings
+    final userSettings = userSettingsAsync.value!;
+    debugPrint('RouterNotifier: User settings available, hasCompletedOnboarding=${userSettings.hasCompletedOnboarding}');
+    
     // Check if biometric auth is required
-    if (isLoggedIn && !isBiometricAuthRoute && _shouldShowBiometricAuth()) {
+    if (isLoggedIn && !isBiometricAuthRoute && !isBiometricSetupRoute && 
+        !isOnboardingRoute && _shouldShowBiometricAuth()) {
+      debugPrint('RouterNotifier: Biometric auth required, redirecting');
       _isBiometricAuthShowing = true;
       return '/biometric-auth';
     }
@@ -158,20 +210,34 @@ class RouterNotifier extends Notifier<GoRouter> implements Listenable {
       _isBiometricAuthShowing = false;
     }
 
-    // Check if the user has completed onboarding
-    final userSettingsAsync = ref.read(userSettingsControllerProvider);
-    if (userSettingsAsync.hasValue && userSettingsAsync.value != null) {
-      final hasCompletedOnboarding = userSettingsAsync.value!.hasCompletedOnboarding;
-      
-      if (isLoggedIn && !hasCompletedOnboarding && !isOnboardingRoute) {
+    // Onboarding flow
+    if (!userSettings.hasCompletedOnboarding) {
+      // User hasn't completed onboarding, make sure they're on the onboarding screen
+      if (!isOnboardingRoute) {
+        debugPrint('RouterNotifier: User needs onboarding, redirecting');
         return '/onboarding';
       }
-    }
-
-    // If the user is logged in and on the onboarding route but has completed it, redirect to home
-    if (isLoggedIn && isOnboardingRoute && userSettingsAsync.hasValue && 
-        userSettingsAsync.value != null && userSettingsAsync.value!.hasCompletedOnboarding) {
-      return '/home';
+    } else {
+      // User has completed onboarding
+      
+      // If they're still on the onboarding screen, move them to either
+      // biometric setup (if not set up) or home
+      if (isOnboardingRoute) {
+        if (!userSettings.useBiometricAuth && !isBiometricSetupRoute && !kIsWeb) {
+          debugPrint('RouterNotifier: Onboarding completed, redirecting to biometric setup');
+          return '/biometric-setup';
+        } else {
+          debugPrint('RouterNotifier: Onboarding completed, redirecting to home');
+          return '/home';
+        }
+      }
+      
+      // If they're on the biometric setup screen but already have biometrics set up,
+      // redirect them to home
+      if (isBiometricSetupRoute && userSettings.useBiometricAuth) {
+        debugPrint('RouterNotifier: Biometrics already set up, redirecting to home');
+        return '/home';
+      }
     }
 
     // No redirect needed
@@ -180,38 +246,48 @@ class RouterNotifier extends Notifier<GoRouter> implements Listenable {
   
   /// Determines if biometric authentication should be shown.
   bool _shouldShowBiometricAuth() {
+    debugPrint('RouterNotifier: _shouldShowBiometricAuth called');
+    
     // Skip on web
     if (kIsWeb) {
+      debugPrint('RouterNotifier: Web platform detected, skipping biometric auth');
       return false;
     }
     
     // Skip if not resumed or already showing biometric auth
     if (!_wasResumed || _isBiometricAuthShowing) {
+      debugPrint('RouterNotifier: Not resumed or already showing biometric auth, _wasResumed=$_wasResumed, _isBiometricAuthShowing=$_isBiometricAuthShowing');
       return false;
     }
     
     // Check if biometric auth is enabled in user settings
     final userSettingsAsync = ref.read(userSettingsControllerProvider);
     if (!userSettingsAsync.hasValue || userSettingsAsync.value == null) {
+      debugPrint('RouterNotifier: User settings not available, userSettingsAsync.hasValue=${userSettingsAsync.hasValue}');
       return false;
     }
     
     final useBiometricAuth = userSettingsAsync.value!.useBiometricAuth;
+    debugPrint('RouterNotifier: useBiometricAuth=$useBiometricAuth');
     if (!useBiometricAuth) {
       return false;
     }
     
     // Check if biometric auth is available on this device
     if (!(Platform.isAndroid || Platform.isIOS)) {
+      debugPrint('RouterNotifier: Not Android or iOS platform');
       return false;
     }
     
     // Check if biometric auth is available on this device
     final biometricService = ref.read(biometricServiceProvider);
-    if (!biometricService.isBiometricAvailableSync()) {
+    final isBiometricAvailable = biometricService.isBiometricAvailableSync();
+    debugPrint('RouterNotifier: isBiometricAvailable=$isBiometricAvailable');
+    if (!isBiometricAvailable) {
       return false;
     }
     
+    debugPrint('RouterNotifier: All conditions met, showing biometric auth');
     return true;
   }
 }
@@ -281,13 +357,24 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // TODO: Implement app shell with navigation drawer or bottom navigation
+    final currentLocation = GoRouterState.of(context).matchedLocation;
+    final isSettingsScreen = currentLocation == '/settings';
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pallet Pro'),
         actions: [
+          // Settings button
+          if (!isSettingsScreen)
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: 'Settings',
+              onPressed: () => context.go('/settings'),
+            ),
+          // Logout button
           IconButton(
             icon: const Icon(Icons.logout),
+            tooltip: 'Sign Out',
             onPressed: () async {
               try {
                 await ref.read(authControllerProvider.notifier).signOut();
@@ -310,6 +397,26 @@ class AppShell extends ConsumerWidget {
         ],
       ),
       body: child,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: currentLocation == '/home' ? 0 : 1,
+        onTap: (index) {
+          if (index == 0 && currentLocation != '/home') {
+            context.go('/home');
+          } else if (index == 1 && currentLocation != '/settings') {
+            context.go('/settings');
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.inventory),
+            label: 'Inventory',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
+      ),
     );
   }
 }

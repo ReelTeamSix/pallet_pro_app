@@ -71,17 +71,22 @@ class UserSettings {
   /// Creates a new [UserSettings] instance from JSON.
   factory UserSettings.fromJson(Map<String, dynamic> json) {
     return UserSettings(
-      userId: json['user_id'] as String,
+      // Fix: Use 'id' from database instead of 'user_id'
+      userId: json['id'] as String,
       hasCompletedOnboarding: json['has_completed_onboarding'] as bool? ?? false,
-      useDarkMode: json['use_dark_mode'] as bool? ?? false,
-      useBiometricAuth: json['use_biometric_auth'] as bool? ?? false,
+      // Fix: Use 'theme' with conversion instead of 'use_dark_mode'
+      useDarkMode: _isDarkTheme(json['theme'] as String?),
+      // Fix: Use 'enable_biometric_unlock' instead of 'use_biometric_auth'
+      useBiometricAuth: json['enable_biometric_unlock'] as bool? ?? false,
       costAllocationMethod: _costAllocationMethodFromString(json['cost_allocation_method'] as String?),
-      showBreakEvenPrice: json['show_break_even_price'] as bool? ?? true,
+      // Fix: Use 'show_break_even' instead of 'show_break_even_price'
+      showBreakEvenPrice: json['show_break_even'] as bool? ?? true,
       staleThresholdDays: json['stale_threshold_days'] as int? ?? 90,
-      dailySalesGoal: (json['daily_sales_goal'] as num?)?.toDouble() ?? 0,
-      weeklySalesGoal: (json['weekly_sales_goal'] as num?)?.toDouble() ?? 0,
-      monthlySalesGoal: (json['monthly_sales_goal'] as num?)?.toDouble() ?? 0,
-      yearlySalesGoal: (json['yearly_sales_goal'] as num?)?.toDouble() ?? 0,
+      // Fix: Use 'daily_goal' instead of 'daily_sales_goal'
+      dailySalesGoal: (json['daily_goal'] as num?)?.toDouble() ?? 0,
+      weeklySalesGoal: (json['weekly_goal'] as num?)?.toDouble() ?? 0,
+      monthlySalesGoal: (json['monthly_goal'] as num?)?.toDouble() ?? 0,
+      yearlySalesGoal: (json['yearly_goal'] as num?)?.toDouble() ?? 0,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : null,
@@ -94,17 +99,22 @@ class UserSettings {
   /// Converts this [UserSettings] instance to JSON.
   Map<String, dynamic> toJson() {
     return {
-      'user_id': userId,
+      // Fix: Use 'id' for database instead of 'user_id'
+      'id': userId,
       'has_completed_onboarding': hasCompletedOnboarding,
-      'use_dark_mode': useDarkMode,
-      'use_biometric_auth': useBiometricAuth,
-      'cost_allocation_method': costAllocationMethod.name,
-      'show_break_even_price': showBreakEvenPrice,
+      // Fix: Use 'theme' instead of 'use_dark_mode'
+      'theme': useDarkMode ? 'dark' : 'system',
+      // Fix: Use 'enable_biometric_unlock' instead of 'use_biometric_auth'
+      'enable_biometric_unlock': useBiometricAuth,
+      'cost_allocation_method': _dbCostAllocationMethodFromEnum(costAllocationMethod),
+      // Fix: Use 'show_break_even' instead of 'show_break_even_price'
+      'show_break_even': showBreakEvenPrice,
       'stale_threshold_days': staleThresholdDays,
-      'daily_sales_goal': dailySalesGoal,
-      'weekly_sales_goal': weeklySalesGoal,
-      'monthly_sales_goal': monthlySalesGoal,
-      'yearly_sales_goal': yearlySalesGoal,
+      // Fix: Use 'daily_goal' instead of 'daily_sales_goal'
+      'daily_goal': dailySalesGoal,
+      'weekly_goal': weeklySalesGoal,
+      'monthly_goal': monthlySalesGoal,
+      'yearly_goal': yearlySalesGoal,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };
@@ -146,13 +156,31 @@ class UserSettings {
   /// Converts a string to a [CostAllocationMethod].
   static CostAllocationMethod _costAllocationMethodFromString(String? value) {
     switch (value) {
-      case 'fifo':
-        return CostAllocationMethod.fifo;
-      case 'lifo':
-        return CostAllocationMethod.lifo;
-      case 'average':
+      case 'even':
+        return CostAllocationMethod.fifo; // Map DB 'even' to app 'fifo'
+      case 'proportional':
+        return CostAllocationMethod.lifo; // Map DB 'proportional' to app 'lifo'
+      case 'manual':
+        return CostAllocationMethod.average; // Map DB 'manual' to app 'average'
       default:
         return CostAllocationMethod.average;
     }
+  }
+
+  /// Maps the CostAllocationMethod enum to the DB string value
+  static String _dbCostAllocationMethodFromEnum(CostAllocationMethod method) {
+    switch (method) {
+      case CostAllocationMethod.fifo:
+        return 'even'; // Map app 'fifo' to DB 'even'
+      case CostAllocationMethod.lifo:
+        return 'proportional'; // Map app 'lifo' to DB 'proportional'
+      case CostAllocationMethod.average:
+        return 'manual'; // Map app 'average' to DB 'manual'
+    }
+  }
+  
+  /// Determines if the theme string represents dark mode
+  static bool _isDarkTheme(String? theme) {
+    return theme == 'dark';
   }
 }

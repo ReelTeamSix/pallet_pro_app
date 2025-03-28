@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/features/auth/data/repositories/auth_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
@@ -29,31 +30,46 @@ class SupabaseAuthRepository implements AuthRepository {
     try {
       final trimmedEmail = email.trim();
       
-      // Check if user already exists by trying to sign in with a dummy password
+      // Check for duplicate users - first try to check if the email already exists
       try {
-        // Try to get user data by email
-        final data = await _client.rpc(
-          'check_email_exists',
-          params: {'email_to_check': trimmedEmail},
-        );
-        
-        if (data != null && data == true) {
-          throw AuthException.signUpFailed('User with this email already exists');
+        // Try calling a custom function to check if email exists
+        // If this fails, we'll continue with the signup and let Supabase handle it
+        final response = await _client.functions.invoke('check-email-exists', 
+          body: {'email': trimmedEmail});
+          
+        final body = response.data;
+        if (body != null && body['exists'] == true) {
+          // Email already exists
+          throw AuthException.signUpFailed('User already registered');
         }
       } catch (e) {
-        // If the RPC function doesn't exist, we'll just continue with sign-up
-        // Supabase will return an error if the user already exists
+        // If the function doesn't exist or fails, just continue with signup
+        debugPrint('Error checking if email exists: $e');
       }
       
-      // If we get here, the user doesn't exist, so we can sign them up
+      // If we get here, the user doesn't exist (or we couldn't check), so we can sign them up
       final response = await _client.auth.signUp(
         email: trimmedEmail,
         password: password,
       );
+      
+      // Handle user already registered error from Supabase
+      if (response.session == null && 
+          (response.user == null || response.user?.identities?.isEmpty == true)) {
+        throw AuthException.signUpFailed('User already registered');
+      }
+      
       return response;
     } on gotrue.AuthException catch (e) {
+      // Explicitly handle the case of a user that already exists
+      if (e.message.contains('already registered') || 
+          e.message.contains('already in use') ||
+          e.message.toLowerCase().contains('user already exists')) {
+        throw AuthException.signUpFailed('User already registered');
+      }
       throw AuthException.signUpFailed(e.message);
     } catch (e) {
+      debugPrint('SignUp error: $e');
       if (e is AuthException) {
         rethrow;
       }

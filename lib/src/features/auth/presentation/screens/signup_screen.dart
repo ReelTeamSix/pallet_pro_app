@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -50,17 +51,38 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       if (mounted) {
         // Show success message and navigate back to login
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Account created successfully! Please check your email to verify your account.'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 5),
           ),
         );
         context.goNamed('login');
       }
     } catch (e) {
+      debugPrint('SignupScreen: Error signing up: $e');
+      
+      // Handle duplicate user error specifically
+      String errorMsg;
+      if (e.toString().contains('User already registered')) {
+        errorMsg = 'An account with this email already exists. Please use a different email or try signing in.';
+      } else if (e is AppException) {
+        errorMsg = e.message;
+      } else {
+        errorMsg = 'Failed to sign up: ${e.toString()}';
+      }
+      
       setState(() {
-        _errorMessage = e is AppException ? e.message : 'Failed to sign up: ${e.toString()}';
+        _errorMessage = errorMsg;
       });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMsg),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {

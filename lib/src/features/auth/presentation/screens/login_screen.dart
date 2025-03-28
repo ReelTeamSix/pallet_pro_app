@@ -40,13 +40,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     try {
+      debugPrint('LoginScreen: Starting sign in process');
+      
+      // Get credentials
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      
+      // Sign in with forced wait
       await ref.read(authControllerProvider.notifier).signInWithEmail(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
+        email: email,
+        password: password,
       );
       
-      // The router will handle navigation after sign-in
+      // Add a short delay to ensure auth state propagation
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Verify sign in was successful
+      final authState = ref.read(authControllerProvider);
+      
+      debugPrint('LoginScreen: Auth state after sign in: ${authState.hasValue ? "has value" : "no value"}, '
+          'user: ${authState.value?.id ?? "null"}');
+      
+      if (authState.hasValue && authState.value != null) {
+        debugPrint('LoginScreen: Successfully signed in, navigating to home');
+        
+        if (mounted) {
+          // Force navigation directly to home
+          context.go('/home');
+        }
+      } else {
+        debugPrint('LoginScreen: Sign in didn\'t produce a valid user');
+        setState(() {
+          _errorMessage = 'Failed to sign in: No valid user returned';
+        });
+      }
     } catch (e) {
+      debugPrint('LoginScreen: Sign in error: $e');
       setState(() {
         _errorMessage = e is AppException ? e.message : 'Failed to sign in: ${e.toString()}';
       });
