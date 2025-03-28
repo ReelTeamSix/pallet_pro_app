@@ -55,6 +55,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Add a short delay to ensure auth state propagation
       await Future.delayed(const Duration(milliseconds: 500));
       
+      // Exit early if the widget was disposed during the delay
+      if (!mounted) return;
+      
       // Verify sign in was successful
       final authState = ref.read(authControllerProvider);
       
@@ -70,19 +73,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
       } else {
         debugPrint('LoginScreen: Sign in didn\'t produce a valid user');
-        setState(() {
-          _errorMessage = 'Failed to sign in: No valid user returned';
-        });
+        // Guard setState with mounted check
+        if (mounted) {
+          setState(() {
+            _isLoading = false; // Ensure loading indicator stops
+            _errorMessage = 'Failed to sign in: No valid user returned';
+          });
+        }
       }
     } catch (e) {
       debugPrint('LoginScreen: Sign in error: $e');
-      setState(() {
-        _errorMessage = e is AppException ? e.message : 'Failed to sign in: ${e.toString()}';
-      });
-    } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _errorMessage = e is AppException ? e.message : 'Failed to sign in: $e';
         });
       }
     }

@@ -1,3 +1,5 @@
+import 'dart:io'; // Added import for Platform
+import 'package:flutter/foundation.dart'; // Added import for kIsWeb
 import 'package:flutter/material.dart';
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
@@ -33,6 +35,9 @@ class _InventoryScreenState extends State<InventoryScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Determine if we should use drawer layout (same logic as AppShell)
+    final bool useDrawerLayout = kIsWeb || !Platform.isIOS && !Platform.isAndroid;
+
     return Scaffold(
       appBar: AppBar(
         title: _isSearching
@@ -70,6 +75,9 @@ class _InventoryScreenState extends State<InventoryScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
+          labelColor: Theme.of(context).appBarTheme.foregroundColor,
+          unselectedLabelColor: Theme.of(context).appBarTheme.foregroundColor?.withOpacity(0.7),
+          indicatorColor: Theme.of(context).appBarTheme.foregroundColor,
           tabs: const [
             Tab(text: 'Pallets'),
             Tab(text: 'Items'),
@@ -86,14 +94,17 @@ class _InventoryScreenState extends State<InventoryScreen>
           _buildItemsTab(),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Show dialog to add new pallet or item based on current tab
-          final isItemsTab = _tabController.index == 1;
-          _showAddDialog(isItemsTab);
-        },
-        child: const Icon(Icons.add),
-      ),
+      // Conditionally display FAB based on layout
+      floatingActionButton: useDrawerLayout 
+          ? null // Don't show FAB on web/desktop
+          : FloatingActionButton(
+              onPressed: () {
+                // Show dialog to add new pallet or item based on current tab
+                final isItemsTab = _tabController.index == 1;
+                _showAddDialog(isItemsTab);
+              },
+              child: const Icon(Icons.add),
+            ),
     );
   }
 

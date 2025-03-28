@@ -385,10 +385,10 @@ class AppTheme {
       unselectedLabelColor: Colors.grey,
       indicatorColor: _primaryDark,
     ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
       backgroundColor: _surfaceDark,
       selectedItemColor: _primaryDark,
-      unselectedItemColor: Colors.grey,
+      unselectedItemColor: Colors.grey.shade400,
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: _onSurfaceDark,

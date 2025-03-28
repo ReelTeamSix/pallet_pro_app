@@ -29,6 +29,8 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
           .eq('id', user.id)  // 'id' not 'user_id'
           .single();
 
+      debugPrint('SupabaseUserSettingsRepository: Raw JSON response: $response');
+
         return UserSettings.fromJson(response);
       } on PostgrestException catch (e) {
         if (e.code == 'PGRST116') {

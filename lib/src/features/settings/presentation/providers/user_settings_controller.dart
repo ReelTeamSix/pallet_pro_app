@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
 import 'package:pallet_pro_app/src/features/settings/data/providers/user_settings_repository_provider.dart';
 import 'package:pallet_pro_app/src/features/settings/data/repositories/user_settings_repository.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide UserSettings;
 
 /// Provider for the [UserSettingsController].
 final userSettingsControllerProvider =
@@ -17,11 +19,25 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
   Future<UserSettings?> build() async {
     _userSettingsRepository = ref.read(userSettingsRepositoryProvider);
     
-    try {
-      return await _userSettingsRepository.getUserSettings();
-    } catch (e) {
-      debugPrint('UserSettingsController.build error: $e');
-      // Return null if there's an error (e.g., user not authenticated)
+    // Watch the auth state to automatically refetch settings on user change
+    final authState = ref.watch(authControllerProvider);
+    final currentUser = authState.valueOrNull;
+
+    if (currentUser != null) {
+      debugPrint('UserSettingsController.build: User ${currentUser.id} logged in. Fetching settings...');
+      try {
+        // Assuming getUserSettings implicitly uses the current user from Supabase context
+        final settings = await _userSettingsRepository.getUserSettings();
+        debugPrint('UserSettingsController.build: Settings fetched for user ${currentUser.id}');
+        return settings;
+      } catch (e, stackTrace) {
+        debugPrint('UserSettingsController.build: Error fetching settings for user ${currentUser.id}: $e');
+        // Propagate the error to the AsyncNotifier state
+        throw AsyncError(e, stackTrace);
+      }
+    } else {
+      // No user logged in, return null (no settings)
+      debugPrint('UserSettingsController.build: No user logged in.');
       return null;
     }
   }

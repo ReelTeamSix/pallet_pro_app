@@ -6,7 +6,12 @@ import 'package:pallet_pro_app/src/features/auth/data/repositories/auth_reposito
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
 import 'package:pallet_pro_app/src/features/settings/data/providers/user_settings_repository_provider.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException, UserSettings;
+
+/// Provider that exposes the Supabase auth state change stream.
+final authStateChangesProvider = StreamProvider<AuthState>((ref) {
+  return Supabase.instance.client.auth.onAuthStateChange;
+});
 
 /// Provider for the [AuthController].
 final authControllerProvider =
@@ -20,16 +25,13 @@ class AuthController extends AsyncNotifier<User?> {
   Future<User?> build() async {
     _authRepository = ref.read(authRepositoryProvider);
     
-    // Listen to auth state changes
-    _authRepository.onAuthStateChange.listen((state) {
-      debugPrint('AuthController: Auth state changed to ${state.event}');
-      if (state.event == AuthChangeEvent.signedIn ||
-          state.event == AuthChangeEvent.signedOut ||
-          state.event == AuthChangeEvent.userUpdated) {
-        ref.invalidateSelf();
-      }
-    });
+    // Watch the auth state stream provider.
+    // Riverpod will automatically re-run build when the stream emits.
+    final authState = ref.watch(authStateChangesProvider);
     
+    // When the stream updates (signIn, signOut, etc.), 
+    // simply return the latest user status from the repository.
+    debugPrint('AuthController: Rebuilding due to auth state change: ${authState.value?.event}');
     return _authRepository.currentUser;
   }
 
@@ -132,9 +134,6 @@ class AuthController extends AsyncNotifier<User?> {
   /// Ensures that user settings exist for the current user.
   Future<void> _ensureUserSettingsExist() async {
     debugPrint('AuthController: Ensuring user settings exist...');
-    
-    // Wait for authentication to complete
-    await Future.delayed(const Duration(seconds: 1));
     
     final currentUser = _authRepository.currentUser;
     if (currentUser == null) {
