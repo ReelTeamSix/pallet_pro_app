@@ -9,7 +9,10 @@ import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_con
 /// The login screen.
 class LoginScreen extends ConsumerStatefulWidget {
   /// Creates a new [LoginScreen] instance.
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.from});
+
+  /// The source of navigation to this screen.
+  final String? from;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -21,6 +24,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.from != null) {
+      debugPrint('LoginScreen: Navigated from source: ${widget.from}');
+    }
+  }
 
   @override
   void dispose() {
@@ -46,41 +57,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
       
-      // Sign in with forced wait
+      // Attempt sign in - this will trigger loadings states and redirects
       await ref.read(authControllerProvider.notifier).signInWithEmail(
         email: email,
         password: password,
       );
       
-      // Add a short delay to ensure auth state propagation
-      await Future.delayed(const Duration(milliseconds: 500));
+      // The router will automatically handle redirection to splash and then home
+      // based on the loading states of authControllerProvider
       
-      // Exit early if the widget was disposed during the delay
-      if (!mounted) return;
-      
-      // Verify sign in was successful
-      final authState = ref.read(authControllerProvider);
-      
-      debugPrint('LoginScreen: Auth state after sign in: ${authState.hasValue ? "has value" : "no value"}, '
-          'user: ${authState.value?.id ?? "null"}');
-      
-      if (authState.hasValue && authState.value != null) {
-        debugPrint('LoginScreen: Successfully signed in, navigating to home');
-        
-        if (mounted) {
-          // Force navigation directly to home
-          context.go('/home');
-        }
-      } else {
-        debugPrint('LoginScreen: Sign in didn\'t produce a valid user');
-        // Guard setState with mounted check
-        if (mounted) {
-          setState(() {
-            _isLoading = false; // Ensure loading indicator stops
-            _errorMessage = 'Failed to sign in: No valid user returned';
-          });
-        }
-      }
     } catch (e) {
       debugPrint('LoginScreen: Sign in error: $e');
       if (mounted) {

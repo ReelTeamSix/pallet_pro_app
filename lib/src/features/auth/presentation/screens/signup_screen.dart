@@ -10,7 +10,10 @@ import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_con
 /// The signup screen.
 class SignupScreen extends ConsumerStatefulWidget {
   /// Creates a new [SignupScreen] instance.
-  const SignupScreen({super.key});
+  const SignupScreen({super.key, this.from});
+  
+  /// The source of navigation to this screen.
+  final String? from;
 
   @override
   ConsumerState<SignupScreen> createState() => _SignupScreenState();
@@ -23,6 +26,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   String? _errorMessage;
+  
+  @override
+  void initState() {
+    super.initState();
+    if (widget.from != null) {
+      debugPrint('SignupScreen: Navigated from source: ${widget.from}');
+    }
+  }
 
   @override
   void dispose() {
@@ -43,13 +54,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     });
 
     try {
+      // Attempt sign up - this will trigger loading states and redirects
       await ref.read(authControllerProvider.notifier).signUpWithEmail(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
       
       if (mounted) {
-        // Show success message and navigate back to login
+        // Show success message - router will handle redirections
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Account created successfully! Please check your email to verify your account.'),
@@ -57,7 +69,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             duration: Duration(seconds: 5),
           ),
         );
-        context.goNamed('login');
       }
     } catch (e) {
       debugPrint('SignupScreen: Error signing up: $e');

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -15,24 +16,66 @@ Future<void> main() async {
 
   // Load environment variables from .env file
   await dotenv.load(fileName: '.env');
-
-  // Initialize Supabase with environment variables from .env file
-  await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL'] ?? '',
-    anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
-    debug: false,
-  );
   
-  // Pre-check biometric availability
-  final biometricService = BiometricService();
-  await biometricService.isBiometricAvailable();
-
-  // Run the app wrapped in a ProviderScope for Riverpod
+  // Run the app as soon as possible while initializing Supabase in the background
+  final ProviderContainer container = ProviderContainer();
+  
+  // Pre-check biometric availability in parallel
+  final biometricFuture = BiometricService().isBiometricAvailable();
+  
+  // Start Supabase initialization in the background for better startup time
+  final supabaseFuture = _initializeSupabase();
+  
+  // Start the app immediately without waiting for Supabase to fully initialize
   runApp(
-    const ProviderScope(
-      child: AppWithLifecycleObserver(),
+    UncontrolledProviderScope(
+      container: container,
+      child: const AppWithLifecycleObserver(),
     ),
   );
+  
+  // Continue initialization in the background
+  await Future.wait([supabaseFuture, biometricFuture]);
+}
+
+/// Initialize Supabase with better error handling
+Future<void> _initializeSupabase() async {
+  try {
+    // Get Supabase credentials from environment
+    final supabaseUrl = dotenv.env['SUPABASE_URL'];
+    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+    
+    // Debug info
+    debugPrint('Initializing Supabase with URL: ${supabaseUrl?.isNotEmpty == true ? 'Present' : 'Missing!'}');
+    debugPrint('Supabase Anon Key: ${supabaseAnonKey?.isNotEmpty == true ? 'Present' : 'Missing!'}');
+    
+    if (supabaseUrl == null || supabaseUrl.isEmpty || supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
+      throw Exception('Supabase credentials missing in .env file');
+    }
+
+    // Initialize Supabase with environment variables from .env file
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
+      debug: !kReleaseMode, // Only enable debug mode in development
+    );
+    
+    debugPrint('Supabase initialized successfully');
+    
+    // On web specifically, force a check to make sure auth state is populated
+    if (kIsWeb) {
+      // Wait a small amount of time to ensure auth state is properly populated
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // Access auth state directly after initialization to ensure it's properly initialized
+      final currentSession = Supabase.instance.client.auth.currentSession;
+      debugPrint('Current session after init: ${currentSession != null ? 'exists' : 'null'}');
+    }
+  } catch (e, stack) {
+    debugPrint('Error initializing Supabase: $e');
+    debugPrint(stack.toString());
+    // Continue anyway to let the app handle auth failure gracefully
+  }
 }
 
 /// A widget that observes app lifecycle changes.
@@ -61,9 +104,7 @@ class _AppWithLifecycleObserverState extends ConsumerState<AppWithLifecycleObser
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Notify the router that the app was resumed
-      final router = ref.read(routerProvider);
-      // Access the RouterNotifier directly from the provider
-      final routerNotifier = ref.read(routerProvider.notifier);
+      final routerNotifier = ref.read(routerNotifierProvider.notifier);
       routerNotifier.appResumed();
     }
   }

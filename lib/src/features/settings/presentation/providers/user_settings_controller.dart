@@ -19,25 +19,41 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
   Future<UserSettings?> build() async {
     _userSettingsRepository = ref.read(userSettingsRepositoryProvider);
     
-    // Watch the auth state to automatically refetch settings on user change
-    final authState = ref.watch(authControllerProvider);
-    final currentUser = authState.valueOrNull;
+    // Watch the raw Supabase auth state stream directly.
+    // This ensures settings are fetched ONLY when the actual session changes.
+    final authState = ref.watch(authStateChangesProvider);
+    final session = authState.valueOrNull?.session;
+    final currentUser = session?.user;
 
     if (currentUser != null) {
-      debugPrint('UserSettingsController.build: User ${currentUser.id} logged in. Fetching settings...');
+      debugPrint('UserSettingsController.build: User ${currentUser.id} detected via AuthStateChanges. Fetching settings...');
       try {
-        // Assuming getUserSettings implicitly uses the current user from Supabase context
+        // Add a small delay to ensure auth is fully established before fetching settings
+        // This helps prevent race conditions during rapid auth state changes
+        await Future.delayed(const Duration(milliseconds: 200));
+        
+        // Check if the user is still logged in after the delay (prevents unnecessary fetches)
+        final latestAuthState = ref.read(authStateChangesProvider);
+        final latestUser = latestAuthState.valueOrNull?.session?.user;
+        
+        if (latestUser?.id != currentUser.id) {
+          debugPrint('UserSettingsController.build: User changed during delay, aborting fetch.');
+          return null;
+        }
+        
+        // Assuming getUserSettings implicitly uses the current user from Supabase client context
         final settings = await _userSettingsRepository.getUserSettings();
         debugPrint('UserSettingsController.build: Settings fetched for user ${currentUser.id}');
         return settings;
       } catch (e, stackTrace) {
         debugPrint('UserSettingsController.build: Error fetching settings for user ${currentUser.id}: $e');
-        // Propagate the error to the AsyncNotifier state
+        // Re-throw the error to put the provider in an error state.
+        // Use AsyncError to preserve stack trace if needed by GoRouter.
         throw AsyncError(e, stackTrace);
       }
     } else {
       // No user logged in, return null (no settings)
-      debugPrint('UserSettingsController.build: No user logged in.');
+      debugPrint('UserSettingsController.build: No user detected via AuthStateChanges.');
       return null;
     }
   }
