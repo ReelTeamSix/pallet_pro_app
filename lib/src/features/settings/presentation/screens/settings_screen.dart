@@ -6,6 +6,7 @@ import 'package:pallet_pro_app/src/features/auth/data/providers/biometric_servic
 import 'package:pallet_pro_app/src/features/auth/data/services/biometric_service.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
+import 'package:go_router/go_router.dart';
 
 /// The settings screen.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -100,6 +101,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SnackBar(
             content: Text(
               e is AppException ? e.message : 'Failed to update biometric auth: ${e.toString()}',
+            ),
+            backgroundColor: context.errorColor,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Updates whether to use PIN authentication.
+  Future<void> _togglePinAuth(bool value) async {
+    if (_isLoading) return;
+
+    // If enabling PIN but no PIN is set, navigate to setup first
+    if (value && (_cachedSettings?.pinHash == null || _cachedSettings!.pinHash!.isEmpty)) {
+      // Add a check to prevent navigation if already on PinSetupScreen
+      final currentLocation = GoRouterState.of(context).matchedLocation;
+      if (currentLocation != '/pin-setup') {
+         context.push('/pin-setup').then((_) {
+             // After returning from setup, refresh state if needed
+             // The controller should update the state automatically
+         });
+      }
+      return; // Don't toggle the switch directly yet
+    }
+
+    // If disabling PIN, clear the hash
+    String? pinHashToSet = _cachedSettings?.pinHash;
+    if (!value) {
+        pinHashToSet = null; // Clear hash when disabling
+    }
+
+    setState(() {
+      _isLoading = true;
+      // Optimistic update
+      _cachedSettings = _cachedSettings?.copyWith(usePinAuth: value, pinHash: pinHashToSet);
+    });
+
+    try {
+      // Update via controller
+      await ref.read(userSettingsControllerProvider.notifier).updatePinSettings(
+            usePinAuth: value,
+            pinHash: pinHashToSet,
+          );
+    } catch (e) {
+      // Revert optimistic update on error
+       if (_cachedSettings != null) {
+         setState(() {
+           _cachedSettings = _cachedSettings!.copyWith(usePinAuth: !value, pinHash: _cachedSettings?.pinHash); // Revert to original values
+         });
+       }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is AppException ? e.message : 'Failed to update PIN auth: ${e.toString()}',
             ),
             backgroundColor: context.errorColor,
           ),
@@ -252,6 +315,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       'Biometric authentication is not available on this device'),
                   enabled: false,
                 ),
+              // PIN Authentication Toggle
+              SwitchListTile(
+                title: const Text('PIN Authentication'),
+                subtitle: const Text('Use a 4-digit PIN to unlock the app'),
+                value: userSettings.usePinAuth,
+                onChanged: _isLoading ? null : _togglePinAuth,
+              ),
+              // Change PIN Tile (only enabled if PIN Auth is enabled)
+              ListTile(
+                title: const Text('Change PIN'),
+                subtitle: const Text('Set or update your 4-digit PIN'),
+                leading: const Icon(Icons.pin),
+                enabled: userSettings.usePinAuth && !_isLoading,
+                onTap: userSettings.usePinAuth && !_isLoading 
+                    ? () {
+                        // Add a check to prevent navigation if already on PinSetupScreen
+                        final currentLocation = GoRouterState.of(context).matchedLocation;
+                        if (currentLocation != '/pin-setup') {
+                           context.push('/pin-setup'); 
+                        }
+                       } 
+                    : null,
+              ),
               const Divider(),
 
               // Inventory settings section

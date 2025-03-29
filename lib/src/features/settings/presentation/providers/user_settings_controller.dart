@@ -19,11 +19,20 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
   Future<UserSettings?> build() async {
     _userSettingsRepository = ref.read(userSettingsRepositoryProvider);
     
+    // Check if sign out is in progress
+    final isSigningOut = ref.watch(isSigningOutProvider);
+    
     // Watch the raw Supabase auth state stream directly.
     // This ensures settings are fetched ONLY when the actual session changes.
     final authState = ref.watch(authStateChangesProvider);
     final session = authState.valueOrNull?.session;
     final currentUser = session?.user;
+
+    // If sign out is in progress, preserve the current settings rather than setting to null
+    if (isSigningOut) {
+      debugPrint('UserSettingsController.build: Sign out in progress, preserving current settings');
+      return state.valueOrNull; // Return current settings to avoid flickering
+    }
 
     if (currentUser != null) {
       debugPrint('UserSettingsController.build: User ${currentUser.id} detected via AuthStateChanges. Fetching settings...');
@@ -177,6 +186,51 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
       state = const AsyncValue.loading();
       try {
         final updatedSettings = await _userSettingsRepository.updateUseBiometricAuth(useBiometricAuth);
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        state = AsyncValue.error(e, stackTrace);
+        rethrow;
+      }
+    }
+  }
+
+  /// Updates the PIN authentication settings.
+  Future<void> updatePinSettings({required bool usePinAuth, String? pinHash}) async {
+    // Use optimistic updates pattern
+    final currentSettings = state.valueOrNull;
+    if (currentSettings != null) {
+      // Apply optimistic update
+      final optimisticSettings = currentSettings.copyWith(
+        usePinAuth: usePinAuth,
+        pinHash: pinHash,
+      );
+      
+      // Set immediately to optimistic value
+      state = AsyncValue.data(optimisticSettings);
+      
+      try {
+        // Perform update in background - Needs matching method in repository
+        final updatedSettings = await _userSettingsRepository.updatePinSettings(
+          usePinAuth: usePinAuth,
+          pinHash: pinHash,
+        );
+        // Update with server value
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        // On error, revert to previous settings
+        state = AsyncValue.data(currentSettings);
+        // Report error but don't store in state
+        final _ = AsyncValue<UserSettings?>.error(e, stackTrace);
+        rethrow;
+      }
+    } else {
+      // Fallback: Should ideally not happen when setting PIN, but handle defensively
+      state = const AsyncValue.loading();
+      try {
+        final updatedSettings = await _userSettingsRepository.updatePinSettings(
+          usePinAuth: usePinAuth,
+          pinHash: pinHash,
+        );
         state = AsyncValue.data(updatedSettings);
       } catch (e, stackTrace) {
         state = AsyncValue.error(e, stackTrace);
@@ -408,6 +462,8 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
            a.hasCompletedOnboarding == b.hasCompletedOnboarding &&
            a.useDarkMode == b.useDarkMode &&
            a.useBiometricAuth == b.useBiometricAuth &&
+           a.usePinAuth == b.usePinAuth &&
+           a.pinHash == b.pinHash &&
            a.costAllocationMethod == b.costAllocationMethod &&
            a.showBreakEvenPrice == b.showBreakEvenPrice &&
            a.staleThresholdDays == b.staleThresholdDays &&

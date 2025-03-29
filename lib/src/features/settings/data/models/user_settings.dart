@@ -18,6 +18,8 @@ class UserSettings {
     this.hasCompletedOnboarding = false,
     this.useDarkMode = false,
     this.useBiometricAuth = false,
+    this.usePinAuth = false,
+    this.pinHash,
     this.costAllocationMethod = CostAllocationMethod.average,
     this.showBreakEvenPrice = true,
     this.staleThresholdDays = 90,
@@ -40,6 +42,12 @@ class UserSettings {
   
   /// Whether to use biometric authentication.
   final bool useBiometricAuth;
+  
+  /// Whether to use PIN authentication.
+  final bool usePinAuth;
+  
+  /// The securely hashed PIN, if set.
+  final String? pinHash;
   
   /// The cost allocation method.
   final CostAllocationMethod costAllocationMethod;
@@ -78,6 +86,9 @@ class UserSettings {
       useDarkMode: _isDarkTheme(json['theme'] as String?),
       // Fix: Use 'enable_biometric_unlock' instead of 'use_biometric_auth'
       useBiometricAuth: json['enable_biometric_unlock'] as bool? ?? false,
+      // Add parsing for new PIN fields
+      usePinAuth: json['enable_pin_unlock'] as bool? ?? false,
+      pinHash: json['pin_hash'] as String?,
       costAllocationMethod: _costAllocationMethodFromString(json['cost_allocation_method'] as String?),
       // Fix: Use 'show_break_even' instead of 'show_break_even_price'
       showBreakEvenPrice: json['show_break_even'] as bool? ?? true,
@@ -106,6 +117,9 @@ class UserSettings {
       'theme': useDarkMode ? 'dark' : 'system',
       // Fix: Use 'enable_biometric_unlock' instead of 'use_biometric_auth'
       'enable_biometric_unlock': useBiometricAuth,
+      // Add serialization for new PIN fields
+      'enable_pin_unlock': usePinAuth,
+      'pin_hash': pinHash,
       'cost_allocation_method': _dbCostAllocationMethodFromEnum(costAllocationMethod),
       // Fix: Use 'show_break_even' instead of 'show_break_even_price'
       'show_break_even': showBreakEvenPrice,
@@ -126,6 +140,8 @@ class UserSettings {
     bool? hasCompletedOnboarding,
     bool? useDarkMode,
     bool? useBiometricAuth,
+    bool? usePinAuth,
+    String? pinHash,
     CostAllocationMethod? costAllocationMethod,
     bool? showBreakEvenPrice,
     int? staleThresholdDays,
@@ -141,6 +157,8 @@ class UserSettings {
       hasCompletedOnboarding: hasCompletedOnboarding ?? this.hasCompletedOnboarding,
       useDarkMode: useDarkMode ?? this.useDarkMode,
       useBiometricAuth: useBiometricAuth ?? this.useBiometricAuth,
+      usePinAuth: usePinAuth ?? this.usePinAuth,
+      pinHash: pinHash ?? this.pinHash,
       costAllocationMethod: costAllocationMethod ?? this.costAllocationMethod,
       showBreakEvenPrice: showBreakEvenPrice ?? this.showBreakEvenPrice,
       staleThresholdDays: staleThresholdDays ?? this.staleThresholdDays,

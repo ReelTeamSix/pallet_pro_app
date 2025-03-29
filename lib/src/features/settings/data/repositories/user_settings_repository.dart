@@ -33,4 +33,10 @@ abstract class UserSettingsRepository {
     double? monthlyGoal,
     double? yearlyGoal,
   });
+
+  /// Updates the PIN authentication settings.
+  Future<UserSettings> updatePinSettings({
+    required bool usePinAuth,
+    String? pinHash,
+  });
 }

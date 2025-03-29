@@ -12,6 +12,8 @@ import 'package:pallet_pro_app/src/features/auth/presentation/screens/biometric_
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/biometric_setup_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/login_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/signup_screen.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_setup_screen.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_auth_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/inventory_screen.dart';
 import 'package:pallet_pro_app/src/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
@@ -47,33 +49,34 @@ final routerNotifierProvider =
 /// Manages routing logic and triggers refreshes based on auth/settings state.
 class RouterNotifier extends Notifier<void> implements Listenable {
   VoidCallback? _routerListener;
-  bool _isBiometricAuthShowing = false;
   bool _wasResumed = false;
   bool _isNotifying = false;
   bool _isOnSettingsScreen = false;
+  // Flag to track if the *initial* authentication check after login has passed.
+  bool _initialAuthDone = false; 
   DateTime _lastNotification = DateTime.now();
-  // Add a timestamp to track when app started
   final DateTime _appStartTime = DateTime.now();
-  // Maximum time to wait on splash screen (3 seconds)
   static const Duration _maxSplashWaitTime = Duration(seconds: 3);
-  // Timer to force periodic checks for splash timeout
   Timer? _splashTimeoutTimer;
-
-  // Create a route observer to track current screen
   final _routeObserver = _RouterObserver();
   
   @override
   void build() {
-    // Add callback to update settings screen flag
+    // _initialAuthDone should persist until logout, so don't reset it here.
+    
     _routeObserver.onRouteChanged = (String path) {
       _isOnSettingsScreen = path == '/settings';
       debugPrint('RouterNotifier: Route changed to $path, isOnSettingsScreen: $_isOnSettingsScreen');
     };
     
-    // Listen to both auth and user settings providers.
-    // When either changes significantly (loading state, error, data presence),
-    // notify the GoRouter to re-evaluate the redirect.
+    // Listen for sign-out events to reset the initial auth flag.
     ref.listen<AsyncValue<User?>>(authControllerProvider, (previous, next) {
+      final userJustSignedOut = previous?.hasValue == true && previous?.value != null && 
+                                next?.hasValue == true && next?.value == null;
+      if (userJustSignedOut) {
+        debugPrint('RouterNotifier: User signed out, resetting _initialAuthDone.');
+        _initialAuthDone = false;
+      }
       _handleProviderChange(previous, next, 'AuthController');
     });
 
@@ -201,139 +204,48 @@ class RouterNotifier extends Notifier<void> implements Listenable {
      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
         _wasResumed = true;
         debugPrint('RouterNotifier: App Resumed, notifying.');
-        _debouncedNotifyListeners(); // Use debounced method
+        _debouncedNotifyListeners();
      }
   }
 
-  /// Resets the resume flag after biometric check.
-  void resetResumeFlag() {
+  /// Marks the initial authentication check as completed successfully.
+  /// Called by auth screens (PIN/Biometric) upon successful verification.
+  void markInitialAuthCompleted() {
+    debugPrint('RouterNotifier: Initial authentication marked as completed.');
+    _initialAuthDone = true;
+    // Also reset the resume flag to prevent redirect loops
     _wasResumed = false;
-  }
-  
-  /// Context-free method to check if we're on splash screen and navigate if needed
-  void checkAndNavigateFromSplash() {
-    // Get router instance
-    final router = ref.read(routerProvider);
-    
-    // Check current location without using BuildContext
-    final location = router.routeInformationProvider.value.uri.path;
-    
-    if (location == '/splash') {
-      debugPrint('RouterNotifier: Forcing navigation from splash to login via safety timer');
-      router.go('/login?from=safety_timer');
-    } else {
-      debugPrint('RouterNotifier: Safety timer fired but not on splash screen (current: $location)');
-    }
+    debugPrint('RouterNotifier: Also reset resume flag to prevent redirect loops.');
+    // No need to notify here, the navigation triggered by the auth screen 
+    // will cause the redirect logic to run again.
   }
 
-  /// The routes for the application.
-  List<RouteBase> get _routes => [
-        GoRoute(
-          path: '/splash',
-          name: 'splash',
-          pageBuilder: (context, state) => CustomTransitionPage<void>(
-            key: state.pageKey,
-            child: const SplashScreen(),
-            // Add a fade transition for smoother experience
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            // Use longer duration for initial splash but shorter for transitions away from it
-            transitionDuration: const Duration(milliseconds: 400),
-          ),
-        ),
-        GoRoute(
-          path: '/login',
-          name: 'login',
-          pageBuilder: (context, state) => CustomTransitionPage<void>(
-            key: state.pageKey,
-            child: LoginScreen(from: state.uri.queryParameters['from']),
-            // Add a fade transition for smoother experience
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            // Use shorter duration for better responsiveness
-            transitionDuration: const Duration(milliseconds: 300),
-          ),
-        ),
-        GoRoute(
-          path: '/signup',
-          name: 'signup',
-          builder: (context, state) => SignupScreen(
-            // Pass the 'from' parameter to know the source of navigation
-            from: state.uri.queryParameters['from'],
-          ),
-        ),
-        GoRoute(
-          path: '/onboarding',
-          name: 'onboarding',
-          builder: (context, state) => const OnboardingScreen(),
-        ),
-        GoRoute(
-          path: '/biometric-setup',
-          name: 'biometric-setup',
-          builder: (context, state) => const BiometricSetupScreen(),
-        ),
-        GoRoute(
-          path: '/biometric-auth',
-          name: 'biometric-auth',
-          builder: (context, state) => BiometricAuthScreen(
-            // Reset resume flag when navigating away from biometric auth
-            onAuthenticated: () => resetResumeFlag(),
-            onCancel: () => resetResumeFlag(),
-          ),
-        ),
-        ShellRoute(
-          builder: (context, state, child) => AppShell(child: child),
-          routes: [
-            GoRoute(
-              path: '/home',
-              name: 'home',
-              pageBuilder: (context, state) => CustomTransitionPage<void>(
-                key: state.pageKey,
-                child: const InventoryScreen(),
-                // Add a fade transition for smoother experience when coming from login/splash
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-                // Use shorter duration for better responsiveness
-                transitionDuration: const Duration(milliseconds: 300),
-              ),
-            ),
-            GoRoute(
-              path: '/settings',
-              name: 'settings',
-              pageBuilder: (context, state) => CustomTransitionPage<void>(
-                key: state.pageKey,
-                child: const SettingsScreen(),
-                // Add a fade transition for smoother experience
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-                // Use shorter duration for better responsiveness
-                transitionDuration: const Duration(milliseconds: 250),
-              ),
-            ),
-            // Add more routes here as needed
-          ],
-        ),
-      ];
+  /// Called when an auth prompt triggered by app resume is explicitly cancelled.
+  void cancelResumeCheck() {
+    debugPrint('RouterNotifier: Resume check explicitly cancelled by user.');
+    _wasResumed = false;
+    // No need to notify here, the navigation from cancel action will trigger _redirectLogic
+  }
 
-  /// The core redirect logic. Watches auth and settings state.
+  /// The core redirect logic.
   String? _redirectLogic(BuildContext context, GoRouterState state) {
     final location = state.matchedLocation;
     final queryParams = state.uri.queryParameters;
-    debugPrint('RouterNotifier: Redirect check triggered for location: $location, params: $queryParams');
+    // Define from and reason early for use throughout the function
+    final from = queryParams['from'] ?? '';
+    final reason = queryParams['reason'] ?? ''; 
+    
+    debugPrint(
+        'RouterNotifier: Redirect check | Location: $location | Params: $queryParams | Reason: $reason | From: $from | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
 
     try {
-      // Snapshot providers ONCE at the beginning to avoid "Cannot use ref functions after dependency changed" errors
+      // Snapshot providers
       final authActionState = ref.read(authControllerProvider);
       final rawAuthState = ref.read(authStateChangesProvider);
       final settingsState = ref.read(userSettingsControllerProvider);
       
       final isSplash = location == '/splash';
       final isLoginRoute = location == '/login' || location == '/signup';
-      final from = queryParams['from'] ?? '';
 
       // --- 1. Handle VERY Initial Raw Auth Load ---
       // Stay on splash ONLY while the raw auth state stream is initially loading.
@@ -400,9 +312,22 @@ class RouterNotifier extends Notifier<void> implements Listenable {
 
       // --- 4a. Not Logged In ---
       if (!isLoggedIn) {
-        debugPrint('RouterNotifier: Raw Auth resolved: Not logged in. Redirecting to /login.');
-        // Go directly to login unless already on login/signup routes
-        return (isLoginRoute) ? null : '/login?from=not_logged_in';
+        // If already on login/signup, or just arrived from cancel/fail, stay there.
+        if (location == '/login' || location == '/signup') {
+          if (from == 'cancel' || from == 'fail') {
+             debugPrint('RouterNotifier: On login/signup from cancel/fail. Staying.');
+             _initialAuthDone = false; // Ensure we reset this flag when on login from cancel
+             return null; // Explicitly stay on login
+          }
+          debugPrint('RouterNotifier: Not logged in, but already on login/signup. Staying.');
+          _initialAuthDone = false; // Ensure flag is reset
+          return null;
+        }
+        // Otherwise, redirect to login
+        debugPrint('RouterNotifier: Not logged in. Resetting flags and redirecting to /login.');
+        _initialAuthDone = false;
+        _wasResumed = false; // Reset resume flag on logout/redirect to login
+        return '/login?from=not_logged_in';
       }
 
       // --- 4b. Logged In (User confirmed via Raw Auth) ---
@@ -450,50 +375,118 @@ class RouterNotifier extends Notifier<void> implements Listenable {
          return '/splash?from=waiting_settings';
       }
 
-      debugPrint('RouterNotifier: Logged in, settings loaded. Onboarding: ${userSettings.hasCompletedOnboarding}.');
+      debugPrint('RouterNotifier: Logged In & Settings Loaded | Onboarding: ${userSettings.hasCompletedOnboarding} | Biometric: ${userSettings.useBiometricAuth} | PIN: ${userSettings.usePinAuth} | InitialAuth: $_initialAuthDone');
 
-      // Define route checks (needed for subsequent logic)
+      // Define route checks
       final isOnboardingRoute = location == '/onboarding';
       final isBiometricAuthRoute = location == '/biometric-auth';
       final isBiometricSetupRoute = location == '/biometric-setup';
+      final isPinAuthRoute = location == '/pin-auth';
+      final isPinSetupRoute = location == '/pin-setup';
       final isHomeRoute = location == '/home';
 
-      // --- Biometric Check on App Resume --- (Keep existing logic)
-      final isOnProtectedLocation = !isLoginRoute && !isOnboardingRoute && !isBiometricSetupRoute && !isBiometricAuthRoute && !isSplash;
-       if (_wasResumed && (userSettings.useBiometricAuth ?? false) && isOnProtectedLocation && !_isBiometricAuthShowing) {
-          if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-             debugPrint('RouterNotifier: App resumed, biometric enabled, on protected route. Redirecting to /biometric-auth.');
-             _isBiometricAuthShowing = true; // Prevent re-entry loops
-             WidgetsBinding.instance.addPostFrameCallback((_) {
-                 _isBiometricAuthShowing = false;
-             });
-             return '/biometric-auth';
-          } else {
-             _wasResumed = false; // Reset flag on web/desktop
-          }
-       }
-       if (location != '/biometric-auth') {
-           resetResumeFlag();
-       }
+      final isAuthRelatedRoute = location == '/login' || location == '/signup' || 
+                                 location == '/onboarding' || 
+                                 isBiometricAuthRoute || 
+                                 location == '/biometric-setup' || 
+                                 isPinAuthRoute || 
+                                 location == '/pin-setup' || 
+                                 location == '/splash';
+
+      final isOnProtectedLocation = !isAuthRelatedRoute;
+
+      // --- Initial App Launch Authentication Check (Runs only if logged in and initial auth not done) ---
+      if (!_initialAuthDone && isOnProtectedLocation) {
+         String? authRoute;
+         bool needsInitialAuth = false;
+         if (userSettings.useBiometricAuth && !kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+            authRoute = '/biometric-auth';
+            needsInitialAuth = true;
+            debugPrint('RouterNotifier: Initial Launch Check: Needs Biometric.');
+         } else if (userSettings.usePinAuth) {
+            authRoute = '/pin-auth';
+            needsInitialAuth = true;
+            debugPrint('RouterNotifier: Initial Launch Check: Needs PIN.');
+         }
+
+         if (needsInitialAuth && authRoute != null) {
+            // Prevent redirect loop if already on the target auth route
+            if (location != authRoute) {
+               // Add reason parameter
+               debugPrint('RouterNotifier: Redirecting to initial auth route: $authRoute?reason=initial_auth');
+               return '$authRoute?reason=initial_auth'; 
+            }
+            // Already on the correct auth route, stay put
+            debugPrint('RouterNotifier: Already on initial auth route $authRoute. Staying.');
+            return null; // Added return null
+            
+         } else {
+            // No initial auth required (e.g., neither enabled)
+            debugPrint('RouterNotifier: Initial Launch Check: No auth needed. Marking done.');
+            _initialAuthDone = true; // Mark as done if no check is needed
+         }
+      }
+
+      // --- App Resume Authentication Check (Runs only if logged in and app was resumed) ---
+      if (_wasResumed && isOnProtectedLocation) {
+         // Reset resume flag immediately to prevent re-triggering this block
+         debugPrint('RouterNotifier: Handling app resume.');
+         _wasResumed = false; 
+
+         String? resumeAuthRoute;
+         bool needsResumeAuth = false;
+          if (userSettings.useBiometricAuth && !kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+            resumeAuthRoute = '/biometric-auth';
+            needsResumeAuth = true;
+            debugPrint('RouterNotifier: Resume Check: Needs Biometric.');
+         } else if (userSettings.usePinAuth) {
+            resumeAuthRoute = '/pin-auth';
+            needsResumeAuth = true;
+            debugPrint('RouterNotifier: Resume Check: Needs PIN.');
+         }
+
+         if (needsResumeAuth && resumeAuthRoute != null) {
+            // Prevent redirect loop if already on the target auth route
+            if (location != resumeAuthRoute) {
+              // Add reason parameter
+               debugPrint('RouterNotifier: Redirecting to resume auth route: $resumeAuthRoute?reason=resume_auth');
+               return '$resumeAuthRoute?reason=resume_auth';
+            }
+            // Already on the correct auth route, stay put
+            debugPrint('RouterNotifier: Already on resume auth route $resumeAuthRoute. Staying.');
+            return null; // Added return null
+
+         } else {
+             // No resume auth needed, flag already reset above.
+             debugPrint('RouterNotifier: Resume Check: No auth needed.');
+         }
+      }
 
       // --- Onboarding Check ---
-      if (!(userSettings.hasCompletedOnboarding ?? false)) { // Handle null safety
+      if (!(userSettings.hasCompletedOnboarding ?? false)) {
         debugPrint('RouterNotifier: Needs onboarding.');
+        // Redirect away from PIN setup during onboarding
+        if (isPinSetupRoute) return '/onboarding'; 
         return isOnboardingRoute ? null : '/onboarding';
       }
 
       // --- Post-Onboarding/Login Redirects ---
-      // Redirect away from auth/splash/onboarding screens if fully logged in and onboarded
+      // If fully authenticated and onboarded, redirect away from auth/splash/onboarding
       if (isLoginRoute || isOnboardingRoute || isSplash) {
-          final needsBiometricSetup = !(userSettings.useBiometricAuth ?? true) // Default true if null
-                                      && !isBiometricSetupRoute
-                                      && !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+          final bool canUseBiometrics = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+          // Redirect to Biometric setup if needed (only from onboarding)
+          final bool needsBiometricSetup = canUseBiometrics 
+                                          && !(userSettings.useBiometricAuth ?? false)
+                                          && !isBiometricSetupRoute;
 
-          if (needsBiometricSetup && isOnboardingRoute) { // Redirect from onboarding only
+          if (needsBiometricSetup && isOnboardingRoute) { 
                debugPrint('RouterNotifier: Onboarding complete, needs biometric setup. Redirecting to /biometric-setup.');
                return '/biometric-setup';
-          } else {
-               // Add a query parameter to indicate a smooth transition to avoid flashing
+          } 
+          // TODO: Consider adding PIN setup redirect here? 
+          // E.g., if biometrics skipped/unavailable, prompt for PIN?
+          // For now, just go home.
+          else {
                debugPrint('RouterNotifier: Logged in and onboarded. Redirecting away from $location to /home.');
                return '/home?from=auth_complete'; 
           }
@@ -504,11 +497,42 @@ class RouterNotifier extends Notifier<void> implements Listenable {
           debugPrint('RouterNotifier: On biometric setup but already setup/not applicable. Redirecting to /home.');
           return '/home';
       }
+      
+      // Redirect away from PIN setup if PIN auth is disabled (user might land here via deep link)
+      if (isPinSetupRoute && !userSettings.usePinAuth && (userSettings.pinHash != null && userSettings.pinHash!.isNotEmpty)) {
+         debugPrint('RouterNotifier: On PIN setup but PIN auth is disabled. Redirecting to /settings.');
+         return '/settings'; // Or /home?
+      }
 
-      // --- Default Case ---
-      // All checks passed, user is logged in, onboarded, settings loaded, no special condition applies.
+      // --- Final Check: Properly Handle Authentication Conflicts ---
+      // 'from' and 'reason' are already defined above
+
+      // Special case: Allow direct navigation from biometric to PIN auth
+      if (isPinAuthRoute && from == 'biometric') { // Use 'from' here if needed
+          debugPrint('RouterNotifier: Allowing direct navigation from biometric to PIN auth');
+          return null; // Let the navigation to PIN auth proceed
+      }
+      
+      // Check if we are on an auth route specifically because it was required (using 'reason')
+      final bool onRequiredAuthRoute = (isPinAuthRoute || isBiometricAuthRoute) &&
+                                       (reason == 'initial_auth' || reason == 'resume_auth');
+
+      // If initial auth is done and user is logged in, redirect away from auth screens
+      // UNLESS the user was just sent there for a required auth check.
+      if (_initialAuthDone && isLoggedIn && (isPinAuthRoute || isBiometricAuthRoute) && !onRequiredAuthRoute) {
+         debugPrint('RouterNotifier: Already authenticated & not required, redirecting from $location to /home'); // Updated msg
+         return '/home';
+      }
+      
+      // If we are on login/signup but actually logged in and initial auth is done, go home
+      if (_initialAuthDone && isLoggedIn && (location == '/login' || location == '/signup')) {
+          debugPrint('RouterNotifier: Logged in and initial auth done, redirecting from login/signup to /home');
+          return '/home';
+      }
+      
+      // --- Default Case --- 
       debugPrint('RouterNotifier: All checks passed for $location. Allowing navigation.');
-      return null; // No redirect needed, stay on the current target route.
+      return null; 
     } catch (e, stack) {
       debugPrint('RouterNotifier: Error in redirect logic: $e\n$stack');
       
@@ -525,14 +549,119 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     }
   }
 
-  /// Checks if biometric auth should be shown based on settings and platform.
-  /// NOTE: This logic seems duplicated/implicitly handled by the main redirect. Keeping for reference or potential future use.
-  // bool _shouldShowBiometricAuth(UserSettings settings) {
-  //   return _wasResumed &&
-  //          settings.useBiometricAuth &&
-  //          !kIsWeb &&
-  //          (Platform.isAndroid || Platform.isIOS);
-  // }
+  /// The routes for the application.
+  List<RouteBase> get _routes => [
+        GoRoute(
+          path: '/splash',
+          name: 'splash',
+          pageBuilder: (context, state) => CustomTransitionPage<void>(
+            key: state.pageKey,
+            child: const SplashScreen(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 400),
+          ),
+        ),
+        GoRoute(
+          path: '/login',
+          name: 'login',
+          pageBuilder: (context, state) => CustomTransitionPage<void>(
+            key: state.pageKey,
+            child: LoginScreen(from: state.uri.queryParameters['from']),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 300),
+          ),
+        ),
+        GoRoute(
+          path: '/signup',
+          name: 'signup',
+          builder: (context, state) => SignupScreen(
+            from: state.uri.queryParameters['from'],
+          ),
+        ),
+        GoRoute(
+          path: '/onboarding',
+          name: 'onboarding',
+          builder: (context, state) => const OnboardingScreen(),
+        ),
+        GoRoute(
+          path: '/biometric-setup',
+          name: 'biometric-setup',
+          builder: (context, state) => const BiometricSetupScreen(),
+        ),
+        GoRoute(
+          path: '/biometric-auth',
+          name: 'biometric-auth',
+          builder: (context, state) => BiometricAuthScreen(
+            // Logic is handled inside the screen now
+            onAuthenticated: null, // REMOVED
+            // Navigate to login on cancel
+            onCancel: () => GoRouter.of(context).go('/login?from=cancel'), 
+          ),
+        ),
+        GoRoute(
+          path: '/pin-setup',
+          name: 'pin-setup',
+          builder: (context, state) => const PinSetupScreen(),
+        ),
+        GoRoute(
+          path: '/pin-auth',
+          name: 'pin-auth',
+          builder: (context, state) => PinAuthScreen(
+            // Logic is handled inside the screen now
+            onAuthenticated: null, // REMOVED
+             // Navigate to login on cancel
+            onCancel: () => GoRouter.of(context).go('/login?from=cancel'), 
+          ),
+        ),
+        ShellRoute(
+          builder: (context, state, child) => AppShell(child: child),
+          routes: [
+            GoRoute(
+              path: '/home',
+              name: 'home',
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const InventoryScreen(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                transitionDuration: const Duration(milliseconds: 300),
+              ),
+            ),
+            GoRoute(
+              path: '/scan',
+              name: 'scan',
+              builder: (context, state) => const PlaceholderScreen(title: 'Scan/Add'),
+            ),
+            GoRoute(
+              path: '/sales',
+              name: 'sales',
+              builder: (context, state) => const PlaceholderScreen(title: 'Sales'),
+            ),
+            GoRoute(
+              path: '/analytics',
+              name: 'analytics',
+              builder: (context, state) => const PlaceholderScreen(title: 'Analytics'),
+            ),
+            GoRoute(
+              path: '/settings',
+              name: 'settings',
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const SettingsScreen(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                transitionDuration: const Duration(milliseconds: 250),
+              ),
+            ),
+          ],
+        ),
+      ];
 }
 
 /// The app shell, providing consistent navigation (Drawer or BottomNav).
@@ -548,28 +677,62 @@ class AppShell extends ConsumerWidget {
 
   // Helper function to calculate navigation index based on route
   int _calculateSelectedIndex(String currentLocation) {
-    if (currentLocation.startsWith('/settings')) {
+    if (currentLocation.startsWith('/scan')) { // Placeholder route name
       return 1;
     }
-    // Default to Inventory/Home
+    if (currentLocation.startsWith('/sales')) { // Placeholder route name
+      return 2;
+    }
+    if (currentLocation.startsWith('/analytics')) { // Placeholder route name
+      return 3;
+    }
+    if (currentLocation.startsWith('/settings')) {
+      return 4; // Updated index
+    }
+    // Default to Home/Inventory
     return 0;
   }
 
   // Helper for navigation logic
   void _navigate(BuildContext scaffoldContext, int index, String currentLocation) {
-     bool drawerIsOpen = Scaffold.of(scaffoldContext).isDrawerOpen;
+     bool drawerIsOpen = false;
+     // Check if the Scaffold has a drawer and if it's open
+     // Use maybeOf to handle cases where Scaffold or drawer might not be present immediately
+     final scaffoldState = Scaffold.maybeOf(scaffoldContext);
+     if (scaffoldState?.hasDrawer ?? false) {
+        drawerIsOpen = scaffoldState!.isDrawerOpen;
+     }
+
      if (drawerIsOpen) {
-      Navigator.of(scaffoldContext).pop();
-    }
+       // Use root navigator to ensure drawer context isn't lost
+       Navigator.of(scaffoldContext, rootNavigator: true).pop();
+     }
 
     // Use Future.delayed to allow the drawer to close before navigating
-    Future.delayed(drawerIsOpen ? const Duration(milliseconds: 50) : Duration.zero, () {
+    // Increased delay slightly for smoother drawer closing
+    Future.delayed(drawerIsOpen ? const Duration(milliseconds: 100) : Duration.zero, () {
       if (!scaffoldContext.mounted) return;
-      
-      if (index == 0 && !currentLocation.startsWith('/home')) {
-        GoRouter.of(scaffoldContext).go('/home');
-      } else if (index == 1 && !currentLocation.startsWith('/settings')) {
-        GoRouter.of(scaffoldContext).go('/settings');
+      final router = GoRouter.of(scaffoldContext);
+
+      switch (index) {
+        case 0:
+          if (!currentLocation.startsWith('/home')) router.go('/home');
+          break;
+        case 1:
+          // TODO: Define and navigate to '/scan' route
+          if (!currentLocation.startsWith('/scan')) router.go('/scan'); // Placeholder
+          break;
+        case 2:
+          // TODO: Define and navigate to '/sales' route
+          if (!currentLocation.startsWith('/sales')) router.go('/sales'); // Placeholder
+          break;
+        case 3:
+          // TODO: Define and navigate to '/analytics' route
+          if (!currentLocation.startsWith('/analytics')) router.go('/analytics'); // Placeholder
+          break;
+        case 4:
+          if (!currentLocation.startsWith('/settings')) router.go('/settings');
+          break;
       }
     });
   }
@@ -644,7 +807,6 @@ class AppShell extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: Theme.of(drawerContext).colorScheme.primaryContainer,
                     ),
-                    // TODO: Add nice header content? Logo? App name?
                     child: Text(
                       'Pallet Pro',
                       style: Theme.of(drawerContext).textTheme.titleLarge?.copyWith(
@@ -653,18 +815,40 @@ class AppShell extends ConsumerWidget {
                     ),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.inventory),
-                    title: const Text('Inventory'),
+                    // Using 'Home' icon and label for consistency
+                    leading: const Icon(Icons.home_filled),
+                    title: const Text('Home'), // Changed from Inventory
                     selected: selectedIndex == 0,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
                     onTap: () => _navigate(drawerContext, 0, currentLocation),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.settings),
-                    title: const Text('Settings'),
+                    leading: const Icon(Icons.qr_code_scanner), // Placeholder icon
+                    title: const Text('Scan/Add'), // Placeholder label
                     selected: selectedIndex == 1,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 1, currentLocation),
+                    onTap: () => _navigate(drawerContext, 1, currentLocation), // Placeholder
+                  ),
+                   ListTile(
+                    leading: const Icon(Icons.receipt_long), // Placeholder icon
+                    title: const Text('Sales'), // Placeholder label
+                    selected: selectedIndex == 2,
+                    selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
+                    onTap: () => _navigate(drawerContext, 2, currentLocation), // Placeholder
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.analytics), // Placeholder icon
+                    title: const Text('Analytics'), // Placeholder label
+                    selected: selectedIndex == 3,
+                    selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
+                    onTap: () => _navigate(drawerContext, 3, currentLocation), // Placeholder
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.settings),
+                    title: const Text('Settings'),
+                    selected: selectedIndex == 4, // Updated index
+                    selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
+                    onTap: () => _navigate(drawerContext, 4, currentLocation), // Updated index
                   ),
                   const Divider(),
                   ListTile(
@@ -683,46 +867,48 @@ class AppShell extends ConsumerWidget {
     } else {
       // Mobile Layout using BottomNavigationBar
       return Scaffold(
-        // Use Builder to get context below the Scaffold for sign-out SnackBar
+        // Use Builder to get context below the Scaffold for sign-out SnackBar etc.
         body: Builder(
-          builder: (scaffoldBodyContext) { 
+          builder: (scaffoldBodyContext) {
+            // We only need the AppBar and the main content (child) here.
+            // The AppBar no longer needs Settings/Logout actions.
             return Column(
               children: [
                 AppBar(
                   title: const Text('Pallet Pro'),
                   // No back button automatically if it's a top-level route in Shell
-                  // Add leading drawer button explicitly if needed, but maybe not typical for BNV
-                  actions: [
-                    // Settings button - only on mobile if not on settings screen
-                    if (selectedIndex != 1)
-                      IconButton(
-                        icon: const Icon(Icons.settings),
-                        tooltip: 'Settings',
-                        // Use scaffoldBodyContext for navigation
-                        onPressed: () => _navigate(scaffoldBodyContext, 1, currentLocation), 
-                      ),
-                    // Logout button - keep on AppBar for mobile?
-                    IconButton(
-                      icon: const Icon(Icons.logout),
-                      tooltip: 'Sign Out',
-                      // Use scaffoldBodyContext for ScaffoldMessenger
-                      onPressed: () => _signOut(scaffoldBodyContext, ref),
-                    ),
-                  ],
+                  // No leading hamburger icon needed for BottomNav
+                  actions: const [], // Remove Settings and Logout actions
                 ),
                 Expanded(child: child), // Main content takes remaining space
               ],
             );
           }
         ),
+        // Updated BottomNavigationBar
         bottomNavigationBar: BottomNavigationBar(
+          // Set type to fixed when there are more items to prevent shifting
+          type: BottomNavigationBarType.fixed,
           currentIndex: selectedIndex,
-          // Use context from Builder above for navigation
+          // Use context from Builder above if needed, but GoRouter uses root context usually
           onTap: (index) => _navigate(context, index, currentLocation),
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.inventory),
-              label: 'Inventory',
+              // Using 'Home' icon and label for consistency
+              icon: Icon(Icons.home_filled),
+              label: 'Home', // Changed from Inventory
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.qr_code_scanner), // Placeholder icon
+              label: 'Scan/Add', // Placeholder label
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long), // Placeholder icon
+              label: 'Sales', // Placeholder label
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.analytics), // Placeholder icon
+              label: 'Analytics', // Placeholder label
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.settings),
@@ -773,55 +959,6 @@ class SplashScreen extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// Ensure BiometricAuthScreen accepts callbacks
-class BiometricAuthScreen extends StatelessWidget {
-  final VoidCallback? onAuthenticated;
-  final VoidCallback? onCancel;
-
-  const BiometricAuthScreen({super.key, this.onAuthenticated, this.onCancel});
-
-  @override
-  Widget build(BuildContext context) {
-    // Replace with your actual Biometric Auth UI
-    // Call onAuthenticated on success, onCancel on failure/user cancel
-    return Scaffold(
-      appBar: AppBar(title: const Text('Unlock App')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Please authenticate to continue.'),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                // Simulate successful authentication
-                await Future.delayed(const Duration(seconds: 1));
-                debugPrint("BiometricAuthScreen: Authenticated (simulated)");
-                onAuthenticated?.call();
-                // Typically, GoRouter's refresh will handle navigation
-                // after the state change caused by successful auth.
-                // If not, you might need manual navigation:
-                // if (context.canPop()) context.pop(); else context.go('/home');
-              },
-              child: const Text('Authenticate (Simulate)'),
-            ),
-             ElevatedButton(
-              onPressed: () {
-                 debugPrint("BiometricAuthScreen: Cancelled");
-                 onCancel?.call();
-                 // Navigate back or to login on cancel
-                 context.go('/login');
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
-              child: const Text('Cancel'),
-            ),
-          ],
         ),
       ),
     );
@@ -881,5 +1018,23 @@ class _RouterObserver extends NavigatorObserver {
     
     // Fallback to settings.name which might be null
     return route.settings.name;
+  }
+}
+
+/// Simple placeholder screen for undeveloped features
+class PlaceholderScreen extends StatelessWidget {
+  final String title;
+  const PlaceholderScreen({super.key, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    // Note: This screen doesn't have its own AppBar because it's rendered
+    // inside the AppShell which already provides one.
+    return Center(
+      child: Text(
+        '$title Screen - Coming Soon!',
+        style: Theme.of(context).textTheme.headlineSmall,
+      ),
+    );
   }
 }

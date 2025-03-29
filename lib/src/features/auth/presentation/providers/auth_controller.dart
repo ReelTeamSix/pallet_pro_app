@@ -13,6 +13,9 @@ final authStateChangesProvider = StreamProvider<AuthState>((ref) {
   return Supabase.instance.client.auth.onAuthStateChange;
 });
 
+/// Provider to track when sign out is in progress
+final isSigningOutProvider = StateProvider<bool>((ref) => false);
+
 /// Provider for the [AuthController].
 final authControllerProvider =
     AsyncNotifierProvider<AuthController, User?>(() => AuthController());
@@ -112,6 +115,9 @@ class AuthController extends AsyncNotifier<User?> {
     debugPrint('AuthController: Signing out...');
     
     try {
+      // Set the signing out flag to true before starting the process
+      ref.read(isSigningOutProvider.notifier).state = true;
+      
       // Set loading state *before* performing sign out
       state = const AsyncValue.loading();
       
@@ -124,8 +130,14 @@ class AuthController extends AsyncNotifier<User?> {
       // Small delay to ensure all cleanup has occurred, not affecting redirection
       await Future.delayed(const Duration(milliseconds: 200));
       
+      // Reset the signing out flag after sign out completes
+      ref.read(isSigningOutProvider.notifier).state = false;
+      
       debugPrint('AuthController: Sign out successful');
     } catch (e, stackTrace) {
+      // Reset the signing out flag in case of error
+      ref.read(isSigningOutProvider.notifier).state = false;
+      
       debugPrint('AuthController: Sign out error: $e');
       state = AsyncValue.error(e, stackTrace);
       rethrow;

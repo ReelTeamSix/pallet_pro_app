@@ -357,4 +357,34 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
       throw DatabaseException.updateFailed('sales goals', e.toString());
     }
   }
+
+  @override
+  Future<UserSettings> updatePinSettings({
+    required bool usePinAuth,
+    String? pinHash,
+  }) async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        throw const AuthException('User not authenticated');
+      }
+
+      // Prepare updates using DB column names
+      final updates = <String, dynamic>{
+        'enable_pin_unlock': usePinAuth,
+        'pin_hash': pinHash, // Pass hash directly (can be null to clear it)
+      };
+
+      final response = await _client
+          .from(_tableName)
+          .update(updates)
+          .eq('id', user.id) // Ensure we update the correct user
+          .select()
+          .single();
+
+      return UserSettings.fromJson(response);
+    } catch (e) {
+      throw DatabaseException.updateFailed('PIN settings', e.toString());
+    }
+  }
 }

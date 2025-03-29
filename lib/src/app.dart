@@ -8,6 +8,12 @@ import 'package:pallet_pro_app/src/core/theme/app_theme.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 
+/// Provider for persisting theme mode across auth state changes
+final cachedThemeModeProvider = StateProvider<ThemeMode>((ref) {
+  // Default to light theme
+  return ThemeMode.light;
+});
+
 /// The main application widget.
 class App extends ConsumerStatefulWidget {
   /// Creates a new [App] instance.
@@ -25,18 +31,19 @@ class _AppState extends ConsumerState<App> {
     super.initState();
     
     // Additional safety measure - if we're stuck on splash for too long, force navigation
-    if (kIsWeb) {
-      _splashSafetyTimer = Timer(const Duration(seconds: 4), () {
-        debugPrint('App: Splash safety timer expired, forcing navigation to login');
-        
-        // Get router and attempt to go to login directly
-        final router = ref.read(routerProvider);
-        
-        // Use a context-free way to check current location and navigate if needed
-        final routerNotifier = ref.read(routerNotifierProvider.notifier);
-        routerNotifier.checkAndNavigateFromSplash();
-      });
-    }
+    // This timer logic is largely handled within the RouterNotifier now.
+    // Consider removing this if redundant.
+    // if (kIsWeb) {
+    //   _splashSafetyTimer = Timer(const Duration(seconds: 4), () {
+    //     debugPrint('App: Splash safety timer expired, forcing navigation to login');
+    //     
+    //     // Get router and attempt to go to login directly
+    //     final router = ref.read(routerProvider);
+    //     
+    //     // The redirect logic in RouterNotifier should handle splash timeouts.
+    //     // router.go('/login?from=app_safety_timer'); // Example direct navigation
+    //   });
+    // }
   }
   
   @override
@@ -49,11 +56,17 @@ class _AppState extends ConsumerState<App> {
   Widget build(BuildContext context) {
     // Watch user settings to determine theme mode
     final userSettingsAsync = ref.watch(userSettingsControllerProvider);
-    final themeMode = userSettingsAsync.when(
-      data: (settings) => (settings?.useDarkMode ?? false) ? ThemeMode.dark : ThemeMode.light,
-      loading: () => ThemeMode.light, // Default to light while loading
-      error: (err, stack) => ThemeMode.light, // Default to light on error
-    );
+    
+    // Update cached theme when settings change, but keep previous theme during transitions
+    userSettingsAsync.whenData((settings) {
+      if (settings != null) {
+        final newThemeMode = settings.useDarkMode ? ThemeMode.dark : ThemeMode.light;
+        ref.read(cachedThemeModeProvider.notifier).state = newThemeMode;
+      }
+    });
+    
+    // Use cached theme mode, which persists across auth state changes
+    final themeMode = ref.watch(cachedThemeModeProvider);
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
@@ -61,7 +74,7 @@ class _AppState extends ConsumerState<App> {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightThemeData,
       darkTheme: AppTheme.darkThemeData,
-      themeMode: themeMode, // Use themeMode derived from user settings
+      themeMode: themeMode, // Use the cached theme mode
       routerConfig: router,
     );
   }
