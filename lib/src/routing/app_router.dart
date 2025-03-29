@@ -799,13 +799,13 @@ class AppShell extends ConsumerWidget {
                   // No back button automatically if it's a top-level route in Shell
                   // No leading hamburger icon needed for BottomNav
                   actions: [
-                    // Add Sign Out button for mobile layout
-                    IconButton(
-                      icon: const Icon(Icons.logout),
-                      tooltip: 'Sign Out',
-                      // Use scaffoldBodyContext for ScaffoldMessenger access within _signOut
-                      onPressed: () => _signOut(scaffoldBodyContext, ref),
-                    ),
+                    // Remove Sign Out button from mobile layout AppBar
+                    // IconButton(
+                    //   icon: const Icon(Icons.logout),
+                    //   tooltip: 'Sign Out',
+                    //   // Use scaffoldBodyContext for ScaffoldMessenger access within _signOut
+                    //   onPressed: () => _signOut(scaffoldBodyContext, ref),
+                    // ),
                   ], 
                 ),
                 Expanded(child: child), // Main content takes remaining space

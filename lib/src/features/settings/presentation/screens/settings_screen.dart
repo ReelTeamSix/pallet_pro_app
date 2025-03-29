@@ -7,6 +7,7 @@ import 'package:pallet_pro_app/src/features/auth/data/services/biometric_service
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
 
 /// The settings screen.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -78,6 +79,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _toggleBiometricAuth(bool value) async {
     if (_isLoading) return;
 
+    // --- Check for PIN setup BEFORE enabling biometrics ---
+    if (value == true) { // Only check when enabling
+      // Read latest state directly from the provider for the check
+      final currentSettings = ref.read(userSettingsControllerProvider).valueOrNull;
+      final pinAuthEnabled = currentSettings?.usePinAuth ?? false;
+      final pinHashSet = currentSettings?.pinHash != null && currentSettings!.pinHash!.isNotEmpty;
+
+      if (!pinAuthEnabled || !pinHashSet) {
+        // Show message and navigate to PIN setup
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please set up and enable PIN authentication first as a fallback.'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+          // Navigate to PIN setup
+          final currentLocation = GoRouterState.of(context).matchedLocation;
+          if (currentLocation != '/pin-setup') {
+             context.push('/pin-setup'); 
+          }
+        }
+        // IMPORTANT: Return here to prevent the switch from toggling on
+        // and prevent the actual controller update.
+        return; 
+      }
+    }
+    // --- End PIN check ---
+
+    // Continue with optimistic update and controller call only if check passes or disabling
     setState(() {
       _isLoading = true;
       // Apply optimistic update for immediate feedback
@@ -119,6 +150,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _togglePinAuth(bool value) async {
     if (_isLoading) return;
 
+    // --- NEW CHECK: Prevent disabling PIN if Biometrics is enabled ---
+    if (value == false) { // Only check when attempting to disable
+      // Read latest state directly from the provider for the check
+      final currentSettings = ref.read(userSettingsControllerProvider).valueOrNull;
+      final biometricAuthEnabled = currentSettings?.useBiometricAuth ?? false;
+
+      if (biometricAuthEnabled) {
+        // Show message and prevent disabling
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cannot disable PIN while Biometric Authentication is enabled. Disable biometrics first.'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        // IMPORTANT: Return here to prevent the switch from toggling off
+        // and prevent the actual controller update.
+        return;
+      }
+    }
+    // --- End Biometric check ---
+
     // If enabling PIN but no PIN is set, navigate to setup first
     if (value && (_cachedSettings?.pinHash == null || _cachedSettings!.pinHash!.isEmpty)) {
       // Add a check to prevent navigation if already on PinSetupScreen
@@ -132,7 +186,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return; // Don't toggle the switch directly yet
     }
 
-    // If disabling PIN, clear the hash
+    // If disabling PIN, clear the hash (this only happens if biometric check above passes)
     String? pinHashToSet = _cachedSettings?.pinHash;
     if (!value) {
         pinHashToSet = null; // Clear hash when disabling
@@ -262,6 +316,77 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  /// Handles the sign-out process.
+  Future<void> _signOut() async {
+    if (_isLoading) return; // Prevent multiple taps
+
+    // Optional: Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Sign Out', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return; // User cancelled
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    // Show signing out SnackBar
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Signing out...'),
+          duration: Duration(seconds: 2), // Short duration
+        ),
+      );
+      // Attempt to hide quickly if sign-out is fast
+      ScaffoldMessenger.of(context).hideCurrentSnackBar(); 
+    }
+
+    try {
+      // Use ref.read for one-off actions like sign out
+      await ref.read(authControllerProvider.notifier).signOut();
+      // Navigation is handled by the router listening to auth state changes
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is AppException
+                  ? e.message
+                  : 'Failed to sign out: ${e.toString()}'
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      // Only update state if the widget is still mounted
+      // If sign-out was successful, the widget might unmount before this runs
+       if (mounted) {
+         setState(() {
+           _isLoading = false;
+         });
+       }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userSettingsAsync = ref.watch(userSettingsControllerProvider);
@@ -380,6 +505,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 title: Text('Version'),
                 subtitle: Text('Pallet Pro v3.8.0'),
               ),
+
+              // Add Sign Out Button Here
+              const Divider(),
+              ListTile(
+                leading: Icon(Icons.logout, color: context.errorColor),
+                title: Text('Sign Out', style: TextStyle(color: context.errorColor)),
+                // Disable button while loading
+                onTap: _isLoading ? null : _signOut,
+              ),
+              const SizedBox(height: 20), // Add some padding at the bottom
             ],
           );
         },

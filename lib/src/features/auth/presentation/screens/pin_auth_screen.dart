@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
 
 /// Screen for handling PIN authentication on app resume or as fallback.
 class PinAuthScreen extends ConsumerStatefulWidget {
@@ -223,6 +224,43 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
                   onPressed: _isLoading ? null : _cancelAuthentication,
                   child: const Text('Cancel'),
                 ),
+                
+                // --- NEW: Add "Sign Out & Login" Button ---
+                const SizedBox(height: 16), // Add some spacing
+                TextButton(
+                  onPressed: () async {
+                    if (mounted) {
+                      // Show loading indicator
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Signing out...'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                      try {
+                         // Import AuthController if not already done
+                         // import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
+                         await ref.read(authControllerProvider.notifier).signOut();
+                         // Router will handle redirect to login
+                      } catch (e) {
+                         if (mounted) {
+                           ScaffoldMessenger.of(context).showSnackBar(
+                             SnackBar(
+                               content: Text('Sign out failed: $e'),
+                               backgroundColor: Theme.of(context).colorScheme.error,
+                             ),
+                           );
+                         }
+                      }
+                    }
+                  },
+                  child: Text(
+                    'Sign Out & Login with Password',
+                    style: TextStyle(color: Theme.of(context).colorScheme.secondary)
+                  ),
+                ),
+                // --- End New Button ---
+
                 // Hint if PIN isn't set (shouldn't normally be reachable if logic is correct)
                 if (!pinIsSet && !_isLoading)
                   Padding(

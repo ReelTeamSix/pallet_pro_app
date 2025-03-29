@@ -142,6 +142,32 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
       }
   }
 
+  // Helper function for signing out and navigating to login
+  Future<void> _signOutAndLogin() async {
+    if (mounted) {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Signing out...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      try {
+          await ref.read(authControllerProvider.notifier).signOut();
+          // Router will handle redirect to login
+      } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Sign out failed: $e'),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+          }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Watch settings to see if PIN is enabled
@@ -212,10 +238,29 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
                       child: const Text('Use PIN Instead'),
                     ),
                   
-                  // Option 2: Cancel (if PIN not enabled or as primary cancel)
+                  // Option 2: Cancel OR Sign Out button
                   TextButton(
-                    onPressed: _cancelAuthentication, // Uses updated logic
-                    child: Text(pinAuthEnabled ? 'Cancel' : 'Cancel / Sign Out'), // Adjust label slightly
+                    // If PIN is enabled, this is just a 'Cancel'.
+                    // If PIN is disabled, this becomes the 'Sign Out' fallback.
+                    onPressed: () {
+                      if (pinAuthEnabled) {
+                        _cancelAuthentication(); // Normal cancel (goes back or to home)
+                      } else {
+                        // Explicitly sign out if PIN is disabled
+                        _signOutAndLogin(); // Reuse the sign out logic
+                      }
+                    },
+                    child: Text(pinAuthEnabled ? 'Cancel' : 'Sign Out'), // Updated label
+                  ),
+                  
+                  // Option 3: Always show "Login with Password" as the ultimate fallback
+                  const SizedBox(height: 24), // Add some spacing
+                  TextButton(
+                    onPressed: _signOutAndLogin, // Reuse the sign out logic
+                    child: Text(
+                      'Login with Password Instead',
+                      style: TextStyle(color: Theme.of(context).colorScheme.secondary)
+                    ),
                   ),
                 ],
               ],
