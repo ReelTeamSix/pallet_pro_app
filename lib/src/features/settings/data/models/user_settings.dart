@@ -3,7 +3,7 @@ enum CostAllocationMethod {
   /// First-in, first-out.
   fifo,
   
-  /// Last-in, first-out.
+  /// Last-in, first-out..
   lifo,
   
   /// Average cost.
