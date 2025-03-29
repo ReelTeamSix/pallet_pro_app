@@ -243,10 +243,9 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   String? _redirectLogic(BuildContext context, GoRouterState state) {
     final location = state.matchedLocation;
     final queryParams = state.uri.queryParameters;
-    // Define from and reason early for use throughout the function
     final from = queryParams['from'] ?? '';
-    final reason = queryParams['reason'] ?? ''; 
-    
+    final reason = queryParams['reason'] ?? '';
+
     debugPrint(
         'RouterNotifier: Redirect check | Location: $location | Params: $queryParams | Reason: $reason | From: $from | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
 
@@ -255,32 +254,24 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       final authActionState = ref.read(authControllerProvider);
       final rawAuthState = ref.read(authStateChangesProvider);
       final settingsState = ref.read(userSettingsControllerProvider);
-      
+
       final isSplash = location == '/splash';
-      final isLoginRoute = location == '/login' || location == '/signup';
+      final isLoginOrSignupRoute = location == '/login' || location == '/signup';
+      final isOnboardingRoute = location == '/onboarding';
+      final isBiometricAuthRoute = location == '/biometric-auth';
+      final isPinAuthRoute = location == '/pin-auth';
+      final isBiometricSetupRoute = location == '/biometric-setup';
+      final isPinSetupRoute = location == '/pin-setup';
 
       // --- 1. Handle VERY Initial Raw Auth Load ---
-      // Stay on splash ONLY while the raw auth state stream is initially loading.
       final isRawAuthLoading = !rawAuthState.hasValue && !rawAuthState.hasError;
-      
-      // Calculate how long we've been waiting for auth to initialize
       final splashWaitedTooLong = DateTime.now().difference(_appStartTime) > _maxSplashWaitTime;
-      
-      // Prevent redirect loops with special safety timer case
-      if (from == 'safety_timer' && isLoginRoute) {
-        debugPrint('RouterNotifier: Safety timer initiated navigation to login. Allowing.');
-        return null;
-      }
-      
       if (splashWaitedTooLong && isSplash) {
-        // After waiting too long on splash, always go to login regardless of auth state
-        debugPrint('RouterNotifier: Auth initialization timeout after ${_maxSplashWaitTime.inSeconds} seconds. Forcing redirect to login.');
+        debugPrint('RouterNotifier: Auth initialization timeout. Forcing redirect to login.');
         return '/login?from=timeout';
       }
-      
       if (isRawAuthLoading) {
         debugPrint('RouterNotifier: Raw Auth loading. Staying on splash.');
-        // Stay on splash or force back if somehow navigated away during this brief initial load
         return isSplash ? null : '/splash';
       }
 
@@ -288,276 +279,198 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       final rawAuthError = rawAuthState.error;
       if (rawAuthError != null) {
          debugPrint('RouterNotifier: Raw Auth Error: $rawAuthError. Redirecting to /login.');
-         // Redirect to login on initial auth error
-         return (isLoginRoute) ? null : '/login';
+         return isLoginOrSignupRoute ? null : '/login';
       }
 
       // --- 3. Handle Auth Action Loading ---
-      // Check for auth action in progress without creating dependency on state changing
       final isAuthActionLoading = authActionState is AsyncLoading;
-      
-      // Explicitly check if we've already applied a splash redirect to prevent loops
-      final isComingFromTimeout = from == 'timeout';
-      final isComingFromAuthAction = from == 'auth_action';
-      
-      // Avoid redirect loops by improving origin/destination checks
-      if (isAuthActionLoading && isLoginRoute && !isComingFromAuthAction && !isComingFromTimeout) {
-          debugPrint('RouterNotifier: Auth action in progress from login/signup. Redirecting to splash.');
-          return '/splash?from=auth_action';
+      if (isAuthActionLoading && !isSplash) {
+        if (isLoginOrSignupRoute && from != 'timeout') {
+           debugPrint('RouterNotifier: Auth action in progress. Redirecting to splash.');
+           return '/splash?from=auth_action';
+        }
       }
-      
-      // If we're already on splash due to auth action, don't redirect again
-      if (isSplash && isComingFromAuthAction && isAuthActionLoading) {
+      if (isSplash && from == 'auth_action' && isAuthActionLoading) {
           debugPrint('RouterNotifier: Already on splash for auth action. Staying.');
           return null;
       }
-      
-      // If we're on login from timeout, don't redirect even for auth action
-      if (isLoginRoute && isComingFromTimeout && isAuthActionLoading) {
-          debugPrint('RouterNotifier: On login from timeout during auth action. Staying.');
-          return null;
-      }
 
-      // --- 4. Raw Auth Resolved, No Explicit Action Loading ---
+      // --- 4. Raw Auth Resolved ---
       final user = rawAuthState.value?.session?.user;
       final isLoggedIn = user != null;
 
       // --- 4a. Not Logged In ---
       if (!isLoggedIn) {
-        // If already on login/signup, or just arrived from cancel/fail, stay there.
-        if (location == '/login' || location == '/signup') {
-          if (from == 'cancel' || from == 'fail') {
-             debugPrint('RouterNotifier: On login/signup from cancel/fail. Staying.');
-             _initialAuthDone = false; // Ensure we reset this flag when on login from cancel
-             return null; // Explicitly stay on login
-          }
-          debugPrint('RouterNotifier: Not logged in, but already on login/signup. Staying.');
-          _initialAuthDone = false; // Ensure flag is reset
-          return null;
+        if (!isLoginOrSignupRoute && location != '/splash') {
+            debugPrint('RouterNotifier: Not logged in. Redirecting to /login.');
+            _initialAuthDone = false; _wasResumed = false;
+            return '/login?from=not_logged_in';
         }
-        // Otherwise, redirect to login
-        debugPrint('RouterNotifier: Not logged in. Resetting flags and redirecting to /login.');
-        _initialAuthDone = false;
-        _wasResumed = false; // Reset resume flag on logout/redirect to login
-        return '/login?from=not_logged_in';
+        debugPrint('RouterNotifier: Not logged in, on allowed route ($location). Staying.');
+        _initialAuthDone = false; _wasResumed = false;
+        return null;
       }
 
-      // --- 4b. Logged In (User confirmed via Raw Auth) ---
-      // Now check settings state specifically for logged-in users.
-      debugPrint('RouterNotifier: Raw Auth resolved: Logged In as ${user.id}. Checking settings...');
-
+      // --- 4b. Logged In - Check Settings ---
+      debugPrint('RouterNotifier: Logged In as ${user.id}. Checking settings...');
       final isSettingsLoading = !settingsState.hasValue && !settingsState.hasError;
       final settingsError = settingsState.error;
-
-      // Only show splash WHILE settings are first loading AFTER user is confirmed.
-      // Use query parameter to avoid redirect loops
-      final isComingFromSettingsLoading = from == 'settings_loading';
-      final isLoadingSettings = isSettingsLoading && !isComingFromSettingsLoading;
-      
-      if (isLoadingSettings) {
-          debugPrint('RouterNotifier: Settings initially loading for logged-in user. Forcing to splash.');
-          return isSplash ? null : '/splash?from=settings_loading';
+      if (isSettingsLoading && !isSplash && from != 'settings_loading') {
+          debugPrint('RouterNotifier: Settings loading. Forcing to splash.');
+          return '/splash?from=settings_loading';
       }
-      
-      // Don't redirect again if we're already at splash waiting for settings
-      if (isSplash && isComingFromSettingsLoading && isSettingsLoading) {
+      if (isSplash && isSettingsLoading) {
           debugPrint('RouterNotifier: Already at splash waiting for settings. Staying.');
           return null;
       }
-
-      // Handle settings error for logged-in user
       if (settingsError != null) {
-           debugPrint('RouterNotifier: Settings Error for logged-in user: $settingsError. Redirecting to /login.');
-           // Fallback to login on settings error
-           return (isLoginRoute) ? null : '/login';
+           debugPrint('RouterNotifier: Settings Error. Redirecting to /login.');
+           _initialAuthDone = false; _wasResumed = false;
+           return isLoginOrSignupRoute ? null : '/login';
       }
 
       // --- 5. Logged In, Settings Loaded Successfully ---
       final userSettings = settingsState.value;
-      
-      // Check if settings are null but there's no error - this is a race condition where
-      // settings haven't been fetched yet after login but auth is confirmed
       if (userSettings == null) {
-         // If we're already on splash or auth screens, stay there rather than creating a loop
-         if (isSplash || isLoginRoute) {
-           debugPrint('RouterNotifier: Settings not yet available, but on appropriate waiting screen.');
+         if (isSplash || isLoginOrSignupRoute) {
+           debugPrint('RouterNotifier: Settings null (race?). Staying on waiting screen.');
            return null;
          }
-         debugPrint('RouterNotifier: Logged in, settings not yet available. Redirecting to /splash.');
-         return '/splash?from=waiting_settings';
+         debugPrint('RouterNotifier: Settings null unexpectedly. Redirecting to /splash.');
+         return '/splash?from=waiting_settings_race';
       }
 
-      debugPrint('RouterNotifier: Logged In & Settings Loaded | Onboarding: ${userSettings.hasCompletedOnboarding} | Biometric: ${userSettings.useBiometricAuth} | PIN: ${userSettings.usePinAuth} | InitialAuth: $_initialAuthDone');
+      debugPrint('RouterNotifier: Logged In & Settings Loaded | Onboarding: ${userSettings.hasCompletedOnboarding} | UseBio: ${userSettings.useBiometricAuth} | UsePIN: ${userSettings.usePinAuth} | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
 
-      // Define route checks
-      final isOnboardingRoute = location == '/onboarding';
-      final isBiometricAuthRoute = location == '/biometric-auth';
-      final isBiometricSetupRoute = location == '/biometric-setup';
-      final isPinAuthRoute = location == '/pin-auth';
-      final isPinSetupRoute = location == '/pin-setup';
-      final isHomeRoute = location == '/home';
-
-      final isAuthRelatedRoute = location == '/login' || location == '/signup' || 
-                                 location == '/onboarding' || 
-                                 isBiometricAuthRoute || 
-                                 location == '/biometric-setup' || 
-                                 isPinAuthRoute || 
-                                 location == '/pin-setup' || 
-                                 location == '/splash';
-
+      final isAuthRelatedRoute = isLoginOrSignupRoute || isOnboardingRoute || isBiometricAuthRoute || isBiometricSetupRoute || isPinAuthRoute || isPinSetupRoute || isSplash;
       final isOnProtectedLocation = !isAuthRelatedRoute;
+      final bool canUseBiometrics = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
-      // --- Initial App Launch Authentication Check (Runs only if logged in and initial auth not done) ---
-      if (!_initialAuthDone && isOnProtectedLocation) {
-         String? authRoute;
-         bool needsInitialAuth = false;
-         if (userSettings.useBiometricAuth && !kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-            authRoute = '/biometric-auth';
-            needsInitialAuth = true;
-            debugPrint('RouterNotifier: Initial Launch Check: Needs Biometric.');
-         } else if (userSettings.usePinAuth) {
-            authRoute = '/pin-auth';
-            needsInitialAuth = true;
-            debugPrint('RouterNotifier: Initial Launch Check: Needs PIN.');
-         }
-
-         if (needsInitialAuth && authRoute != null) {
-            // Prevent redirect loop if already on the target auth route
-            if (location != authRoute) {
-               // Add reason parameter
-               debugPrint('RouterNotifier: Redirecting to initial auth route: $authRoute?reason=initial_auth');
-               return '$authRoute?reason=initial_auth'; 
-            }
-            // Already on the correct auth route, stay put
-            debugPrint('RouterNotifier: Already on initial auth route $authRoute. Staying.');
-            return null; // Added return null
-            
-         } else {
-            // No initial auth required (e.g., neither enabled)
-            debugPrint('RouterNotifier: Initial Launch Check: No auth needed. Marking done.');
-            _initialAuthDone = true; // Mark as done if no check is needed
-         }
-      }
-
-      // --- App Resume Authentication Check (Runs only if logged in and app was resumed) ---
-      if (_wasResumed && isOnProtectedLocation) {
-         // Reset resume flag immediately to prevent re-triggering this block
-         debugPrint('RouterNotifier: Handling app resume.');
-         _wasResumed = false; 
-
-         String? resumeAuthRoute;
-         bool needsResumeAuth = false;
-          if (userSettings.useBiometricAuth && !kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-            resumeAuthRoute = '/biometric-auth';
-            needsResumeAuth = true;
-            debugPrint('RouterNotifier: Resume Check: Needs Biometric.');
-         } else if (userSettings.usePinAuth) {
-            resumeAuthRoute = '/pin-auth';
-            needsResumeAuth = true;
-            debugPrint('RouterNotifier: Resume Check: Needs PIN.');
-         }
-
-         if (needsResumeAuth && resumeAuthRoute != null) {
-            // Prevent redirect loop if already on the target auth route
-            if (location != resumeAuthRoute) {
-              // Add reason parameter
-               debugPrint('RouterNotifier: Redirecting to resume auth route: $resumeAuthRoute?reason=resume_auth');
-               return '$resumeAuthRoute?reason=resume_auth';
-            }
-            // Already on the correct auth route, stay put
-            debugPrint('RouterNotifier: Already on resume auth route $resumeAuthRoute. Staying.');
-            return null; // Added return null
-
-         } else {
-             // No resume auth needed, flag already reset above.
-             debugPrint('RouterNotifier: Resume Check: No auth needed.');
-         }
-      }
-
-      // --- Onboarding Check ---
+      // --- 6. Onboarding Check --- (Needs to run before auth checks)
       if (!(userSettings.hasCompletedOnboarding ?? false)) {
         debugPrint('RouterNotifier: Needs onboarding.');
-        // Redirect away from PIN setup during onboarding
-        if (isPinSetupRoute) return '/onboarding'; 
         return isOnboardingRoute ? null : '/onboarding';
       }
+      // --- User is onboarded from here --- 
 
-      // --- Post-Onboarding/Login Redirects ---
-      // If fully authenticated and onboarded, redirect away from auth/splash/onboarding
-      if (isLoginRoute || isOnboardingRoute || isSplash) {
-          final bool canUseBiometrics = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-          // Redirect to Biometric setup if needed (only from onboarding)
-          final bool needsBiometricSetup = canUseBiometrics 
-                                          && !(userSettings.useBiometricAuth ?? false)
-                                          && !isBiometricSetupRoute;
-
-          if (needsBiometricSetup && isOnboardingRoute) { 
-               debugPrint('RouterNotifier: Onboarding complete, needs biometric setup. Redirecting to /biometric-setup.');
-               return '/biometric-setup';
-          } 
-          // TODO: Consider adding PIN setup redirect here? 
-          // E.g., if biometrics skipped/unavailable, prompt for PIN?
-          // For now, just go home.
+      // --- 7. Determine if Auth Check is Required (Initial Launch or Resume) ---
+      bool needsAuthCheck = false;
+      String? authRoute;
+      String authReason = '';
+      bool bioAvailableAndEnabled = canUseBiometrics && (userSettings.useBiometricAuth ?? false);
+      bool pinEnabled = userSettings.usePinAuth ?? false;
+      bool isResumeCheck = _wasResumed && isOnProtectedLocation;
+      bool isInitialLaunchCheck = !_initialAuthDone; // Check if initial flag is not yet set
+      
+      if (isResumeCheck) {
+         // Consume the resume flag
+         _wasResumed = false;
+         debugPrint('RouterNotifier: Evaluating Resume Auth Check.');
+         if (bioAvailableAndEnabled) {
+            needsAuthCheck = true;
+            authRoute = '/biometric-auth';
+            authReason = 'resume_auth';
+            debugPrint('RouterNotifier: Resume Check: Needs Biometric.');
+         } else if (pinEnabled) {
+            needsAuthCheck = true;
+            authRoute = '/pin-auth';
+            authReason = 'resume_auth';
+            debugPrint('RouterNotifier: Resume Check: Needs PIN.');
+         }
+      }
+      // Only do initial launch check if NOT resuming and initial auth isn't done
+      else if (isInitialLaunchCheck) {
+         debugPrint('RouterNotifier: Evaluating Initial Launch Auth Check.');
+          if (bioAvailableAndEnabled) {
+            needsAuthCheck = true;
+            authRoute = '/biometric-auth';
+            authReason = 'initial_launch_auth';
+            debugPrint('RouterNotifier: Initial Launch Check: Needs Biometric.');
+         } else if (pinEnabled) {
+            needsAuthCheck = true;
+            authRoute = '/pin-auth';
+            authReason = 'initial_launch_auth';
+            debugPrint('RouterNotifier: Initial Launch Check: Needs PIN.');
+         } else {
+             // No auth method enabled, mark as done immediately
+             debugPrint('RouterNotifier: Initial Launch: No bio/PIN enabled. Marking auth done.');
+             _initialAuthDone = true;
+         }
+      }
+      
+      // --- 8. Execute Auth Redirect if Needed ---
+      if (needsAuthCheck && authRoute != null) {
+          // Allow navigation *between* auth methods even during initial check
+          if (location == '/pin-auth' && from == 'biometric') {
+             debugPrint('RouterNotifier: Allowing navigation from biometric to PIN auth screen.');
+             return null; // Allow the navigation to pin-auth
+          }
+          // Hypothetical: Allow navigation from PIN to Biometric if PIN was primary
+          // if (location == '/biometric-auth' && from == 'pin') {
+          //    debugPrint('RouterNotifier: Allowing navigation from PIN to biometric auth screen.');
+          //    return null; 
+          // }
+          
+          // If we need auth check AND are not already on the correct auth route (and not navigating between auth types)
+          if (location != authRoute) {
+              debugPrint('RouterNotifier: Redirecting to required auth route: $authRoute?reason=$authReason');
+              return '$authRoute?reason=$authReason';
+          }
+          // If we need auth check AND ARE already on the correct auth route
           else {
-               debugPrint('RouterNotifier: Logged in and onboarded. Redirecting away from $location to /home.');
-               return '/home?from=auth_complete'; 
+             debugPrint('RouterNotifier: Already on required auth route $authRoute for $reason. Staying.');
+             return null; // Stay put and wait for user interaction
           }
       }
 
-      // Redirect away from biometric setup if already done or not applicable
-      if (isBiometricSetupRoute && ((userSettings.useBiometricAuth ?? false) || kIsWeb || (!Platform.isAndroid && !Platform.isIOS))) {
+      // --- Auth Check Handled or Not Required --- 
+      // If we reach here, it means: 
+      // 1. No auth check was needed (bio/pin disabled or initial check done)
+      // 2. Auth check was needed and we are waiting on the correct auth screen
+      // Ensure _initialAuthDone is true if no check was triggered initially because bio/pin were disabled
+      if (isInitialLaunchCheck && !needsAuthCheck) {
+          _initialAuthDone = true; // Already logged above
+      }
+
+      // --- 9. Post-Auth/Onboarding Redirect --- 
+      // If initial authentication is now complete (_initialAuthDone is true), 
+      // and we are on a non-protected screen (splash/login/onboarding), redirect to home.
+      if (_initialAuthDone && (isLoginOrSignupRoute || isOnboardingRoute || isSplash)) {
+           debugPrint('RouterNotifier: Initial auth complete, redirecting from $location to /home.');
+           return '/home?from=auth_complete';
+      }
+
+      // --- 10. Handle Setup Routes --- (After main auth flow)
+      if (isBiometricSetupRoute && (userSettings.useBiometricAuth ?? false || !canUseBiometrics)) {
           debugPrint('RouterNotifier: On biometric setup but already setup/not applicable. Redirecting to /home.');
           return '/home';
       }
-      
-      // Redirect away from PIN setup if PIN auth is disabled (user might land here via deep link)
-      if (isPinSetupRoute && !userSettings.usePinAuth && (userSettings.pinHash != null && userSettings.pinHash!.isNotEmpty)) {
-         debugPrint('RouterNotifier: On PIN setup but PIN auth is disabled. Redirecting to /settings.');
-         return '/settings'; // Or /home?
-      }
-
-      // --- Final Check: Properly Handle Authentication Conflicts ---
-      // 'from' and 'reason' are already defined above
-
-      // Special case: Allow direct navigation from biometric to PIN auth
-      if (isPinAuthRoute && from == 'biometric') { // Use 'from' here if needed
-          debugPrint('RouterNotifier: Allowing direct navigation from biometric to PIN auth');
-          return null; // Let the navigation to PIN auth proceed
-      }
-      
-      // Check if we are on an auth route specifically because it was required (using 'reason')
-      final bool onRequiredAuthRoute = (isPinAuthRoute || isBiometricAuthRoute) &&
-                                       (reason == 'initial_auth' || reason == 'resume_auth');
-
-      // If initial auth is done and user is logged in, redirect away from auth screens
-      // UNLESS the user was just sent there for a required auth check.
-      if (_initialAuthDone && isLoggedIn && (isPinAuthRoute || isBiometricAuthRoute) && !onRequiredAuthRoute) {
-         debugPrint('RouterNotifier: Already authenticated & not required, redirecting from $location to /home'); // Updated msg
+      if (isPinSetupRoute && (userSettings.pinHash != null && userSettings.pinHash!.isNotEmpty)) {
+         debugPrint('RouterNotifier: On PIN setup but PIN exists. Redirecting to /home.');
          return '/home';
       }
-      
-      // If we are on login/signup but actually logged in and initial auth is done, go home
-      if (_initialAuthDone && isLoggedIn && (location == '/login' || location == '/signup')) {
-          debugPrint('RouterNotifier: Logged in and initial auth done, redirecting from login/signup to /home');
+
+      // --- 11. Handle Auth Route Conflicts --- 
+      // Allow direct navigation from biometric to PIN auth if needed
+      if (isPinAuthRoute && from == 'biometric') {
+          debugPrint('RouterNotifier: Allowing direct navigation from biometric to PIN auth');
+          return null;
+      }
+      // If user lands on auth route unexpectedly (not for initial/resume check)
+      if (_initialAuthDone && (isBiometricAuthRoute || isPinAuthRoute) && reason != 'resume_auth' && reason != 'initial_launch_auth') {
+          debugPrint('RouterNotifier: On auth route ($location) unexpectedly after auth complete. Redirecting to /home');
           return '/home';
       }
-      
+
       // --- Default Case --- 
       debugPrint('RouterNotifier: All checks passed for $location. Allowing navigation.');
-      return null; 
+      // If we've reached here, user is logged in, onboarded, initial auth is complete, 
+      // resume checks (if any) were handled, and we are likely on a protected route.
+      return null;
+
     } catch (e, stack) {
       debugPrint('RouterNotifier: Error in redirect logic: $e\n$stack');
-      
-      // In case of an unexpected error, try to stay on the current route
-      // or go to login as a fallback, to prevent infinite redirect loops
-      final location = state.matchedLocation;
-      if (location == '/login' || location == '/signup') {
-        return null; // Stay on login/signup route if already there
-      } else if (location == '/home') {
-        return null; // Stay on home if already there
-      } else {
-        return '/login?from=error_recovery'; // Use login as a safe fallback
-      }
+      return '/login?from=error_recovery'; // Fallback
     }
   }
 

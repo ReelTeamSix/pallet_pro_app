@@ -83,12 +83,6 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
         });
         // Optionally, could call _cancelAuthentication here after a delay
         // or let the user explicitly cancel/retry.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            debugPrint("BiometricAuthScreen: Executing navigation to /home?from=cancel");
-            context.go('/home?from=cancel');
-          }
-        });
       }
     } catch (e) {
       debugPrint("BiometricAuthScreen: Authentication Error: $e");
@@ -129,12 +123,6 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
     } else {
       // If cancelling resume auth, notify router and go home
       ref.read(routerNotifierProvider.notifier).cancelResumeCheck();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          debugPrint("BiometricAuthScreen: Resume auth cancelled, navigating to /home?from=cancel_resume");
-          context.go('/home?from=cancel_resume'); 
-        }
-      });
     }
   }
 

@@ -124,12 +124,6 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
     } else {
       // If cancelling resume auth, notify router and go home
       ref.read(routerNotifierProvider.notifier).cancelResumeCheck();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          debugPrint("PinAuthScreen: Resume auth cancelled, navigating to /home?from=cancel_resume");
-          context.go('/home?from=cancel_resume'); 
-        }
-      });
     }
   }
 
