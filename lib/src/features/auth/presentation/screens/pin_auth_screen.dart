@@ -8,13 +8,10 @@ import 'package:pallet_pro_app/src/routing/app_router.dart';
 
 /// Screen for handling PIN authentication on app resume or as fallback.
 class PinAuthScreen extends ConsumerStatefulWidget {
-  /// Callback executed when authentication is successful.
-  final VoidCallback? onAuthenticated;
+  /// Indicates why this auth screen is being shown (initial or resume).
+  final String? reason;
 
-  /// Callback executed when authentication is cancelled or fails.
-  final VoidCallback? onCancel;
-
-  const PinAuthScreen({super.key, this.onAuthenticated, this.onCancel});
+  const PinAuthScreen({super.key, this.reason});
 
   @override
   ConsumerState<PinAuthScreen> createState() => _PinAuthScreenState();
@@ -76,14 +73,14 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
         // Mark initial auth as complete in the router *before* navigating
         ref.read(routerNotifierProvider.notifier).markInitialAuthCompleted();
         
-        // Call the legacy onAuthenticated callback (optional)
-        // widget.onAuthenticated?.call(); 
-        
-        // Navigate to home AFTER state updates
+        // Navigate to home AFTER state updates and marking auth complete
         if (mounted) {
-          // Use a post-frame callback for navigation to ensure build cycle completes?
-          // Or trust go() to handle it correctly after state is set.
-          GoRouter.of(context).go('/home');
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             if (mounted) {
+                debugPrint("PinAuthScreen: Authentication successful, navigating to /home?from=auth_success");
+                context.go('/home?from=auth_success');
+             }
+          });
         }
       } else {
         debugPrint("PinAuthScreen: Authentication Failed (Incorrect PIN)");
@@ -103,20 +100,34 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
         _pinController.clear();
         _isLoading = false; 
       });
+    } finally {
+      // Ensure isLoading is reset even if an unexpected error occurs during verification
+      if (mounted && _isLoading) { 
+        setState(() { _isLoading = false; });
+      }
     }
   }
 
   // Function to handle cancellation (invoked by user action)
   void _cancelAuthentication() {
-    debugPrint("PinAuthScreen: Cancelled by user - Navigating to /login");
-    
-    // Use addPostFrameCallback to ensure navigation happens after the current build cycle
-    // This is essential when called from onPopInvoked or other callbacks that might be during build
-    if (mounted) {
+    final isInitialAuth = widget.reason == 'initial_auth';
+    debugPrint("PinAuthScreen: Cancelled by user (isInitialAuth: $isInitialAuth)");
+
+    if (isInitialAuth) {
+      // If cancelling initial required auth, go to login
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          debugPrint("PinAuthScreen: Executing navigation to /login?from=cancel");
-          context.go('/login?from=cancel');
+          debugPrint("PinAuthScreen: Initial auth cancelled, navigating to /login?from=cancel_initial");
+          context.go('/login?from=cancel_initial');
+        }
+      });
+    } else {
+      // If cancelling resume auth, notify router and go home
+      ref.read(routerNotifierProvider.notifier).cancelResumeCheck();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          debugPrint("PinAuthScreen: Resume auth cancelled, navigating to /home?from=cancel_resume");
+          context.go('/home?from=cancel_resume'); 
         }
       });
     }

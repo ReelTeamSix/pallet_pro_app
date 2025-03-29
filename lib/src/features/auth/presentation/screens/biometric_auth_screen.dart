@@ -13,12 +13,15 @@ import 'package:pallet_pro_app/src/features/settings/presentation/providers/user
 /// Screen for handling biometric authentication on app resume.
 class BiometricAuthScreen extends ConsumerStatefulWidget {
   /// Callback executed when authentication is successful.
-  final VoidCallback? onAuthenticated;
+  // final VoidCallback? onAuthenticated; // REMOVED - Logic handled internally
 
   /// Callback executed when authentication is cancelled or fails.
-  final VoidCallback? onCancel;
+  // final VoidCallback? onCancel; // REMOVED - Logic handled internally
 
-  const BiometricAuthScreen({super.key, this.onAuthenticated, this.onCancel});
+  /// Indicates why this auth screen is being shown (initial or resume).
+  final String? reason;
+
+  const BiometricAuthScreen({super.key, this.reason});
 
   @override
   ConsumerState<BiometricAuthScreen> createState() => _BiometricAuthScreenState();
@@ -63,9 +66,13 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
         
         // widget.onAuthenticated?.call(); // Legacy callback - likely no longer needed
         
-        // Router refresh should handle navigation back.
-        // Explicitly go home to ensure the redirect logic runs with the updated state.
-        // REMOVED: GoRouter.of(context).go('/home');
+        // Explicitly navigate after successful auth, using postFrameCallback for safety
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+             debugPrint("BiometricAuthScreen: Authentication successful, navigating to /home?from=auth_success");
+             context.go('/home?from=auth_success');
+          }
+        });
         
       } else {
         // Although local_auth often throws, handle the false case just in case.
@@ -107,19 +114,25 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
   }
 
   // Function to handle cancellation or choosing another method
-  void _cancelAuthentication({bool navigateToLogin = true}) {
-    debugPrint("BiometricAuthScreen: Cancelled by user (navigateToLogin: $navigateToLogin)");
-    
-    // Explicitly notify the router that the resume check was handled by cancellation
-    ref.read(routerNotifierProvider.notifier).cancelResumeCheck();
+  void _cancelAuthentication() {
+    final isInitialAuth = widget.reason == 'initial_auth';
+    debugPrint("BiometricAuthScreen: Cancelled by user (isInitialAuth: $isInitialAuth)");
 
-    if (mounted && navigateToLogin) {
-      // Use addPostFrameCallback to ensure navigation happens after the current build cycle
-      // This is essential when called from onPopInvoked or other callbacks that might be during build
+    if (isInitialAuth) {
+      // If cancelling initial required auth, go to login
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          debugPrint("BiometricAuthScreen: Executing navigation to /home?from=cancel");
-          context.go('/home?from=cancel'); // Changed destination
+          debugPrint("BiometricAuthScreen: Initial auth cancelled, navigating to /login?from=cancel_initial");
+          context.go('/login?from=cancel_initial');
+        }
+      });
+    } else {
+      // If cancelling resume auth, notify router and go home
+      ref.read(routerNotifierProvider.notifier).cancelResumeCheck();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          debugPrint("BiometricAuthScreen: Resume auth cancelled, navigating to /home?from=cancel_resume");
+          context.go('/home?from=cancel_resume'); 
         }
       });
     }
@@ -213,7 +226,7 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
                   
                   // Option 2: Cancel (if PIN not enabled or as primary cancel)
                   TextButton(
-                    onPressed: _cancelAuthentication, // Default cancel action
+                    onPressed: _cancelAuthentication, // Uses updated logic
                     child: Text(pinAuthEnabled ? 'Cancel' : 'Cancel / Sign Out'), // Adjust label slightly
                   ),
                 ],

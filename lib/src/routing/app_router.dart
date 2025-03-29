@@ -56,6 +56,9 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   bool _initialAuthDone = false; 
   DateTime _lastNotification = DateTime.now();
   final DateTime _appStartTime = DateTime.now();
+  // Timestamp for the last successful authentication (initial or resume)
+  DateTime? _lastAuthCompletionTime; 
+  static const Duration _authCooldownDuration = Duration(seconds: 1);
   static const Duration _maxSplashWaitTime = Duration(seconds: 3);
   Timer? _splashTimeoutTimer;
   final _routeObserver = _RouterObserver();
@@ -202,6 +205,14 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   /// Called when the app is resumed.
   void appResumed() {
      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+        // Ignore resume events that happen immediately after auth completion
+        final now = DateTime.now();
+        if (_lastAuthCompletionTime != null && 
+            now.difference(_lastAuthCompletionTime!) < _authCooldownDuration) {
+          debugPrint('RouterNotifier: App Resumed within cooldown period, ignoring.');
+          return;
+        }
+
         _wasResumed = true;
         debugPrint('RouterNotifier: App Resumed, notifying.');
         _debouncedNotifyListeners();
@@ -213,6 +224,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   void markInitialAuthCompleted() {
     debugPrint('RouterNotifier: Initial authentication marked as completed.');
     _initialAuthDone = true;
+    _lastAuthCompletionTime = DateTime.now(); // Record completion time
     // Also reset the resume flag to prevent redirect loops
     _wasResumed = false;
     debugPrint('RouterNotifier: Also reset resume flag to prevent redirect loops.');
@@ -596,10 +608,8 @@ class RouterNotifier extends Notifier<void> implements Listenable {
           path: '/biometric-auth',
           name: 'biometric-auth',
           builder: (context, state) => BiometricAuthScreen(
-            // Logic is handled inside the screen now
-            onAuthenticated: null, // REMOVED
-            // Navigate to login on cancel
-            onCancel: () => GoRouter.of(context).go('/login?from=cancel'), 
+            // Pass the reason from query parameters
+            reason: state.uri.queryParameters['reason'],
           ),
         ),
         GoRoute(
@@ -611,10 +621,8 @@ class RouterNotifier extends Notifier<void> implements Listenable {
           path: '/pin-auth',
           name: 'pin-auth',
           builder: (context, state) => PinAuthScreen(
-            // Logic is handled inside the screen now
-            onAuthenticated: null, // REMOVED
-             // Navigate to login on cancel
-            onCancel: () => GoRouter.of(context).go('/login?from=cancel'), 
+            // Pass the reason from query parameters
+            reason: state.uri.queryParameters['reason'],
           ),
         ),
         ShellRoute(
@@ -870,7 +878,6 @@ class AppShell extends ConsumerWidget {
         // Use Builder to get context below the Scaffold for sign-out SnackBar etc.
         body: Builder(
           builder: (scaffoldBodyContext) {
-            // We only need the AppBar and the main content (child) here.
             // The AppBar no longer needs Settings/Logout actions.
             return Column(
               children: [
@@ -878,7 +885,15 @@ class AppShell extends ConsumerWidget {
                   title: const Text('Pallet Pro'),
                   // No back button automatically if it's a top-level route in Shell
                   // No leading hamburger icon needed for BottomNav
-                  actions: const [], // Remove Settings and Logout actions
+                  actions: [
+                    // Add Sign Out button for mobile layout
+                    IconButton(
+                      icon: const Icon(Icons.logout),
+                      tooltip: 'Sign Out',
+                      // Use scaffoldBodyContext for ScaffoldMessenger access within _signOut
+                      onPressed: () => _signOut(scaffoldBodyContext, ref),
+                    ),
+                  ], 
                 ),
                 Expanded(child: child), // Main content takes remaining space
               ],
