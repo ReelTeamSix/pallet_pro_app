@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // Import kIsWeb
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
@@ -441,28 +442,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   enabled: false,
                 ),
               // PIN Authentication Toggle
-              SwitchListTile(
-                title: const Text('PIN Authentication'),
-                subtitle: const Text('Use a 4-digit PIN to unlock the app'),
-                value: userSettings.usePinAuth,
-                onChanged: _isLoading ? null : _togglePinAuth,
-              ),
-              // Change PIN Tile (only enabled if PIN Auth is enabled)
-              ListTile(
-                title: const Text('Change PIN'),
-                subtitle: const Text('Set or update your 4-digit PIN'),
-                leading: const Icon(Icons.pin),
-                enabled: userSettings.usePinAuth && !_isLoading,
-                onTap: userSettings.usePinAuth && !_isLoading 
-                    ? () {
-                        // Add a check to prevent navigation if already on PinSetupScreen
-                        final currentLocation = GoRouterState.of(context).matchedLocation;
-                        if (currentLocation != '/pin-setup') {
-                           context.push('/pin-setup'); 
-                        }
-                       } 
-                    : null,
-              ),
+              if (!kIsWeb) ...[
+                SwitchListTile(
+                  title: const Text('PIN Authentication'),
+                  subtitle: const Text('Use a 4-digit PIN to unlock the app'),
+                  value: userSettings.usePinAuth,
+                  onChanged: _isLoading ? null : _togglePinAuth,
+                ),
+                // Change PIN Tile (only enabled if PIN Auth is enabled)
+                ListTile(
+                  title: const Text('Change PIN'),
+                  subtitle: const Text('Set or update your 4-digit PIN'),
+                  leading: const Icon(Icons.pin),
+                  enabled: userSettings.usePinAuth && !_isLoading,
+                  onTap: userSettings.usePinAuth && !_isLoading 
+                      ? () {
+                          // Add a check to prevent navigation if already on PinSetupScreen
+                          final currentLocation = GoRouterState.of(context).matchedLocation;
+                          if (currentLocation != '/pin-setup') {
+                             context.push('/pin-setup'); 
+                          }
+                         } 
+                      : null,
+                ),
+              ],
               const Divider(),
 
               // Inventory settings section

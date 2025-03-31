@@ -399,7 +399,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
             authRoute = '/biometric-auth';
             authReason = 'resume_auth';
             debugPrint('RouterNotifier: Resume Check: Needs Biometric.');
-         } else if (pinEnabled) {
+         } else if (pinEnabled && !kIsWeb) {
             needsAuthCheck = true;
             authRoute = '/pin-auth';
             authReason = 'resume_auth';
@@ -414,7 +414,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
             authRoute = '/biometric-auth';
             authReason = 'initial_launch_auth';
             debugPrint('RouterNotifier: Initial Launch Check: Needs Biometric.');
-         } else if (pinEnabled) {
+         } else if (pinEnabled && !kIsWeb) {
             needsAuthCheck = true;
             authRoute = '/pin-auth';
             authReason = 'initial_launch_auth';

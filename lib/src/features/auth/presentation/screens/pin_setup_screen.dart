@@ -53,6 +53,9 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
             pinHash: pinHash,
           );
 
+      // ALSO enable biometric auth automatically after successful PIN setup
+      await ref.read(userSettingsControllerProvider.notifier).updateUseBiometricAuth(true);
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -131,6 +134,7 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 maxLength: 4,
                 obscureText: _obscurePin,
+                textAlign: TextAlign.center,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter a PIN';
@@ -163,6 +167,7 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 maxLength: 4,
                 obscureText: _obscureConfirmPin,
+                textAlign: TextAlign.center,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please confirm your PIN';
