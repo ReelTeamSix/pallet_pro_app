@@ -6,6 +6,9 @@ import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
+import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException hide UserCredentials;
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase_auth show AuthException;
 
 /// The login screen.
 class LoginScreen extends ConsumerStatefulWidget {
@@ -95,19 +98,73 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (wasFromAuth) {
         final target = ref.read(routerNotifierProvider.notifier).debugGetPostAuthTarget();
         debugPrint('LoginScreen: After successful login, PostAuthTarget = $target');
+      } else {
+        // For regular sign-in, mark the transition state to handle settings loading
+        debugPrint('LoginScreen: Regular sign-in successful, marking transition state');
+        ref.read(routerNotifierProvider.notifier).markSignInSuccess();
+      }
+      
+      // DIRECT NAVIGATION APPROACH: Instead of relying on router redirects, 
+      // navigate directly to home screen after successful authentication
+      if (mounted) {
+        debugPrint('LoginScreen: Sign in successful, preparing for direct navigation');
+        
+        // Ensure user settings are properly loaded before navigation
+        try {
+          // Force a refresh of user settings
+          debugPrint('LoginScreen: Explicitly refreshing user settings before navigation');
+          await ref.read(userSettingsControllerProvider.notifier).refreshSettings();
+          
+          // Small additional delay to ensure everything is synchronized
+          await Future.delayed(const Duration(milliseconds: 200));
+          
+          if (mounted) {
+            debugPrint('LoginScreen: Settings refreshed, navigating to dashboard');
+            // Use GoRouter's context.go instead of waiting for redirect
+            GoRouter.of(context).go('/home?from=direct_login');
+          }
+        } catch (e) {
+          debugPrint('LoginScreen: Error during settings refresh: $e, using fallback navigation');
+          // Even if settings refresh fails, still attempt navigation
+          if (mounted) {
+            // Use a slightly longer delay for fallback navigation
+            await Future.delayed(const Duration(milliseconds: 300));
+            if (mounted) {
+              GoRouter.of(context).go('/home?from=fallback_navigation');
+            }
+          }
+        }
       }
       
       // The router will automatically handle redirection based on auth state
       debugPrint('LoginScreen: Sign in successful, router will handle redirect.');
       
+    } on supabase_auth.AuthException catch (e) {
+      debugPrint('LoginScreen: Sign in failed (AuthException): ${e.message}');
+      ref.read(routerNotifierProvider.notifier).resetPostAuthTarget(); 
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Login failed: ${e.message}';
+        });
+      }
+    } on AppException catch (e) {
+       debugPrint('LoginScreen: Sign in failed (AppException): ${e.message}');
+      ref.read(routerNotifierProvider.notifier).resetPostAuthTarget(); 
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.message;
+        });
+      }
     } catch (e) {
-      debugPrint('LoginScreen: Sign in error: $e');
+      debugPrint('LoginScreen: Sign in error (Unknown): $e');
       // Reset the prepared state if login fails
       ref.read(routerNotifierProvider.notifier).resetPostAuthTarget(); 
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = e is AppException ? e.message : 'Failed to sign in: $e';
+          _errorMessage = 'An unexpected error occurred during sign in.';
         });
       }
     } finally {

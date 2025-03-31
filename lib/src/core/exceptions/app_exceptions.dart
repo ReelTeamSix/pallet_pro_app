@@ -90,6 +90,16 @@ class StorageException extends AppException {
       StorageException('Failed to delete file: $details');
 }
 
+/// Exception thrown when a resource is not found.
+class NotFoundException extends AppException {
+  /// Creates a new [NotFoundException] with the given [message].
+  const NotFoundException(super.message);
+
+  /// Creates a new [NotFoundException] for a specific entity.
+  factory NotFoundException.entityNotFound(String entity, String identifier) =>
+      NotFoundException('$entity with identifier $identifier not found');
+}
+
 /// Exception thrown when validation fails.
 class ValidationException extends AppException {
   /// Creates a new [ValidationException] with the given [message].

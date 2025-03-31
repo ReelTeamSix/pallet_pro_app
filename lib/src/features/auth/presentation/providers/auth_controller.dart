@@ -4,7 +4,7 @@ import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/features/auth/data/providers/auth_repository_provider.dart';
 import 'package:pallet_pro_app/src/features/auth/data/repositories/auth_repository.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
-import 'package:pallet_pro_app/src/features/settings/data/providers/user_settings_repository_provider.dart';
+import 'package:pallet_pro_app/src/features/settings/data/repositories/user_settings_providers.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException, UserSettings;
 

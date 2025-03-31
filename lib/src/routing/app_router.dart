@@ -23,7 +23,7 @@ import 'package:pallet_pro_app/src/features/settings/presentation/providers/user
 import 'package:pallet_pro_app/src/features/settings/presentation/screens/settings_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide UserSettings;
+import 'package:supabase_flutter/supabase_flutter.dart' hide UserSettings, AuthException;
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
 
 /// The router provider.
@@ -54,6 +54,7 @@ final routerNotifierProvider =
 enum _PostAuthNavigationTarget {
   none,
   homeAfterForcedLogin,
+  homeAfterRegularLogin, // Added new state for regular login success
 }
 
 /// Manages routing logic and triggers refreshes based on auth/settings state.
@@ -69,11 +70,19 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   // Using a backing field pattern to add debug logging on changes
   _PostAuthNavigationTarget _postAuthTargetValue = _PostAuthNavigationTarget.none;
   
+  // Timestamp to track auth transition states to prevent redirect loops
+  DateTime? _lastAuthTransitionTime;
+  // Add timestamp for when a user signs in successfully
+  DateTime? _lastSignInSuccessTime;
+  static const Duration _authTransitionCooldown = Duration(seconds: 3);
+  static const Duration _signInSettingsWaitTime = Duration(seconds: 2); // Wait time for settings to load after sign-in
+  static const Duration _absoluteMaxSplashTime = Duration(seconds: 8); // Absolute max time to stay on splash
+  
   // Getter and setter with debug logging
   _PostAuthNavigationTarget get _postAuthTarget => _postAuthTargetValue;
   set _postAuthTarget(_PostAuthNavigationTarget value) {
     if (_postAuthTargetValue != value) {
-      debugPrint('RouterNotifier: _postAuthTarget changing from $_postAuthTargetValue to $value');
+      // debugPrint('RouterNotifier: _postAuthTarget changing from $_postAuthTargetValue to $value'); // Commented out: Too frequent
       _postAuthTargetValue = value;
     }
   }
@@ -87,13 +96,26 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   Timer? _splashTimeoutTimer;
   final _routeObserver = _RouterObserver();
   
+  // Helper method to cancel the timer safely
+  void _cancelSplashTimer() {
+    if (_splashTimeoutTimer?.isActive ?? false) {
+      // debugPrint("RouterNotifier: Cancelling splash timeout timer."); // Commented out: Noisy
+      _splashTimeoutTimer!.cancel();
+      _splashTimeoutTimer = null;
+    }
+  }
+  
   @override
   void build() {
     // _initialAuthDone should persist until logout, so don't reset it here.
     
     _routeObserver.onRouteChanged = (String path) {
       _isOnSettingsScreen = path == '/settings';
-      debugPrint('RouterNotifier: Route changed to $path, isOnSettingsScreen: $_isOnSettingsScreen');
+      // debugPrint('RouterNotifier: Route changed to $path, isOnSettingsScreen: $_isOnSettingsScreen'); // Commented out: Too frequent
+      // Cancel splash timer if we navigate away from splash
+      if (path != '/splash' && path != '/splash?from=auth_action') { // Consider splash variants
+          _cancelSplashTimer();
+      }
     };
     
     // Listen for sign-out events to reset the initial auth flag.
@@ -105,10 +127,10 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                              next?.hasValue == true && next?.value != null;
 
       if (userJustSignedOut) {
-        debugPrint('RouterNotifier: User signed out, resetting initial auth/resume flags.');
+        // debugPrint('RouterNotifier: User signed out, resetting initial auth/resume flags.'); // Commented out: Noisy
         // Explicitly preserve _postAuthTarget when signing out
         final targetBeforeSignOut = _postAuthTarget;
-        debugPrint('RouterNotifier: Preserving post-auth target during sign-out: $targetBeforeSignOut');
+        // debugPrint('RouterNotifier: Preserving post-auth target during sign-out: $targetBeforeSignOut'); // Commented out: Noisy
         
         _initialAuthDone = false;
         _wasResumed = false; // Reset resume flag on sign out
@@ -118,7 +140,9 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       } else if (userJustSignedIn) {
         // For sign in, preserve the post auth target
         final targetBeforeSignIn = _postAuthTarget;
-        debugPrint('RouterNotifier: User signed in, current postAuthTarget: $targetBeforeSignIn');
+        // debugPrint('RouterNotifier: User signed in, current postAuthTarget: $targetBeforeSignIn'); // Commented out: Noisy
+        // Reset auth transition state on sign in
+        _lastAuthTransitionTime = null;
         // Don't reset or change _postAuthTarget here
       }
       
@@ -132,19 +156,29 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     // Set up a timer to periodically check if we've been on the splash screen too long
     // This ensures we don't get stuck even if no state changes occur
     _splashTimeoutTimer?.cancel();
-    _splashTimeoutTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _splashTimeoutTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       final timeOnSplash = DateTime.now().difference(_appStartTime);
-      if (timeOnSplash > _maxSplashWaitTime) {
-        debugPrint('RouterNotifier: Splash timeout check - forcing redirect after ${timeOnSplash.inSeconds} seconds');
+      final currentLocation = _routeObserver.lastPath;
+      
+      // Reset auth transition state if we're on splash for longer than max time
+      if (timeOnSplash > _absoluteMaxSplashTime && (currentLocation == '/splash' || currentLocation == null)) {
+        // debugPrint('RouterNotifier: Absolute max time reached. Forcing auth state reset and redirect.'); // Commented out: Noisy
+        _lastAuthTransitionTime = null;
         _debouncedNotifyListeners();
         _splashTimeoutTimer?.cancel();
+      }
+      else if (timeOnSplash > _maxSplashWaitTime) {
+        // debugPrint('RouterNotifier: Splash timeout check - forcing redirect after ${timeOnSplash.inSeconds} seconds'); // Commented out: Noisy periodic check
+        // Force more frequent checks when approaching timeout
+        _debouncedNotifyListeners();
       }
     });
   }
 
   @override
   void dispose() {
-    _splashTimeoutTimer?.cancel();
+    _cancelSplashTimer(); // Keep the timer cancellation
+    _routeObserver.onRouteChanged = null; // Clean up listener
   }
 
   /// Helper to determine if a provider state change warrants a router refresh.
@@ -168,12 +202,12 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     if (isSignOutEvent) {
       // Preserve our post-auth target during sign-out
       final currentTarget = _postAuthTarget;
-      debugPrint('RouterNotifier: Sign-out detected, immediately notifying. Preserving postAuthTarget: $currentTarget');
+      // debugPrint('RouterNotifier: Sign-out detected, immediately notifying. Preserving postAuthTarget: $currentTarget'); // Commented out: Noisy
       
       _lastNotification = DateTime.now();
       // Force immediate redirect on sign-out without debouncing
       Future.microtask(() {
-        debugPrint('RouterNotifier: Force immediate redirect for sign-out. PostAuthTarget: $currentTarget');
+        // debugPrint('RouterNotifier: Force immediate redirect for sign-out. PostAuthTarget: $currentTarget'); // Commented out: Noisy
         
         // Save the current target before notifying listeners
         final savedTarget = _postAuthTarget;
@@ -181,7 +215,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
         
         // Restore the target after notifying, as it may have been reset during redirection
         if (_postAuthTarget != savedTarget) {
-          debugPrint('RouterNotifier: Restoring postAuthTarget after sign-out redirect: $savedTarget');
+          // debugPrint('RouterNotifier: Restoring postAuthTarget after sign-out redirect: $savedTarget'); // Commented out: Noisy
           _postAuthTarget = savedTarget;
         }
       });
@@ -198,7 +232,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     if (isSignInEvent) {
       // Preserve our post-auth target during sign-in
       final currentTarget = _postAuthTarget;
-      debugPrint('RouterNotifier: Sign-in detected. Current postAuthTarget: $currentTarget');
+      // debugPrint('RouterNotifier: Sign-in detected. Current postAuthTarget: $currentTarget'); // Commented out: Noisy
     }
 
     // Ignore UserSettings changes if within settings context - use a cached location value
@@ -207,20 +241,20 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       // Store path based on router lifecycle events rather than reading router directly
       // If this is a settings update and we're on the settings screen, don't trigger a refresh
       if (_isOnSettingsScreen) {
-        debugPrint('RouterNotifier: Ignoring UserSettings change while on settings screen');
+        // debugPrint('RouterNotifier: Ignoring UserSettings change while on settings screen'); // Commented out: Noisy
         return;
       }
     }
 
     if (isLoading != wasLoading || hasError != hadError || hasValue != hadValue) {
-      debugPrint('RouterNotifier: $providerName changed significantly, considering refresh.');
+      // debugPrint('RouterNotifier: $providerName changed significantly, considering refresh.'); // Commented out: Noisy
       
       // Debounce notifications to prevent rapid-fire redirects
       final now = DateTime.now();
       final timeSinceLastNotification = now.difference(_lastNotification);
       
       if (timeSinceLastNotification < const Duration(milliseconds: 100)) {
-        debugPrint('RouterNotifier: Skipping notification, too soon after last one (${timeSinceLastNotification.inMilliseconds}ms)');
+        // debugPrint('RouterNotifier: Skipping notification, too soon after last one (${timeSinceLastNotification.inMilliseconds}ms)'); // Commented out: Noisy debounce info
         return;
       }
       
@@ -231,7 +265,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       // After debounced notification, check if we need to restore the target
       Future.delayed(const Duration(milliseconds: 150), () {
         if (_postAuthTarget != savedTarget && savedTarget != _PostAuthNavigationTarget.none) {
-          debugPrint('RouterNotifier: Restoring postAuthTarget after state change: $savedTarget');
+          // debugPrint('RouterNotifier: Restoring postAuthTarget after state change: $savedTarget'); // Commented out: Noisy
           _postAuthTarget = savedTarget;
         }
       });
@@ -249,7 +283,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     
     // Use Future.microtask to ensure we don't trigger during build
     Future.microtask(() {
-      debugPrint('RouterNotifier: Notifying listeners.');
+      // debugPrint('RouterNotifier: Notifying listeners.'); // Commented out: Noisy, implies standard operation
       notifyListeners();
       _isNotifying = false;
     });
@@ -273,7 +307,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       try {
         _routerListener!.call();
       } catch (e) {
-        debugPrint('RouterNotifier: Error during listener notification: $e');
+        // debugPrint('RouterNotifier: Error during listener notification: $e'); // Commented out: Noisy
       }
     }
   }
@@ -285,12 +319,12 @@ class RouterNotifier extends Notifier<void> implements Listenable {
         final now = DateTime.now();
         if (_lastAuthCompletionTime != null && 
             now.difference(_lastAuthCompletionTime!) < _authCooldownDuration) {
-          debugPrint('RouterNotifier: App Resumed within cooldown period, ignoring.');
+          // debugPrint('RouterNotifier: App Resumed within cooldown period, ignoring.'); // Commented out: Noisy
           return;
         }
 
         _wasResumed = true;
-        debugPrint('RouterNotifier: App Resumed, notifying.');
+        // debugPrint('RouterNotifier: App Resumed, notifying.'); // Commented out: Noisy
         _debouncedNotifyListeners();
      }
   }
@@ -298,19 +332,19 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   /// Marks the initial authentication check as completed successfully.
   /// Called by auth screens (PIN/Biometric) upon successful verification.
   void markInitialAuthCompleted() {
-    debugPrint('RouterNotifier: Initial authentication marked as completed.');
+    // debugPrint('RouterNotifier: Initial authentication marked as completed.'); // Commented out: Noisy
     _initialAuthDone = true;
     _lastAuthCompletionTime = DateTime.now(); // Record completion time
     // Also reset the resume flag to prevent redirect loops
     _wasResumed = false;
-    debugPrint('RouterNotifier: Also reset resume flag to prevent redirect loops.');
+    // debugPrint('RouterNotifier: Also reset resume flag to prevent redirect loops.'); // Commented out: Noisy
     // No need to notify here, the navigation triggered by the auth screen 
     // will cause the redirect logic to run again.
   }
 
   /// Called when an auth prompt triggered by app resume is explicitly cancelled.
   void cancelResumeCheck() {
-    debugPrint('RouterNotifier: Resume check explicitly cancelled by user.');
+    // debugPrint('RouterNotifier: Resume check explicitly cancelled by user.'); // Commented out: Noisy
     _wasResumed = false;
     // No need to notify here, the navigation from cancel action will trigger _redirectLogic
   }
@@ -319,22 +353,44 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   /// bypassing the initial auth check.
   /// Called by LoginScreen upon successful login *if* coming from forced sign-out.
   void prepareForForcedLoginRedirect() {
-      debugPrint('RouterNotifier: Preparing for post-forced-sign-out redirect to home.');
+      // debugPrint('RouterNotifier: Preparing for post-forced-sign-out redirect to home.'); // Commented out: Noisy
       _postAuthTarget = _PostAuthNavigationTarget.homeAfterForcedLogin;
   }
 
   /// Resets the post-auth target if it was set, e.g., after login failure.
   void resetPostAuthTarget() {
     if (_postAuthTarget != _PostAuthNavigationTarget.none) {
-      debugPrint('RouterNotifier: Resetting post-auth target due to login failure or cancellation.');
+      // debugPrint('RouterNotifier: Resetting post-auth target due to login failure or cancellation.'); // Commented out: Noisy
       _postAuthTarget = _PostAuthNavigationTarget.none;
     }
   }
 
+  /// Manually resets any auth transition state
+  /// Called externally when needed to unstick transitions
+  void resetAuthTransitionState() {
+    // debugPrint('RouterNotifier: Manually resetting auth transition state.'); // Commented out: Noisy
+    _lastAuthTransitionTime = null;
+  }
+  
+  /// Public method to notify router of changes without exposing implementation details
+  /// Can be called from other providers when they need to trigger navigation updates
+  void refreshRouterState() {
+    // debugPrint('RouterNotifier: External refresh request received.'); // Commented out: Noisy
+    _debouncedNotifyListeners();
+  }
+
   /// Debug method to get the current post auth target value.
   _PostAuthNavigationTarget debugGetPostAuthTarget() {
-    debugPrint('RouterNotifier: Current _postAuthTarget = $_postAuthTarget');
+    // debugPrint('RouterNotifier: Current _postAuthTarget = $_postAuthTarget'); // Commented out: Noisy
     return _postAuthTarget;
+  }
+
+  /// Signs a user in successfully - called from the LoginScreen
+  void markSignInSuccess() {
+    // debugPrint('RouterNotifier: Sign in successful, marking transition state'); // Commented out: Noisy
+    _lastSignInSuccessTime = DateTime.now();
+    _postAuthTarget = _PostAuthNavigationTarget.homeAfterRegularLogin;
+    _debouncedNotifyListeners();
   }
 
   /// The core redirect logic.
@@ -344,23 +400,23 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     final from = queryParams['from'] ?? '';
     final reason = queryParams['reason'] ?? '';
 
-    final isFromAuth = from == 'biometric' || from == 'pin' || from == 'cancel_initial';
-    if (isFromAuth && location == '/login') {
-      debugPrint('RouterNotifier: Login screen has auth source query parameter: $from');
+    final isSplash = location == '/splash' || location == '/splash?from=auth_action'; // Include variant
+    if (isSplash && location == '/login') {
+      // debugPrint('RouterNotifier: Login screen has auth source query parameter: $from'); // Commented out: Noisy
       if (_postAuthTarget == _PostAuthNavigationTarget.none) {
-        debugPrint('RouterNotifier: Setting postAuthTarget to homeAfterForcedLogin from query param');
+        // debugPrint('RouterNotifier: Setting postAuthTarget to homeAfterForcedLogin from query param'); // Commented out: Noisy
         _postAuthTarget = _PostAuthNavigationTarget.homeAfterForcedLogin;
       }
     }
 
-    debugPrint(
-        'RouterNotifier: Redirect check | Location: $location | Params: $queryParams | Reason: $reason | From: $from | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed | PostAuthTarget: $_postAuthTarget');
+    // debugPrint(
+    //     'RouterNotifier: Redirect check | Location: $location | Params: $queryParams | Reason: $reason | From: $from | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed | PostAuthTarget: $_postAuthTarget');
 
     try {
       // --- 0. Handle Password Recovery --- 
       final recoveryToken = ref.read(passwordRecoveryTokenProvider);
       if (recoveryToken != null) {
-        debugPrint('RouterNotifier: Password recovery token found. Redirecting.');
+        // debugPrint('RouterNotifier: Password recovery token found. Redirecting.'); // Commented out: Noisy
         
         // Redirect to reset password screen if not already there
         if (location != '/reset-password') {
@@ -378,7 +434,6 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       final rawAuthState = ref.read(authStateChangesProvider);
       final settingsState = ref.read(userSettingsControllerProvider);
 
-      final isSplash = location == '/splash';
       final isLoginOrSignupRoute = location == '/login' || location == '/signup';
       final isOnboardingRoute = location == '/onboarding';
       final isBiometricAuthRoute = location == '/biometric-auth';
@@ -388,22 +443,63 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       final isForgotPasswordRoute = location == '/forgot-password';
       final isResetPasswordRoute = location == '/reset-password';
 
+      // --- CHECK FOR RECENT SIGN IN --- 
+      // If we've recently signed in successfully, we need to wait for settings to load
+      final isRecentSignIn = _lastSignInSuccessTime != null && 
+                           DateTime.now().difference(_lastSignInSuccessTime!) < _signInSettingsWaitTime;
+                           
+      if (isRecentSignIn && (isLoginOrSignupRoute || isSplash)) {
+        // debugPrint('RouterNotifier: Recent sign-in detected. Waiting for settings to load on $location.'); // Commented out: Noisy
+        // Stay on the current screen until settings load or timeout occurs
+        return null;
+      }
+      
       // --- 1. Handle VERY Initial Raw Auth Load ---
       final isRawAuthLoading = !rawAuthState.hasValue && !rawAuthState.hasError;
       final splashWaitedTooLong = DateTime.now().difference(_appStartTime) > _maxSplashWaitTime;
-      if (splashWaitedTooLong && isSplash) {
-        debugPrint('RouterNotifier: Auth initialization timeout. Forcing redirect to login.');
-        return '/login?from=timeout';
+      final absoluteTimeout = DateTime.now().difference(_appStartTime) > _absoluteMaxSplashTime;
+      
+      // IMPORTANT: Force redirect after absolute timeout, regardless of auth state
+      // This must be checked first to prevent infinite splash
+      if (absoluteTimeout && isSplash) {
+        // debugPrint('RouterNotifier: Absolute max splash time reached. Forcing redirect to login.'); // Commented out: Noisy
+        // Clear any transition state to prevent future loops
+        _lastAuthTransitionTime = null;
+        _lastSignInSuccessTime = null; // Also clear sign-in time
+        return '/login?from=absolute_timeout';
       }
+      
+      // Check if we're in an auth transition by inspecting query parameters and recent transitions
+      final now = DateTime.now();
+      final isRecentAuthTransition = _lastAuthTransitionTime != null && 
+                                  now.difference(_lastAuthTransitionTime!) < _authTransitionCooldown;
+      
+      // Make auth transition detection more strict to prevent false positives
+      // Only consider explicit transitions from query params, not error states
+      final isInAuthTransition = 
+           from == 'auth_transition' || 
+           reason == 'auth_transition' ||
+           isRecentAuthTransition;
+      
+      // Only timeout to login if we're NOT in an auth transition
+      if (splashWaitedTooLong && isSplash && !isInAuthTransition) {
+        // debugPrint('RouterNotifier: Auth initialization timeout. Forcing redirect to login.'); // Commented out: Noisy
+        return '/login?from=timeout';
+      } else if (isSplash && isInAuthTransition && !absoluteTimeout) {
+        // Reset the splash timer when we're in an auth transition
+        // debugPrint('RouterNotifier: In auth transition, staying on splash screen.'); // Commented out: Noisy
+        return null;
+      }
+      
       if (isRawAuthLoading) {
-        debugPrint('RouterNotifier: Raw Auth loading. Staying on splash.');
+        // debugPrint('RouterNotifier: Raw Auth loading. Staying on splash.'); // Commented out: Noisy
         return isSplash ? null : '/splash';
       }
 
       // --- 2. Handle Raw Auth Error ---
       final rawAuthError = rawAuthState.error;
       if (rawAuthError != null) {
-         debugPrint('RouterNotifier: Raw Auth Error: $rawAuthError. Redirecting to /login.');
+         // debugPrint('RouterNotifier: Raw Auth Error: $rawAuthError. Redirecting to /login.'); // Commented out: Noisy
          return isLoginOrSignupRoute ? null : '/login';
       }
 
@@ -411,12 +507,12 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       final isAuthActionLoading = authActionState is AsyncLoading;
       if (isAuthActionLoading && !isSplash) {
         if (isLoginOrSignupRoute && from != 'timeout') {
-           debugPrint('RouterNotifier: Auth action in progress. Redirecting to splash.');
+           // debugPrint('RouterNotifier: Auth action in progress. Redirecting to splash.'); // Commented out: Noisy
            return '/splash?from=auth_action';
         }
       }
       if (isSplash && from == 'auth_action' && isAuthActionLoading) {
-          debugPrint('RouterNotifier: Already on splash for auth action. Staying.');
+          // debugPrint('RouterNotifier: Already on splash for auth action. Staying.'); // Commented out: Noisy
           return null;
       }
 
@@ -431,68 +527,127 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                                    isResetPasswordRoute || 
                                    location == '/splash';
                                    
-        debugPrint('RouterNotifier: Executing 4a (Not Logged In). Location: $location, Allowed Public: $isAllowedPublicRoute');
+        // debugPrint('RouterNotifier: Executing 4a (Not Logged In). Location: $location, Allowed Public: $isAllowedPublicRoute'); // Commented out: Noisy
         if (!isAllowedPublicRoute) {
-            debugPrint('RouterNotifier: Not logged in. Redirecting to /login.');
+            // debugPrint('RouterNotifier: Not logged in. Redirecting to /login.'); // Commented out: Noisy
             _initialAuthDone = false; _wasResumed = false;
             return '/login?from=not_logged_in';
         }
-        debugPrint('RouterNotifier: Not logged in, on allowed route ($location). Staying.');
+        // debugPrint('RouterNotifier: Not logged in, on allowed route ($location). Staying.'); // Commented out: Noisy standard case
         _initialAuthDone = false; _wasResumed = false;
         return null;
       }
 
-      // --- 4b. Logged In - Check Settings ---
-      debugPrint('RouterNotifier: Logged In as ${user.id}. Checking settings...');
-      final isSettingsLoading = !settingsState.hasValue && !settingsState.hasError;
-      final settingsError = settingsState.error;
-      if (isSettingsLoading && !isSplash && from != 'settings_loading') {
-          debugPrint('RouterNotifier: Settings loading. Forcing to splash.');
-          return '/splash?from=settings_loading';
-      }
-      if (isSplash && isSettingsLoading) {
-          debugPrint('RouterNotifier: Already at splash waiting for settings. Staying.');
+      // --- 5. Logged In, Check Settings State ---
+      if (settingsState is AsyncLoading) {
+        // Handle logging in state transition specifically
+        if (_postAuthTarget == _PostAuthNavigationTarget.homeAfterRegularLogin) {
+          // debugPrint('RouterNotifier: Settings loading after login. Waiting on $location...'); // Commented out: Noisy
+          // Keep waiting on login or splash during the settings load
+          if (isLoginOrSignupRoute || isSplash) {
+            return null;
+          }
+          
+          // If we're already navigating elsewhere, allow it to continue
           return null;
-      }
-      if (settingsError != null) {
-           debugPrint('RouterNotifier: Settings Error. Redirecting to /login.');
-           _initialAuthDone = false; _wasResumed = false;
-           return isLoginOrSignupRoute ? null : '/login';
+        }
+        
+        // debugPrint('RouterNotifier: User logged in, but settings are loading. Staying on current screen ($location).'); // Commented out: Noisy standard waiting case
+        // Stay on the current screen (e.g., login, splash) while settings load
+        return null; 
       }
 
-      // --- 5. Logged In, Settings Loaded Successfully ---
-      final userSettings = settingsState.value;
+      if (settingsState is AsyncError) {
+        // If we have a regular login in progress, we may need to retry instead of immediately failing
+        if (_postAuthTarget == _PostAuthNavigationTarget.homeAfterRegularLogin) {
+          // Only redirect to login if we're outside the grace period for settings to load
+          final isStillWithinGracePeriod = _lastSignInSuccessTime != null && 
+                                          now.difference(_lastSignInSuccessTime!) < _signInSettingsWaitTime;
+                                          
+          if (isStillWithinGracePeriod) {
+            // debugPrint('RouterNotifier: Settings error but still within grace period. Staying on $location'); // Commented out: Noisy
+            return null;
+          }
+        }
+        
+        // debugPrint('RouterNotifier: User logged in, but settings failed to load: ${settingsState.error}. Redirecting to login.'); // Commented out: Noisy
+        _initialAuthDone = false; // Reset flags as we can't proceed
+        _wasResumed = false;
+        // Consider adding an error query parameter if needed
+        return '/login?from=settings_error';
+      }
+
+      // --- Settings Loaded Successfully ---
+      // Now it's safe to access the value
+      final userSettings = settingsState.value; 
       if (userSettings == null) {
-         if (isSplash || isLoginOrSignupRoute) {
-           debugPrint('RouterNotifier: Settings null (race?). Staying on waiting screen.');
+         // We'll handle normal login transition with null settings specially
+         if (_postAuthTarget == _PostAuthNavigationTarget.homeAfterRegularLogin && 
+             (isLoginOrSignupRoute || isSplash)) {
+           // debugPrint('RouterNotifier: After login, settings null, but waiting in grace period on $location'); // Commented out: Noisy
            return null;
          }
-         debugPrint('RouterNotifier: Settings null unexpectedly. Redirecting to /splash.');
+         
+         // This case might still happen if the settings loaded but were unexpectedly null
+         if (isSplash || isLoginOrSignupRoute) {
+           // debugPrint('RouterNotifier: Settings null (race?). Staying on waiting screen.'); // Commented out: Noisy
+           return null;
+         }
+         // debugPrint('RouterNotifier: Settings null unexpectedly. Redirecting to /splash.'); // Commented out: Noisy
          return '/splash?from=waiting_settings_race';
       }
 
-      // --- 5a. Handle Forced Login Redirect ---
+      // Successfully loaded settings, clear auth transition state
+      if (_lastAuthTransitionTime != null) {
+          // debugPrint('RouterNotifier: Successfully loaded settings, clearing auth transition state'); // Commented out: Noisy
+          _lastAuthTransitionTime = null;
+      }
+      
+      // Clear sign-in transition time now that settings are loaded
+      if (_lastSignInSuccessTime != null) {
+          // debugPrint('RouterNotifier: Successfully loaded settings after sign-in, clearing sign-in transition state'); // Commented out: Noisy
+          _lastSignInSuccessTime = null;
+      }
+      
+      // Check current location and fix if we're on the wrong screen after a successful settings load
+      if (isLoginOrSignupRoute && from == 'settings_error') {
+          // debugPrint('RouterNotifier: Successfully loaded settings while on login screen with settings_error, redirecting to home'); // Commented out: Noisy
+          _initialAuthDone = true; // Mark auth as done
+          return '/home?from=settings_recovered';
+      }
+
+      // --- 5a. Handle Regular Login Redirect ---
+      // Check for regular login navigation target
+      if (_postAuthTarget == _PostAuthNavigationTarget.homeAfterRegularLogin) {
+        // debugPrint('RouterNotifier: Settings loaded after login. Redirecting to home.'); // Commented out: Noisy
+        _postAuthTarget = _PostAuthNavigationTarget.none; // Consume the target
+        _initialAuthDone = true; // Mark initial auth as done
+        _wasResumed = false;
+        return '/home?from=login_complete';
+      }
+      
+      // --- 5b. Handle Forced Login Redirect ---
       // Check this *before* onboarding or standard auth checks
-      debugPrint('RouterNotifier: Checking for forced login redirect. PostAuthTarget: $_postAuthTarget');
+      // debugPrint('RouterNotifier: Checking for forced login redirect. PostAuthTarget: $_postAuthTarget'); // Commented out: Noisy
       
       // Set the target if we're on login with from=biometric or from=pin, even if not already set
       if ((from == 'biometric' || from == 'pin' || from == 'cancel_initial') && isLoginOrSignupRoute && _postAuthTarget == _PostAuthNavigationTarget.none) {
-        debugPrint('RouterNotifier: On login with auth source, setting home redirect flag');
+        // debugPrint('RouterNotifier: On login with auth source, setting home redirect flag'); // Commented out: Noisy
         _postAuthTarget = _PostAuthNavigationTarget.homeAfterForcedLogin;
       }
       
       if (_postAuthTarget == _PostAuthNavigationTarget.homeAfterForcedLogin) {
-        debugPrint('RouterNotifier: REDIRECTING - Post-forced-sign-out login detected, going directly to home.');
+        // debugPrint('RouterNotifier: REDIRECTING - Post-forced-sign-out login detected, going directly to home.'); // Commented out: Noisy
         _postAuthTarget = _PostAuthNavigationTarget.none; // Consume the target state
         _initialAuthDone = true; // Mark initial auth as complete for this session
         _wasResumed = false; // Ensure resume check doesn't trigger immediately
         return '/home?from=forced_login_complete'; // Go directly to home
       } else {
-        debugPrint('RouterNotifier: No forced login redirect needed.');
+        // debugPrint('RouterNotifier: No forced login redirect needed.'); // Commented out: Noisy
       }
       // --- End Forced Login Handling ---
 
-      debugPrint('RouterNotifier: Logged In & Settings Loaded | Onboarding: ${userSettings.hasCompletedOnboarding} | UseBio: ${userSettings.useBiometricAuth} | UsePIN: ${userSettings.usePinAuth} | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
+      // debugPrint('RouterNotifier: Logged In & Settings Loaded | Onboarding: ${userSettings.hasCompletedOnboarding} | UseBio: ${userSettings.useBiometricAuth} | UsePIN: ${userSettings.usePinAuth} | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
 
       final isAuthRelatedRoute = isLoginOrSignupRoute || isOnboardingRoute || isBiometricAuthRoute || isBiometricSetupRoute || isPinAuthRoute || isPinSetupRoute || isSplash;
       final isOnProtectedLocation = !isAuthRelatedRoute;
@@ -500,7 +655,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
 
       // --- 6. Onboarding Check --- (Needs to run before auth checks)
       if (!(userSettings.hasCompletedOnboarding ?? false)) {
-        debugPrint('RouterNotifier: Needs onboarding.');
+        // debugPrint('RouterNotifier: Needs onboarding.'); // Commented out: Noisy
         return isOnboardingRoute ? null : '/onboarding';
       }
       // --- User is onboarded from here --- 
@@ -527,43 +682,43 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       bool isInitialLaunchCheck = !_initialAuthDone && !shouldSkipInitialAuth;
       
       if (shouldSkipInitialAuth && !_initialAuthDone) {
-        debugPrint('RouterNotifier: Skipping initial auth check due to direct login or target flag');
+        // debugPrint('RouterNotifier: Skipping initial auth check due to direct login or target flag'); // Commented out: Noisy
         _initialAuthDone = true; // Mark as done since we're bypassing
       }
       
       if (isResumeCheck) {
          // Consume the resume flag
          _wasResumed = false;
-         debugPrint('RouterNotifier: Evaluating Resume Auth Check.');
+         // debugPrint('RouterNotifier: Evaluating Resume Auth Check.'); // Commented out: Noisy
          if (bioAvailableAndEnabled) {
             needsAuthCheck = true;
             authRoute = '/biometric-auth';
             authReason = 'resume_auth';
-            debugPrint('RouterNotifier: Resume Check: Needs Biometric.');
+            // debugPrint('RouterNotifier: Resume Check: Needs Biometric.'); // Commented out: Noisy
          } else if (pinEnabled && !kIsWeb) {
             needsAuthCheck = true;
             authRoute = '/pin-auth';
             authReason = 'resume_auth';
-            debugPrint('RouterNotifier: Resume Check: Needs PIN.');
+            // debugPrint('RouterNotifier: Resume Check: Needs PIN.'); // Commented out: Noisy
          }
       }
       // Only do initial launch check if NOT resuming and initial auth isn't done
       else if (isInitialLaunchCheck) {
-         debugPrint('RouterNotifier: Evaluating Initial Launch Auth Check.');
+         // debugPrint('RouterNotifier: Evaluating Initial Launch Auth Check.'); // Commented out: Noisy
          // --- Original Initial Check Logic ---
          if (bioAvailableAndEnabled) {
             needsAuthCheck = true;
             authRoute = '/biometric-auth';
             authReason = 'initial_launch_auth';
-            debugPrint('RouterNotifier: Initial Launch Check: Needs Biometric.');
+            // debugPrint('RouterNotifier: Initial Launch Check: Needs Biometric.'); // Commented out: Noisy
          } else if (pinEnabled && !kIsWeb) {
             needsAuthCheck = true;
             authRoute = '/pin-auth';
             authReason = 'initial_launch_auth';
-            debugPrint('RouterNotifier: Initial Launch Check: Needs PIN.');
+            // debugPrint('RouterNotifier: Initial Launch Check: Needs PIN.'); // Commented out: Noisy
          } else {
              // No auth method enabled, mark as done immediately
-             debugPrint('RouterNotifier: Initial Launch: No bio/PIN enabled. Marking auth done.');
+             // debugPrint('RouterNotifier: Initial Launch: No bio/PIN enabled. Marking auth done.'); // Commented out: Noisy
              _initialAuthDone = true;
          }
       }
@@ -572,7 +727,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       if (needsAuthCheck && authRoute != null) {
           // Allow navigation *between* auth methods even during initial check
           if (location == '/pin-auth' && from == 'biometric') {
-             debugPrint('RouterNotifier: Allowing navigation from biometric to PIN auth screen.');
+             // debugPrint('RouterNotifier: Allowing navigation from biometric to PIN auth screen.'); // Commented out: Noisy
              return null; // Allow the navigation to pin-auth
           }
           // Hypothetical: Allow navigation from PIN to Biometric if PIN was primary
@@ -583,12 +738,12 @@ class RouterNotifier extends Notifier<void> implements Listenable {
           
           // If we need auth check AND are not already on the correct auth route (and not navigating between auth types)
           if (location != authRoute) {
-              debugPrint('RouterNotifier: Redirecting to required auth route: $authRoute?reason=$authReason');
+              // debugPrint('RouterNotifier: Redirecting to required auth route: $authRoute?reason=$authReason'); // Commented out: Noisy
               return '$authRoute?reason=$authReason';
           }
           // If we need auth check AND ARE already on the correct auth route
           else {
-             debugPrint('RouterNotifier: Already on required auth route $authRoute for $reason. Staying.');
+             // debugPrint('RouterNotifier: Already on required auth route $authRoute for $reason. Staying.'); // Commented out: Noisy
              return null; // Stay put and wait for user interaction
           }
       }
@@ -606,40 +761,40 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       // If initial authentication is now complete (_initialAuthDone is true), 
       // and we are on a non-protected screen (splash/login/onboarding), redirect to home.
       if (_initialAuthDone && (isLoginOrSignupRoute || isOnboardingRoute || isSplash)) {
-           debugPrint('RouterNotifier: Initial auth complete, redirecting from $location to /home.');
+           // debugPrint('RouterNotifier: Initial auth complete, redirecting from $location to /home.'); // Commented out: Noisy
            return '/home?from=auth_complete';
       }
 
       // --- 10. Handle Setup Routes --- (After main auth flow)
       if (isBiometricSetupRoute && (userSettings.useBiometricAuth ?? false || !canUseBiometrics)) {
-          debugPrint('RouterNotifier: On biometric setup but already setup/not applicable. Redirecting to /home.');
+          // debugPrint('RouterNotifier: On biometric setup but already setup/not applicable. Redirecting to /home.'); // Commented out: Noisy
           return '/home';
       }
       if (isPinSetupRoute && (userSettings.pinHash != null && userSettings.pinHash!.isNotEmpty)) {
-         debugPrint('RouterNotifier: On PIN setup but PIN exists. Redirecting to /home.');
+         // debugPrint('RouterNotifier: On PIN setup but PIN exists. Redirecting to /home.'); // Commented out: Noisy
          return '/home';
       }
 
       // --- 11. Handle Auth Route Conflicts --- 
       // Allow direct navigation from biometric to PIN auth if needed
       if (isPinAuthRoute && from == 'biometric') {
-          debugPrint('RouterNotifier: Allowing direct navigation from biometric to PIN auth');
+          // debugPrint('RouterNotifier: Allowing direct navigation from biometric to PIN auth'); // Commented out: Noisy
           return null;
       }
       // If user lands on auth route unexpectedly (not for initial/resume check)
       if (_initialAuthDone && (isBiometricAuthRoute || isPinAuthRoute) && reason != 'resume_auth' && reason != 'initial_launch_auth') {
-          debugPrint('RouterNotifier: On auth route ($location) unexpectedly after auth complete. Redirecting to /home');
+          // debugPrint('RouterNotifier: On auth route ($location) unexpectedly after auth complete. Redirecting to /home'); // Commented out: Noisy
           return '/home';
       }
 
       // --- Default Case --- 
-      debugPrint('RouterNotifier: All checks passed for $location. Allowing navigation.');
+      // debugPrint('RouterNotifier: All checks passed for $location. Allowing navigation.'); // Commented out: Noisy
       // If we've reached here, user is logged in, onboarded, initial auth is complete, 
       // resume checks (if any) were handled, and we are likely on a protected route.
       return null;
 
     } catch (e, stack) {
-      debugPrint('RouterNotifier: Error in redirect logic: $e\n$stack');
+      // debugPrint('RouterNotifier: Error in redirect logic: $e\n$stack'); // Commented out: Noisy
       return '/login?from=error_recovery'; // Fallback
     }
   }
@@ -868,6 +1023,7 @@ class AppShell extends ConsumerWidget {
           ),
         );
         
+        
         // Force trigger notifyListeners on the router after sign-out completes
         ref.read(authControllerProvider.notifier).signOut().then((_) {
           // Force a router refresh if the redirect didn't happen automatically
@@ -1089,6 +1245,17 @@ class _RouterObserver extends NavigatorObserver {
   /// Callback to notify when routes change
   Function(String path)? onRouteChanged;
   
+  /// The last known path, used for timeout detection
+  String? lastPath;
+
+  // Reference to the notifier to call cancel method
+  RouterNotifier? _notifier;
+
+  // Method to set the notifier reference
+  void setNotifier(RouterNotifier notifier) {
+    _notifier = notifier;
+  }
+  
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     _updateCurrentRoute(route);
@@ -1114,6 +1281,13 @@ class _RouterObserver extends NavigatorObserver {
   void _updateCurrentRoute(Route<dynamic> route) {
     // Extract path from route
     final String? path = _extractPathFromRoute(route);
+    
+    // Cancel timer if navigating away from splash
+    if (lastPath == '/splash' && path != '/splash') {
+      _notifier?._cancelSplashTimer();
+    }
+    
+    lastPath = path;
     
     if (path != null && onRouteChanged != null) {
       onRouteChanged!(path);

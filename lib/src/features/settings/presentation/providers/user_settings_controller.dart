@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
-import 'package:pallet_pro_app/src/features/settings/data/providers/user_settings_repository_provider.dart';
-import 'package:pallet_pro_app/src/features/settings/data/repositories/user_settings_repository.dart';
+import 'package:pallet_pro_app/src/features/settings/domain/repositories/user_settings_repository.dart';
+import 'package:pallet_pro_app/src/features/settings/data/repositories/user_settings_providers.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide UserSettings;
+import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
+import 'package:pallet_pro_app/src/routing/app_router.dart';
+import 'package:flutter/widgets.dart';
 
 /// Provider for the [UserSettingsController].
 final userSettingsControllerProvider =
@@ -17,7 +20,25 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
 
   @override
   Future<UserSettings?> build() async {
-    _userSettingsRepository = ref.read(userSettingsRepositoryProvider);
+    try {
+      // Attempt to initialize the repository
+      _userSettingsRepository = ref.read(userSettingsRepositoryProvider);
+    } catch (e, stackTrace) {
+      // If the repository provider itself fails (e.g., user not ready when read),
+      // log the error and put this controller provider into an error state.
+      debugPrint('UserSettingsController.build: Failed to initialize repository: $e');
+
+      // Optional: Schedule a router refresh to ensure it reacts to this error state
+      // (Though it might react anyway due to the provider changing state)
+      // final routerNotifier = ref.read(routerNotifierProvider.notifier);
+      // WidgetsBinding.instance.addPostFrameCallback((_) {
+      //   debugPrint('UserSettingsController.build: Notifying router after repo init error');
+      //   routerNotifier.refreshRouterState();
+      // });
+
+      // Rethrow as AsyncError to put this provider in an error state
+      throw AsyncError(e, stackTrace);
+    }
     
     // Check if sign out is in progress
     final isSigningOut = ref.watch(isSigningOutProvider);
@@ -37,25 +58,60 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
     if (currentUser != null) {
       debugPrint('UserSettingsController.build: User ${currentUser.id} detected via AuthStateChanges. Fetching settings...');
       try {
-        // Add a small delay to ensure auth is fully established before fetching settings
-        // This helps prevent race conditions during rapid auth state changes
-        await Future.delayed(const Duration(milliseconds: 200));
-        
-        // Check if the user is still logged in after the delay (prevents unnecessary fetches)
-        final latestAuthState = ref.read(authStateChangesProvider);
-        final latestUser = latestAuthState.valueOrNull?.session?.user;
-        
-        if (latestUser?.id != currentUser.id) {
-          debugPrint('UserSettingsController.build: User changed during delay, aborting fetch.');
-          return null;
+        // Enhanced retry logic for settings fetch after auth transitions
+        for (int attempt = 1; attempt <= 5; attempt++) { // Increased max attempts from 3 to 5
+          try {
+            // Add a small delay to ensure auth is fully established before fetching settings
+            // This helps prevent race conditions during rapid auth state changes
+            // Increase delay for subsequent attempts with some randomization to avoid synchronized retries
+            final delay = 200 * attempt + (attempt > 1 ? 100 * (attempt % 3) : 0);
+            debugPrint('UserSettingsController.build: Attempt $attempt, waiting ${delay}ms before fetching...');
+            await Future.delayed(Duration(milliseconds: delay));
+            
+            // Check if the user is still logged in after the delay (prevents unnecessary fetches)
+            final latestAuthState = ref.read(authStateChangesProvider);
+            final latestUser = latestAuthState.valueOrNull?.session?.user;
+            
+            if (latestUser?.id != currentUser.id) {
+              debugPrint('UserSettingsController.build: User changed during delay, aborting fetch.');
+              return null;
+            }
+            
+            // Assuming getUserSettings implicitly uses the current user from Supabase client context
+            final settings = await _userSettingsRepository.getUserSettings();
+            debugPrint('UserSettingsController.build: Settings fetched for user ${currentUser.id} on attempt $attempt');
+            
+            // Explicitly notify the router to handle login transition
+            // This helps ensure navigation happens after settings are loaded
+            final routerNotifier = ref.read(routerNotifierProvider.notifier);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              debugPrint('UserSettingsController.build: Notifying router after settings load');
+              routerNotifier.refreshRouterState();
+            });
+            
+            return settings;
+          } catch (e) {
+            if (attempt == 5) { // Updated from 3 to 5
+              // Only rethrow on final attempt
+              debugPrint('UserSettingsController.build: All settings fetch attempts failed');
+              rethrow;
+            }
+            debugPrint('UserSettingsController.build: Settings fetch attempt $attempt failed: $e. Retrying...');
+            // Continue to next attempt
+          }
         }
-        
-        // Assuming getUserSettings implicitly uses the current user from Supabase client context
-        final settings = await _userSettingsRepository.getUserSettings();
-        debugPrint('UserSettingsController.build: Settings fetched for user ${currentUser.id}');
-        return settings;
+        // Should never reach here due to rethrow in the loop
+        throw StateError('Unexpected error in settings fetch retry logic');
       } catch (e, stackTrace) {
         debugPrint('UserSettingsController.build: Error fetching settings for user ${currentUser.id}: $e');
+        
+        // Schedule a router refresh even on error to ensure the router can handle the transition
+        final routerNotifier = ref.read(routerNotifierProvider.notifier);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          debugPrint('UserSettingsController.build: Notifying router after settings load error');
+          routerNotifier.refreshRouterState();
+        });
+        
         // Re-throw the error to put the provider in an error state.
         // Use AsyncError to preserve stack trace if needed by GoRouter.
         throw AsyncError(e, stackTrace);
@@ -465,7 +521,25 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
   /// Refreshes the user settings.
   Future<void> refreshSettings() async {
     debugPrint('UserSettingsController.refreshSettings: Starting refresh');
-    
+
+    // --- NEW: Try to ensure repository is available ---
+    UserSettingsRepository repository;
+    try {
+      // Try reading the provider *again* here. If the initial build failed,
+      // the auth state might be ready now.
+      repository = ref.read(userSettingsRepositoryProvider);
+      // If successful, store it in the instance variable for future use by other methods *if* needed
+      // and if the initial build failed.
+      _userSettingsRepository = repository; // Assign if read succeeds
+    } catch (e, stackTrace) {
+      debugPrint('UserSettingsController.refreshSettings: Failed to get repository: $e');
+      // Put the provider into an error state if it wasn't already
+      state = AsyncValue.error(e, stackTrace);
+      // Rethrow to signal failure
+      rethrow;
+    }
+    // --- END NEW ---
+
     // Keep track of current settings to avoid unnecessary loading state
     final currentSettings = state.valueOrNull;
     
@@ -477,7 +551,8 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         debugPrint('UserSettingsController.refreshSettings: Attempt $attempt');
-        final settings = await _userSettingsRepository.getUserSettings();
+        // Use the locally obtained repository
+        final settings = await repository.getUserSettings();
         
         // Compare with previous settings to minimize state changes
         if (currentSettings == null || !_areSettingsEqual(currentSettings, settings)) {

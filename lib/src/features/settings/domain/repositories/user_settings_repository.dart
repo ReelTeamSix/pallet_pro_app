@@ -1,4 +1,4 @@
-import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
+import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart'; // Adjusted path if needed
 
 /// Repository interface for user settings operations.
 abstract class UserSettingsRepository {
@@ -18,6 +18,7 @@ abstract class UserSettingsRepository {
   Future<UserSettings> updateUseBiometricAuth(bool useBiometricAuth);
 
   /// Updates the cost allocation method.
+  /// Assuming CostAllocationMethod is defined within user_settings.dart or imported correctly
   Future<UserSettings> updateCostAllocationMethod(CostAllocationMethod method);
 
   /// Updates whether to show break-even price.
@@ -44,4 +45,4 @@ abstract class UserSettingsRepository {
   /// The map should contain the database column names and their new values.
   /// This method should ensure 'has_completed_onboarding' is set to true.
   Future<UserSettings> updateSettingsFromOnboarding(Map<String, dynamic> updates);
-}
+} 
