@@ -7,9 +7,9 @@ part of 'pallet.dart';
 // **************************************************************************
 
 _Pallet _$PalletFromJson(Map<String, dynamic> json) => _Pallet(
-  id: (json['id'] as num).toInt(),
+  id: json['id'] as String,
   userId: json['user_id'] as String,
-  name: json['name'] as String,
+  name: json['name'] as String?,
   supplier: json['supplier'] as String?,
   type: json['type'] as String?,
   createdAt: DateTime.parse(json['created_at'] as String),

@@ -6,11 +6,11 @@ part 'pallet.g.dart';
 @freezed
 class Pallet with _$Pallet {
   const factory Pallet({
-    required int id,
+    required String id,
     @JsonKey(name: 'user_id') required String userId,
-    required String name,
+    String? name,
     String? supplier,
-    String? type, // e.g., 'wood', 'plastic', 'custom'
+    String? type, // Consider using an enum later
     @JsonKey(name: 'created_at') required DateTime createdAt,
   }) = _Pallet;
 

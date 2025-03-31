@@ -18,6 +18,17 @@ Essentially, Pallet Pro aims to give resellers clear visibility into their inven
 
 This section outlines key architectural decisions, conventions, and potential gotchas discovered during the initial MVP development, particularly related to authentication, user settings, and routing.
 
+## Inventory Feature - Data Layer
+
+*   **`Pallet` Model:**
+    *   Defined in `lib/src/features/inventory/data/models/pallet.dart` using `@freezed` for immutability and code generation.
+    *   Includes fields like `id`, `user_id`, `name`, `supplier`, `type`, and `created_at`.
+    *   Uses `@JsonKey` annotations to map Dart field names (e.g., `userId`, `createdAt`) to database column names (e.g., `user_id`, `created_at`).
+*   **`PalletRepository` Interface:**
+    *   Defined in `lib/src/features/inventory/data/repositories/pallet_repository.dart`.
+    *   Provides an abstract contract for CRUD operations (watch, fetchById, add, update, delete) on Pallet data.
+    *   This separation allows for different implementations (e.g., Supabase, local mock) without changing the components that use the repository.
+
 ## User Settings & Database Interaction
 
 1.  **`user_settings` Table Schema Convention:**
@@ -41,8 +52,17 @@ This section outlines key architectural decisions, conventions, and potential go
     *   The controller's `build` method wraps the initial repository read (`ref.read(userSettingsRepositoryProvider)`) in a `try-catch`. If the repository cannot be created immediately (due to auth timing), the controller provider enters an error state.
     *   The `refreshSettings` method *also* attempts to read the repository provider at its start, making it resilient even if the initial `build` failed to initialize the repository instance.
 
+6.  **Riverpod Code Generation (`@riverpod`) Requirements & Troubleshooting:**
+    *   Using the `@riverpod` annotation requires specific packages:
+        *   `riverpod_annotation` in `dependencies`.
+        *   `riverpod_generator` in `dev_dependencies`.
+    *   **Gotcha:** Missing these packages will cause `flutter pub run build_runner build` to fail with errors like `Could not resolve annotation for ... (InvalidType ref)`. Ensure both packages are present in `pubspec.yaml` with compatible versions.
+    *   **Provider Locations:** Core providers used across features might be located in different feature directories. As of this writing:
+        *   `authStateChangesProvider` is in `lib/src/features/auth/presentation/providers/auth_controller.dart`.
+        *   `supabaseClientProvider` is in `lib/src/features/settings/data/repositories/user_settings_providers.dart`.
+
 ## Routing (`RouterNotifier` & GoRouter)
 
-6.  **Routing Logic Dependencies:**
+7.  **Routing Logic Dependencies:**
     *   The `RouterNotifier`'s redirection logic heavily depends on the state of `userSettingsControllerProvider`.
     *   An `AsyncError` state in `userSettingsControllerProvider` (whether from failed repository initialization or failed settings fetch after login) will trigger a redirect back to `/login?from=settings_error`. This is the expected behavior if settings cannot be loaded. 

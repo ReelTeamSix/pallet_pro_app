@@ -16,7 +16,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Pallet {
 
- int get id;@JsonKey(name: 'user_id') String get userId; String get name; String? get supplier; String? get type;// e.g., 'wood', 'plastic', 'custom'
+ String get id;@JsonKey(name: 'user_id') String get userId; String? get name; String? get supplier; String? get type;// Consider using an enum later
 @JsonKey(name: 'created_at') DateTime get createdAt;
 /// Create a copy of Pallet
 /// with the given fields replaced by the non-null parameter values.
@@ -50,7 +50,7 @@ abstract mixin class $PalletCopyWith<$Res>  {
   factory $PalletCopyWith(Pallet value, $Res Function(Pallet) _then) = _$PalletCopyWithImpl;
 @useResult
 $Res call({
- int id,@JsonKey(name: 'user_id') String userId, String name, String? supplier, String? type,@JsonKey(name: 'created_at') DateTime createdAt
+ String id,@JsonKey(name: 'user_id') String userId, String? name, String? supplier, String? type,@JsonKey(name: 'created_at') DateTime createdAt
 });
 
 
@@ -67,12 +67,12 @@ class _$PalletCopyWithImpl<$Res>
 
 /// Create a copy of Pallet
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? userId = null,Object? name = null,Object? supplier = freezed,Object? type = freezed,Object? createdAt = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? userId = null,Object? name = freezed,Object? supplier = freezed,Object? type = freezed,Object? createdAt = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
-as int,userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
-as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
-as String,supplier: freezed == supplier ? _self.supplier : supplier // ignore: cast_nullable_to_non_nullable
+as String,userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
+as String,name: freezed == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
+as String?,supplier: freezed == supplier ? _self.supplier : supplier // ignore: cast_nullable_to_non_nullable
 as String?,type: freezed == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
 as String?,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,
@@ -86,15 +86,15 @@ as DateTime,
 @JsonSerializable()
 
 class _Pallet implements Pallet {
-  const _Pallet({required this.id, @JsonKey(name: 'user_id') required this.userId, required this.name, this.supplier, this.type, @JsonKey(name: 'created_at') required this.createdAt});
+  const _Pallet({required this.id, @JsonKey(name: 'user_id') required this.userId, this.name, this.supplier, this.type, @JsonKey(name: 'created_at') required this.createdAt});
   factory _Pallet.fromJson(Map<String, dynamic> json) => _$PalletFromJson(json);
 
-@override final  int id;
+@override final  String id;
 @override@JsonKey(name: 'user_id') final  String userId;
-@override final  String name;
+@override final  String? name;
 @override final  String? supplier;
 @override final  String? type;
-// e.g., 'wood', 'plastic', 'custom'
+// Consider using an enum later
 @override@JsonKey(name: 'created_at') final  DateTime createdAt;
 
 /// Create a copy of Pallet
@@ -130,7 +130,7 @@ abstract mixin class _$PalletCopyWith<$Res> implements $PalletCopyWith<$Res> {
   factory _$PalletCopyWith(_Pallet value, $Res Function(_Pallet) _then) = __$PalletCopyWithImpl;
 @override @useResult
 $Res call({
- int id,@JsonKey(name: 'user_id') String userId, String name, String? supplier, String? type,@JsonKey(name: 'created_at') DateTime createdAt
+ String id,@JsonKey(name: 'user_id') String userId, String? name, String? supplier, String? type,@JsonKey(name: 'created_at') DateTime createdAt
 });
 
 
@@ -147,12 +147,12 @@ class __$PalletCopyWithImpl<$Res>
 
 /// Create a copy of Pallet
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? userId = null,Object? name = null,Object? supplier = freezed,Object? type = freezed,Object? createdAt = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? userId = null,Object? name = freezed,Object? supplier = freezed,Object? type = freezed,Object? createdAt = null,}) {
   return _then(_Pallet(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
-as int,userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
-as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
-as String,supplier: freezed == supplier ? _self.supplier : supplier // ignore: cast_nullable_to_non_nullable
+as String,userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
+as String,name: freezed == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
+as String?,supplier: freezed == supplier ? _self.supplier : supplier // ignore: cast_nullable_to_non_nullable
 as String?,type: freezed == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
 as String?,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,
