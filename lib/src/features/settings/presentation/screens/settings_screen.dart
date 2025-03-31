@@ -23,6 +23,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isLoading = false;
   bool _isBiometricAvailable = false;
   UserSettings? _cachedSettings;
+  String _selectedTheme = 'system'; // Added for theme radio buttons
 
   @override
   void initState() {
@@ -35,46 +36,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() {
       _isBiometricAvailable = isAvailable;
     });
-  }
-
-  Future<void> _toggleDarkMode(bool value) async {
-    if (_isLoading) return;
-
-    setState(() {
-      _isLoading = true;
-      // Apply optimistic update for immediate feedback
-      _cachedSettings = _cachedSettings?.copyWith(useDarkMode: value);
-    });
-
-    try {
-      await ref
-          .read(userSettingsControllerProvider.notifier)
-          .updateUseDarkMode(value);
-    } catch (e) {
-      // Revert optimistic update on error
-      if (_cachedSettings != null) {
-        setState(() {
-          _cachedSettings = _cachedSettings!.copyWith(useDarkMode: !value);
-        });
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e is AppException ? e.message : 'Failed to update theme: ${e.toString()}',
-            ),
-            backgroundColor: context.errorColor,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
   }
 
   Future<void> _toggleBiometricAuth(bool value) async {
@@ -388,6 +349,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _updateTheme(String theme) async {
+    if (_cachedSettings?.theme == theme) return;
+
+    setState(() {
+      _isLoading = true;
+      _cachedSettings = _cachedSettings?.copyWith(theme: theme);
+    });
+
+    try {
+      await ref.read(userSettingsControllerProvider.notifier).updateTheme(theme);
+      // Refresh settings from provider to ensure consistency after update
+      final updatedSettings = ref.read(userSettingsControllerProvider).value;
+      if (mounted && updatedSettings != null) {
+         _cachedSettings = updatedSettings;
+      }
+    } catch (e) {
+      if (mounted) {
+         // Revert optimistic update on error
+         final previousSettings = ref.read(userSettingsControllerProvider).value;
+         if (previousSettings != null) {
+             _cachedSettings = previousSettings;
+         }
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userSettingsAsync = ref.watch(userSettingsControllerProvider);
@@ -395,6 +385,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Update cached settings when provider has data
     if (userSettingsAsync.hasValue && userSettingsAsync.value != null) {
       _cachedSettings = userSettingsAsync.value;
+      _selectedTheme = _cachedSettings!.theme; // Initialize theme state
     }
 
     // Use cached settings for UI when available
@@ -416,11 +407,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: [
               // Appearance section
               _buildSectionHeader(context, 'Appearance'),
-              SwitchListTile(
-                title: const Text('Dark Mode'),
-                subtitle: const Text('Use dark theme'),
-                value: userSettings.useDarkMode,
-                onChanged: _isLoading ? null : _toggleDarkMode,
+              ListTile(
+                title: const Text('Theme'),
+                leading: const Icon(Icons.color_lens),
+              ),
+              RadioListTile<String>(
+                title: const Text('System Default'),
+                value: 'system',
+                groupValue: _selectedTheme,
+                onChanged: _isLoading ? null : (value) => _updateTheme(value!), 
+              ),
+               RadioListTile<String>(
+                title: const Text('Light'),
+                value: 'light',
+                groupValue: _selectedTheme,
+                onChanged: _isLoading ? null : (value) => _updateTheme(value!), 
+              ),
+              RadioListTile<String>(
+                title: const Text('Dark'),
+                value: 'dark',
+                groupValue: _selectedTheme,
+                onChanged: _isLoading ? null : (value) => _updateTheme(value!), 
               ),
               const Divider(),
 

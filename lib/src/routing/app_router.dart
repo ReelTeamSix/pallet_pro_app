@@ -83,7 +83,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   // Timestamp for the last successful authentication (initial or resume)
   DateTime? _lastAuthCompletionTime;
   static const Duration _authCooldownDuration = Duration(seconds: 1);
-  static const Duration _maxSplashWaitTime = Duration(seconds: 7);
+  static const Duration _maxSplashWaitTime = Duration(seconds: 3);
   Timer? _splashTimeoutTimer;
   final _routeObserver = _RouterObserver();
   

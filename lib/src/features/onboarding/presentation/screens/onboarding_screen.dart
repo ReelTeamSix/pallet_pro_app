@@ -1,10 +1,14 @@
+import 'package:flutter/foundation.dart'; // Needed for kIsWeb
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Added for input formatters
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
+import 'package:pallet_pro_app/src/features/auth/data/providers/biometric_service_provider.dart'; // Added for biometric check
+import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart'; // Added for CostAllocationMethod
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -22,204 +26,507 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   int _currentPage = 0;
   bool _isLoading = false;
 
-  final List<OnboardingPage> _pages = [
-    OnboardingPage(
-      title: 'Welcome to Pallet Pro',
-      description:
-          'The ultimate inventory management solution for resellers and small businesses.',
-      icon: AppIcons.pallet,
-    ),
-    OnboardingPage(
-      title: 'Track Your Inventory',
-      description:
-          'Easily manage your pallets, items, and expenses. Keep track of what\'s selling and what\'s not.',
-      icon: AppIcons.inventory,
-    ),
-    OnboardingPage(
-      title: 'Analyze Your Business',
-      description:
-          'Get insights into your business with detailed analytics and reports. Set goals and track your progress.',
-      icon: AppIcons.analytics,
-    ),
-    OnboardingPage(
-      title: 'Let\'s Get Started',
-      description:
-          'Set up your account and start managing your inventory like a pro.',
-      icon: AppIcons.success,
-    ),
-  ];
+  // --- Define number of pages ---
+  static const int _numPages = 5;
+
+  // --- State Variables for Onboarding Settings ---
+  // Goal Page State
+  final _formKeyGoal = GlobalKey<FormState>(); // Changed from _formKeyGoals
+  String _selectedGoalFrequency = 'Weekly'; // Default frequency
+  final _goalAmountController = TextEditingController(text: '0'); // Renamed and kept one
+
+  // Preferences Page State
+  final _formKeyPrefs = GlobalKey<FormState>();
+  final _staleThresholdController = TextEditingController(text: '60');
+  CostAllocationMethod _selectedCostAllocation = CostAllocationMethod.fifo;
+  bool _showBreakEven = true;
+  String _selectedTheme = 'system';
+
+  // Security Page State
+  bool _enableBiometrics = false;
+  bool _enablePin = false;
+  bool _isBiometricAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+       _checkBiometricAvailability();
+       _ensureUserSettingsExist();
+    });
+  }
 
   @override
   void dispose() {
     _pageController.dispose();
+    // Dispose only the controllers we have now
+    _goalAmountController.dispose();
+    _staleThresholdController.dispose();
     super.dispose();
   }
 
-  Future<void> _completeOnboarding() async {
-    if (_isLoading) return; // Prevent double click
-    
-    setState(() {
-      _isLoading = true;
-    });
+  // --- Widget Builder Methods for Each Step ---
+
+  Widget _buildWelcomePage() {
+    return _buildInfoPage(
+      title: 'Welcome to Pallet Pro!',
+      description: 'Let\'s get your account set up for optimal inventory and profit tracking.',
+      icon: AppIcons.pallet,
+    );
+  }
+
+  // --- UPDATED GOAL PAGE ---
+  Widget _buildGoalPage() {
+    // Define frequency options for the dropdown
+    final List<String> goalFrequencies = ['Daily', 'Weekly', 'Monthly'];
+    // Map display names to icons (optional, but nice)
+    final Map<String, IconData> frequencyIcons = {
+      'Daily': Icons.today,
+      'Weekly': Icons.calendar_view_week,
+      'Monthly': Icons.calendar_month,
+    };
+
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.all(context.spacingLg),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(AppIcons.goals, size: 80, color: context.primaryColor),
+            SizedBox(height: context.spacingMd),
+            Text('Set Your Primary Profit Goal', style: context.headlineMedium, textAlign: TextAlign.center), // Updated title
+            Text('(Optional, you can change this later)', style: context.bodyMedium, textAlign: TextAlign.center),
+            SizedBox(height: context.spacingLg + context.spacingXs), // Slightly more space
+            // Form for frequency and amount
+            Form(
+              key: _formKeyGoal, // Use the new key
+              child: Column(
+                children: [
+                  // Frequency Dropdown
+                  DropdownButtonFormField<String>(
+                    value: _selectedGoalFrequency,
+                    decoration: const InputDecoration(
+                      labelText: 'Goal Frequency',
+                    ),
+                    items: goalFrequencies.map((String frequency) {
+                      return DropdownMenuItem<String>(
+                        value: frequency,
+                        child: Row( // Add icon to dropdown item
+                          children: [
+                            Icon(frequencyIcons[frequency], size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            SizedBox(width: context.spacingMd),
+                            Text(frequency),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _selectedGoalFrequency = newValue;
+                        });
+                      }
+                    },
+                  ),
+                  SizedBox(height: context.spacingLg), // Space between fields
+
+                  // Goal Amount Input
+                  TextFormField(
+                    controller: _goalAmountController, // Use the single controller
+                    decoration: InputDecoration(
+                      labelText: '$_selectedGoalFrequency Goal Amount', // Dynamic label
+                      prefixIcon: const Icon(Icons.attach_money),
+                      helperText: 'Enter 0 if you don\'t have a specific goal.',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                    ],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'Enter 0 or your goal amount';
+                      final amount = double.tryParse(value);
+                      if (amount == null) return 'Invalid number format';
+                      if (amount < 0) return 'Goal cannot be negative'; // Added check
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  // --- END UPDATED GOAL PAGE ---
+
+
+  Widget _buildPreferencesPage() {
+    // Map enum to DB values for Cost Allocation dropdown
+    final Map<CostAllocationMethod, String> costAllocationOptions = {
+      CostAllocationMethod.fifo: 'FIFO (First-In, First-Out)', // Represents DB 'even'
+      CostAllocationMethod.lifo: 'LIFO (Last-In, First-Out)', // Represents DB 'proportional'
+      CostAllocationMethod.average: 'Average Cost', // Represents DB 'manual'
+    };
+
+    return SingleChildScrollView( // Keep scroll view
+      child: Padding(
+        padding: EdgeInsets.all(context.spacingLg),
+         // Wrap form content in a Column starting with Icon and Title
+        child: Column( 
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(AppIcons.settings, size: 80, color: context.primaryColor),
+            SizedBox(height: context.spacingMd),
+            Text('Configure Preferences', style: context.headlineMedium, textAlign: TextAlign.center),
+            SizedBox(height: context.spacingLg),
+            // Form remains nested
+            Form( 
+              key: _formKeyPrefs,
+              child: Column(
+                children: [
+                   // Stale Threshold
+                  TextFormField(
+                    controller: _staleThresholdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Stale Item Threshold (Days)',
+                      helperText: 'Mark items as stale after this many days.',
+                      prefixIcon: Icon(Icons.calendar_today),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'Please enter days';
+                      final days = int.tryParse(value);
+                      if (days == null || days < 1) return 'Must be at least 1 day';
+                      return null;
+                    },
+                  ),
+                  SizedBox(height: context.spacingLg),
+
+                  // Cost Allocation
+                  DropdownButtonFormField<CostAllocationMethod>(
+                    value: _selectedCostAllocation,
+                    decoration: const InputDecoration(
+                      labelText: 'Cost Allocation Method',
+                      prefixIcon: Icon(Icons.calculate_outlined),
+                    ),
+                    items: costAllocationOptions.entries.map((entry) {
+                      return DropdownMenuItem<CostAllocationMethod>(
+                        value: entry.key,
+                        child: Text(entry.value),
+                      );
+                    }).toList(),
+                    onChanged: (CostAllocationMethod? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _selectedCostAllocation = newValue;
+                        });
+                      }
+                    },
+                  ),
+                  SizedBox(height: context.spacingLg),
+
+                   // Theme Preference
+                  // Use Align to left-align the label, looks better with RadioListTiles
+                  Align( 
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: context.spacingXs), // Add space below label
+                      child: Text('Theme Preference', style: context.labelLarge),
+                    )
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('System Default'),
+                    value: 'system',
+                    groupValue: _selectedTheme,
+                    onChanged: (value) {
+                       if (value == null) return;
+                       setState(() => _selectedTheme = value); // Update local state immediately
+                       // Delay provider update until after the current build cycle
+                       Future.delayed(Duration.zero, () { // ADD Future.delayed
+                         if (mounted) { // Check if widget is still mounted before calling ref
+                            ref.read(userSettingsControllerProvider.notifier).updateTheme(value); 
+                         }
+                       }); // ADD Future.delayed
+                    },
+                    contentPadding: EdgeInsets.zero, // Adjust padding
+                  ),
+                   RadioListTile<String>(
+                    title: const Text('Light'),
+                    value: 'light',
+                    groupValue: _selectedTheme,
+                    onChanged: (value) {
+                       if (value == null) return;
+                       setState(() => _selectedTheme = value); // Update local state immediately
+                       // Delay provider update until after the current build cycle
+                       Future.delayed(Duration.zero, () { // ADD Future.delayed
+                         if (mounted) { // Check if widget is still mounted before calling ref
+                            ref.read(userSettingsControllerProvider.notifier).updateTheme(value); 
+                         }
+                       }); // ADD Future.delayed
+                    },
+                    contentPadding: EdgeInsets.zero, // Adjust padding
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Dark'),
+                    value: 'dark',
+                    groupValue: _selectedTheme,
+                    onChanged: (value) {
+                       if (value == null) return;
+                       setState(() => _selectedTheme = value); // Update local state immediately
+                       // Delay provider update until after the current build cycle
+                       Future.delayed(Duration.zero, () { // ADD Future.delayed
+                          if (mounted) { // Check if widget is still mounted before calling ref
+                             ref.read(userSettingsControllerProvider.notifier).updateTheme(value); 
+                          }
+                       }); // ADD Future.delayed
+                    },
+                    contentPadding: EdgeInsets.zero, // Adjust padding
+                  ),
+                  SizedBox(height: context.spacingMd),
+
+
+                  // Break-Even Toggle
+                  SwitchListTile(
+                    title: const Text('Show Break-Even Price'),
+                    value: _showBreakEven,
+                    onChanged: (bool value) {
+                      setState(() {
+                        _showBreakEven = value;
+                      });
+                    },
+                    secondary: Icon(_showBreakEven ? Icons.visibility : Icons.visibility_off),
+                    contentPadding: EdgeInsets.zero, // Adjust padding
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+   Widget _buildSecurityPage() {
+    return SingleChildScrollView( // Keep scroll view
+      child: Padding(
+        padding: EdgeInsets.all(context.spacingLg),
+         // Wrap content in a Column starting with Icon and Title
+        child: Column( 
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+             Icon(AppIcons.security, size: 80, color: context.primaryColor),
+             SizedBox(height: context.spacingMd),
+             Text('Additional Security (Optional)', style: context.headlineMedium, textAlign: TextAlign.center),
+             SizedBox(height: context.spacingLg),
+            
+             // Security options remain nested
+             SwitchListTile(
+               title: const Text('Enable Biometric Unlock'),
+               subtitle: const Text('Use fingerprint or face unlock (if available)'),
+               value: _enableBiometrics,
+               onChanged: (bool value) {
+                 // Only allow enabling if biometrics are available
+                 if (_isBiometricAvailable || !value) { 
+                    setState(() {
+                      _enableBiometrics = value;
+                    });
+                 } else {
+                    // Optionally show a message if user tries to enable unavailable biometrics
+                    ScaffoldMessenger.of(context).showSnackBar(
+                       const SnackBar(content: Text('Biometric authentication is not available on this device.')),
+                    );
+                 }
+               },
+               secondary: const Icon(Icons.fingerprint),
+               activeColor: _isBiometricAvailable ? null : Colors.grey, 
+               inactiveThumbColor: _isBiometricAvailable ? null : Colors.grey[300],
+               inactiveTrackColor: _isBiometricAvailable ? null : Colors.grey[400],
+               contentPadding: EdgeInsets.zero, // Adjust padding
+             ),
+             SizedBox(height: context.spacingMd),
+             SwitchListTile(
+               title: const Text('Enable PIN Unlock'),
+               subtitle: const Text('Use a 4-digit PIN'),
+               value: _enablePin,
+               onChanged: (bool value) {
+                 setState(() {
+                   _enablePin = value;
+                 });
+               },
+               secondary: const Icon(Icons.pin),
+               contentPadding: EdgeInsets.zero, // Adjust padding
+             ),
+             SizedBox(height: context.spacingMd),
+             Text(
+              'You can set up your PIN or confirm biometric settings later if enabled.',
+              style: context.bodySmall,
+              textAlign: TextAlign.center,
+             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildFinalPage() {
+    return _buildInfoPage(
+      title: 'You\'re All Set!',
+      description: 'Your initial settings are configured. Tap below to start managing your inventory.',
+      icon: AppIcons.success,
+    );
+  }
+
+  // Helper for simple info pages
+  Widget _buildInfoPage({required String title, required String description, required IconData icon}) {
+     return ResponsiveUtils.centerContent(
+      context: context,
+      maxWidth: 600,
+      child: Padding(
+        padding: EdgeInsets.all(context.spacingLg),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 100, color: context.primaryColor),
+            SizedBox(height: context.spacingLg),
+            Text(title, style: context.headlineMedium, textAlign: TextAlign.center),
+            SizedBox(height: context.spacingMd),
+            Text(description, style: context.bodyLarge, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper for goal input fields - NO LONGER NEEDED as it's integrated into _buildGoalPage
+  // Widget _buildGoalInput({required String label, required TextEditingController controller}) { ... }
+
+
+  // --- Logic for Completing Onboarding ---
+  Future<void> _submitOnboardingSettings() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
 
     try {
-      debugPrint('OnboardingScreen: Starting direct onboarding completion');
-      
-      // First, ensure user settings exist
       await _ensureUserSettingsExist();
-      
-      // Get the client and user
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      
-      if (user == null) {
-        throw Exception('User not authenticated');
+
+      // Map CostAllocationMethod enum to DB string value
+      String dbCostAllocation;
+      switch (_selectedCostAllocation) {
+        case CostAllocationMethod.fifo:
+          dbCostAllocation = 'even';
+          break;
+        case CostAllocationMethod.lifo:
+          dbCostAllocation = 'proportional';
+          break;
+        case CostAllocationMethod.average:
+        default:
+          dbCostAllocation = 'manual';
+          break;
       }
-      
-      // First update the onboarding status in the database directly
-      debugPrint('OnboardingScreen: Updating has_completed_onboarding in database');
-      try {
-        // Use the update with the correct field name
-        await client
-          .from('user_settings')
-          .update({'has_completed_onboarding': true})
-          .eq('id', user.id); // Use 'id' not 'user_id'
-        debugPrint('OnboardingScreen: Database update successful');
-      } catch (updateError) {
-        debugPrint('OnboardingScreen: Error updating database: $updateError');
-        // Continue anyway - we'll try to navigate
+
+      // --- UPDATED GOAL HANDLING ---
+      final double goalAmount = double.tryParse(_goalAmountController.text) ?? 0.0;
+      double dailyGoal = 0.0;
+      double weeklyGoal = 0.0;
+      double monthlyGoal = 0.0;
+      // double yearlyGoal = 0.0; // Yearly goal not set in this simplified flow
+
+      switch (_selectedGoalFrequency) {
+        case 'Daily':
+          dailyGoal = goalAmount;
+          break;
+        case 'Weekly':
+          weeklyGoal = goalAmount;
+          break;
+        case 'Monthly':
+          monthlyGoal = goalAmount;
+          break;
       }
-      
-      // Attempt to refresh the user settings in the provider
-      try {
-        debugPrint('OnboardingScreen: Refreshing user settings provider');
-        await ref.read(userSettingsControllerProvider.notifier).refreshSettings();
-      } catch (refreshError) {
-        debugPrint('OnboardingScreen: Error refreshing settings: $refreshError');
-        // Continue anyway - we'll try to navigate
-      }
-      
-      // Navigate with query parameter to bypass settings checks in router
+      // --- END UPDATED GOAL HANDLING ---
+
+
+      // Prepare the updates map using DB column names
+      final updates = <String, dynamic>{
+        // Updated goal fields
+        'daily_goal': dailyGoal,
+        'weekly_goal': weeklyGoal,
+        'monthly_goal': monthlyGoal,
+        // 'yearly_goal': yearlyGoal, // Not setting yearly goal here
+
+        // Other settings
+        'stale_threshold_days': int.tryParse(_staleThresholdController.text) ?? 60,
+        'cost_allocation_method': dbCostAllocation,
+        'show_break_even': _showBreakEven,
+        'theme': _selectedTheme,
+        'enable_biometric_unlock': _enableBiometrics,
+        'enable_pin_unlock': _enablePin,
+        // 'has_completed_onboarding' is set to true within the repository method
+      };
+
+      debugPrint('OnboardingScreen: Submitting settings: $updates');
+
+      await ref.read(userSettingsControllerProvider.notifier).updateSettingsFromOnboarding(updates);
+
+      debugPrint('OnboardingScreen: Settings update successful.');
+
       if (mounted) {
-        debugPrint('OnboardingScreen: Navigating to home with bypass parameter');
-        try {
-          // Use the new approach with query parameter
-          final uri = Uri(
-            path: '/home',
-            queryParameters: {'fromOnboarding': 'true'}
-          );
-          context.go(uri.toString());
-          debugPrint('OnboardingScreen: Navigation to home with bypass parameter successful');
-          return;
-        } catch (e) {
-          debugPrint('OnboardingScreen: Error navigating with URI: $e, trying fallback');
-          
-          // Fallback to direct navigation
-          try {
-            context.go('/home');
-            debugPrint('OnboardingScreen: Fallback navigation successful');
-            return;
-          } catch (fallbackError) {
-            debugPrint('OnboardingScreen: Fallback navigation failed: $fallbackError');
-            throw Exception('Failed to navigate to home screen: $fallbackError');
-          }
-        }
+         final userSettingsState = ref.read(userSettingsControllerProvider);
+         debugPrint('OnboardingScreen: State before navigation: hasCompleted=${userSettingsState.value?.hasCompletedOnboarding}, isLoading=${userSettingsState.isLoading}, hasError=${userSettingsState.hasError}');
+         final uri = Uri(path: '/home', queryParameters: {'fromOnboarding': 'true'});
+         debugPrint('OnboardingScreen: Attempting navigation to: ${uri.toString()}');
+         context.go(uri.toString());
+         debugPrint('OnboardingScreen: Navigation call completed.');
       } else {
-        debugPrint('OnboardingScreen: Widget not mounted for navigation');
-        throw Exception('Widget not mounted for navigation');
+         debugPrint('OnboardingScreen: Widget unmounted before navigation could occur.');
       }
-    } catch (e) {
-      debugPrint('OnboardingScreen: Error in complete onboarding flow: $e');
-      
-      // Show error and reset loading state
+
+    } catch (e, stackTrace) {
+       debugPrint('OnboardingScreen: Error submitting settings: $e\n$stackTrace');
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              e is AppException 
-                  ? e.message 
-                  : 'Failed: ${e.toString()}'
-            ),
+            content: Text(e is AppException ? e.message : 'Failed to save settings: ${e.toString()}'),
             backgroundColor: context.errorColor,
           ),
         );
       }
-    }
-  }
-  
-  /// Ensures that user settings exist for the current user
-  Future<void> _ensureUserSettingsExist() async {
-    debugPrint('OnboardingScreen: Ensuring user settings exist');
-    
-    final client = Supabase.instance.client;
-    final user = client.auth.currentUser;
-    
-    if (user == null) {
-      debugPrint('OnboardingScreen: No current user');
-      throw Exception('User not authenticated');
-    }
-    
-    try {
-      // First try to get existing settings
-      try {
-        debugPrint('OnboardingScreen: Checking if settings exist');
-        final response = await client
-            .from('user_settings')
-            .select()
-            .eq('id', user.id)  // Use 'id' instead of 'user_id' based on the DB schema
-            .limit(1)
-            .maybeSingle();
-        
-        if (response != null) {
-          debugPrint('OnboardingScreen: User settings exist');
-          return;
-        }
-      } catch (e) {
-        debugPrint('OnboardingScreen: Error checking if settings exist: $e');
-        // Continue to creation if we couldn't find settings
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
-      
-      // If we get here, settings don't exist, so create them
-      debugPrint('OnboardingScreen: Creating user settings');
-      
-      // Create default settings - use the exact column names from the database schema
-      final defaultSettings = {
-        'id': user.id,  // This should be 'id' not 'user_id' based on the DB schema
-        'theme': 'system',
-        'has_completed_onboarding': false,
-        'stale_threshold_days': 30,
-        'cost_allocation_method': 'even',  // DB default is 'even' not 'average'
-        'enable_biometric_unlock': false,  // Not 'use_biometric_auth'
-        'show_break_even': true,  // Not 'show_break_even_price'
-        'daily_goal': 0,
-        'weekly_goal': 0,
-        'monthly_goal': 0,
-        'yearly_goal': 0
-      };
-      
-      await client
-          .from('user_settings')
-          .insert(defaultSettings);
-      
-      debugPrint('OnboardingScreen: User settings created successfully');
-    } catch (e) {
-      debugPrint('OnboardingScreen: Error creating user settings: $e');
-      throw Exception('Failed to create user settings: $e');
     }
   }
 
+
+  // --- Navigation Logic ---
   void _nextPage() {
-    if (_currentPage < _pages.length - 1) {
+    // Validate current page's form before proceeding
+    bool canProceed = true;
+    if (_currentPage == 1) { // Goal page index
+        canProceed = _formKeyGoal.currentState?.validate() ?? false; // Validate the new goal form
+    } else if (_currentPage == 2) { // Preferences page index
+        canProceed = _formKeyPrefs.currentState?.validate() ?? false;
+    }
+    // Security page (index 3) currently has no form validation
+
+    if (!canProceed) {
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(content: Text('Please complete the current step correctly.'), backgroundColor: Colors.orange[700]),
+         );
+        return;
+    }
+
+    if (_currentPage < _numPages - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
     } else {
-      _completeOnboarding();
+      // Last page's button triggers submission
+      _submitOnboardingSettings();
     }
   }
 
@@ -232,74 +539,113 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
+   // --- Ensure Settings Exist (Keep for safety during onboarding start) ---
+   Future<void> _ensureUserSettingsExist() async {
+     debugPrint('OnboardingScreen: Ensuring user settings exist via controller refresh...');
+     try {
+       // Simply trigger the controller's logic.
+       // It will fetch or create settings as needed during its build/refresh process.
+       await ref.read(userSettingsControllerProvider.notifier).refreshSettings();
+       debugPrint('OnboardingScreen: Controller refresh complete. Settings should exist.');
+     } catch (e) {
+       // If the controller itself fails definitively to load/create settings...
+       debugPrint('OnboardingScreen: CRITICAL - Failed to ensure settings via controller: $e');
+       if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(
+             content: Text('Critical error loading user profile. Please restart the app. Error: ${e.toString()}'), // More specific error
+             backgroundColor: context.errorColor,
+             duration: const Duration(seconds: 6) // Longer duration for critical error
+           ),
+         );
+         // Optionally, could try to force sign out here if settings are unusable.
+         // await ref.read(authControllerProvider.notifier).signOut();
+       }
+     }
+   }
+
+  // Method to check biometric availability
+  Future<void> _checkBiometricAvailability() async {
+     // Avoid checking on web
+     if (kIsWeb) {
+       setState(() => _isBiometricAvailable = false);
+       return;
+     }
+     try {
+       // Assuming BiometricService is available - replace with actual provider if needed
+       final biometricService = ref.read(biometricServiceProvider);
+       final isAvailable = await biometricService.isBiometricAvailable();
+       if (mounted) {
+         setState(() => _isBiometricAvailable = isAvailable);
+       }
+     } catch (e) {
+       debugPrint('OnboardingScreen: Error checking biometric availability: $e');
+       if (mounted) {
+         setState(() => _isBiometricAvailable = false);
+       }
+     }
+  }
+
+  // --- Build Method ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Removed AppBar for a cleaner onboarding look
       body: SafeArea(
         child: Column(
           children: [
-            // Skip button
-            if (_currentPage < _pages.length - 1)
-              Align(
-                alignment: Alignment.topRight,
-                child: TextButton(
-                  onPressed: _isLoading ? null : () => _pageController.jumpToPage(_pages.length - 1),
-                  child: Text('Skip'),
-                ),
-              ),
-            
+            // Removed Skip button
+
             // Page content
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
-                itemCount: _pages.length,
+                itemCount: _numPages,
+                physics: const NeverScrollableScrollPhysics(),
                 onPageChanged: (index) {
                   setState(() {
                     _currentPage = index;
                   });
                 },
                 itemBuilder: (context, index) {
-                  final page = _pages[index];
+                   Widget pageContent;
+                   switch (index) {
+                     case 0:
+                       pageContent = _buildWelcomePage();
+                       break;
+                     case 1:
+                       pageContent = _buildGoalPage(); // Builds the updated goal page
+                       break;
+                     case 2:
+                       pageContent = _buildPreferencesPage();
+                       break;
+                     case 3:
+                       pageContent = _buildSecurityPage();
+                       break;
+                     case 4:
+                       pageContent = _buildFinalPage();
+                       break;
+                     default:
+                       pageContent = const SizedBox.shrink();
+                   }
+
+                  // Apply consistent centering and max width to all pages for better responsiveness
                   return ResponsiveUtils.centerContent(
-                    context: context,
-                    maxWidth: 600,
-                    child: Padding(
-                      padding: EdgeInsets.all(context.spacingLg),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            page.icon,
-                            size: 100,
-                            color: context.primaryColor,
-                          ),
-                          SizedBox(height: context.spacingLg),
-                          Text(
-                            page.title,
-                            style: context.headlineMedium,
-                            textAlign: TextAlign.center,
-                          ),
-                          SizedBox(height: context.spacingMd),
-                          Text(
-                            page.description,
-                            style: context.bodyLarge,
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
+                     context: context,
+                     maxWidth: 600, // Consistent max width
+                     child: pageContent,
                   );
                 },
               ),
             ),
-            
+
             // Page indicator
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(
-                _pages.length,
+                _numPages,
                 (index) => Container(
-                  margin: EdgeInsets.symmetric(horizontal: 4),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
                   width: 10,
                   height: 10,
                   decoration: BoxDecoration(
@@ -312,39 +658,41 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
             ),
             SizedBox(height: context.spacingMd),
-            
+
             // Navigation buttons
             Padding(
               padding: EdgeInsets.all(context.spacingLg),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: _currentPage > 0 ? MainAxisAlignment.spaceBetween : MainAxisAlignment.end, // Adjust alignment
                 children: [
-                  // Back button
+                  // Back button (only show after the first page)
                   if (_currentPage > 0)
                     TextButton.icon(
                       onPressed: _isLoading ? null : _previousPage,
-                      icon: Icon(Icons.arrow_back),
-                      label: Text('Back'),
-                    )
-                  else
-                    SizedBox.shrink(),
-                  
-                  // Next/Get Started button
-                  ElevatedButton(
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Back'),
+                    ),
+
+                  // Spacer if Back button is hidden
+                  // if (_currentPage == 0) Spacer(),
+
+                  // Next / Finish Setup button
+                  ElevatedButton.icon(
                     onPressed: _isLoading ? null : _nextPage,
-                    child: _isLoading
-                        ? SizedBox(
-                            height: 20,
+                    icon: _isLoading
+                        ? Container( // Use container for sizing
                             width: 20,
+                            height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: context.onPrimaryColor,
                             ),
                           )
-                        : Text(
-                            _currentPage < _pages.length - 1
+                        : Icon(_currentPage < _numPages - 1 ? Icons.arrow_forward : Icons.check_circle),
+                    label: Text(
+                            _currentPage < _numPages - 1
                                 ? 'Next'
-                                : 'Get Started',
+                                : 'Finish Setup',
                           ),
                   ),
                 ],
@@ -357,21 +705,4 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 }
 
-/// A page in the onboarding flow.
-class OnboardingPage {
-  /// Creates a new [OnboardingPage] instance.
-  const OnboardingPage({
-    required this.title,
-    required this.description,
-    required this.icon,
-  });
-
-  /// The title of the page.
-  final String title;
-
-  /// The description of the page.
-  final String description;
-
-  /// The icon of the page.
-  final IconData icon;
-}
+// Removed the old static OnboardingPage class

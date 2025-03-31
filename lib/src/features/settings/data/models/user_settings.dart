@@ -16,7 +16,7 @@ class UserSettings {
   const UserSettings({
     required this.userId,
     this.hasCompletedOnboarding = false,
-    this.useDarkMode = false,
+    this.theme = 'system',
     this.useBiometricAuth = false,
     this.usePinAuth = false,
     this.pinHash,
@@ -37,8 +37,8 @@ class UserSettings {
   /// Whether the user has completed onboarding.
   final bool hasCompletedOnboarding;
   
-  /// Whether to use dark mode.
-  final bool useDarkMode;
+  /// The theme setting ('light', 'dark', 'system').
+  final String theme;
   
   /// Whether to use biometric authentication.
   final bool useBiometricAuth;
@@ -83,13 +83,13 @@ class UserSettings {
       userId: json['id'] as String,
       hasCompletedOnboarding: json['has_completed_onboarding'] as bool? ?? false,
       // Fix: Use 'theme' with conversion instead of 'use_dark_mode'
-      useDarkMode: _isDarkTheme(json['theme'] as String?),
+      theme: json['theme'] as String? ?? 'system',
       // Fix: Use 'enable_biometric_unlock' instead of 'use_biometric_auth'
       useBiometricAuth: json['enable_biometric_unlock'] as bool? ?? false,
       // Add parsing for new PIN fields
       usePinAuth: json['enable_pin_unlock'] as bool? ?? false,
       pinHash: json['pin_hash'] as String?,
-      costAllocationMethod: _costAllocationMethodFromString(json['cost_allocation_method'] as String?),
+      costAllocationMethod: costAllocationMethodFromString(json['cost_allocation_method'] as String?),
       // Fix: Use 'show_break_even' instead of 'show_break_even_price'
       showBreakEvenPrice: json['show_break_even'] as bool? ?? true,
       staleThresholdDays: json['stale_threshold_days'] as int? ?? 90,
@@ -114,7 +114,7 @@ class UserSettings {
       'id': userId,
       'has_completed_onboarding': hasCompletedOnboarding,
       // Fix: Use 'theme' instead of 'use_dark_mode'
-      'theme': useDarkMode ? 'dark' : 'system',
+      'theme': theme,
       // Fix: Use 'enable_biometric_unlock' instead of 'use_biometric_auth'
       'enable_biometric_unlock': useBiometricAuth,
       // Add serialization for new PIN fields
@@ -138,7 +138,7 @@ class UserSettings {
   UserSettings copyWith({
     String? userId,
     bool? hasCompletedOnboarding,
-    bool? useDarkMode,
+    String? theme,
     bool? useBiometricAuth,
     bool? usePinAuth,
     String? pinHash,
@@ -155,7 +155,7 @@ class UserSettings {
     return UserSettings(
       userId: userId ?? this.userId,
       hasCompletedOnboarding: hasCompletedOnboarding ?? this.hasCompletedOnboarding,
-      useDarkMode: useDarkMode ?? this.useDarkMode,
+      theme: theme ?? this.theme,
       useBiometricAuth: useBiometricAuth ?? this.useBiometricAuth,
       usePinAuth: usePinAuth ?? this.usePinAuth,
       pinHash: pinHash ?? this.pinHash,
@@ -172,7 +172,7 @@ class UserSettings {
   }
 
   /// Converts a string to a [CostAllocationMethod].
-  static CostAllocationMethod _costAllocationMethodFromString(String? value) {
+  static CostAllocationMethod costAllocationMethodFromString(String? value) {
     switch (value) {
       case 'even':
         return CostAllocationMethod.fifo; // Map DB 'even' to app 'fifo'
@@ -195,10 +195,5 @@ class UserSettings {
       case CostAllocationMethod.average:
         return 'manual'; // Map app 'average' to DB 'manual'
     }
-  }
-  
-  /// Determines if the theme string represents dark mode
-  static bool _isDarkTheme(String? theme) {
-    return theme == 'dark';
   }
 }
