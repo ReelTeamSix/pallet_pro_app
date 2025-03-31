@@ -1,6 +1,7 @@
 import 'dart:io'; // Added import for Platform
 import 'package:flutter/foundation.dart'; // Added import for kIsWeb
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart'; // Import GoRouter
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
@@ -54,6 +55,13 @@ class _InventoryScreenState extends State<InventoryScreen>
               )
             : const Text('Inventory'),
         actions: [
+          IconButton(
+            icon: const Icon(AppIcons.scan),
+            tooltip: 'Scan/Add Item',
+            onPressed: () {
+              context.go('/scan');
+            },
+          ),
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
             onPressed: () {

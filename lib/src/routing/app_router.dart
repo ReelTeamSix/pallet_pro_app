@@ -14,11 +14,13 @@ import 'package:pallet_pro_app/src/features/auth/presentation/screens/login_scre
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/signup_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_setup_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_auth_screen.dart';
+import 'package:pallet_pro_app/src/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/inventory_screen.dart';
 import 'package:pallet_pro_app/src/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/screens/settings_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
+import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide UserSettings;
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
 
@@ -547,6 +549,18 @@ class RouterNotifier extends Notifier<void> implements Listenable {
               name: 'home',
               pageBuilder: (context, state) => CustomTransitionPage<void>(
                 key: state.pageKey,
+                child: const DashboardScreen(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                transitionDuration: const Duration(milliseconds: 300),
+              ),
+            ),
+            GoRoute(
+              path: '/inventory',
+              name: 'inventory',
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
                 child: const InventoryScreen(),
                 transitionsBuilder: (context, animation, secondaryAnimation, child) {
                   return FadeTransition(opacity: animation, child: child);
@@ -599,19 +613,19 @@ class AppShell extends ConsumerWidget {
 
   // Helper function to calculate navigation index based on route
   int _calculateSelectedIndex(String currentLocation) {
-    if (currentLocation.startsWith('/scan')) { // Placeholder route name
+    if (currentLocation.startsWith('/inventory')) { // Check inventory first
       return 1;
     }
-    if (currentLocation.startsWith('/sales')) { // Placeholder route name
+    if (currentLocation.startsWith('/sales')) {
       return 2;
     }
-    if (currentLocation.startsWith('/analytics')) { // Placeholder route name
+    if (currentLocation.startsWith('/analytics')) {
       return 3;
     }
     if (currentLocation.startsWith('/settings')) {
-      return 4; // Updated index
+      return 4;
     }
-    // Default to Home/Inventory
+    // Default to Dashboard/Home
     return 0;
   }
 
@@ -641,16 +655,13 @@ class AppShell extends ConsumerWidget {
           if (!currentLocation.startsWith('/home')) router.go('/home');
           break;
         case 1:
-          // TODO: Define and navigate to '/scan' route
-          if (!currentLocation.startsWith('/scan')) router.go('/scan'); // Placeholder
+          if (!currentLocation.startsWith('/inventory')) router.go('/inventory');
           break;
         case 2:
-          // TODO: Define and navigate to '/sales' route
-          if (!currentLocation.startsWith('/sales')) router.go('/sales'); // Placeholder
+          if (!currentLocation.startsWith('/sales')) router.go('/sales');
           break;
         case 3:
-          // TODO: Define and navigate to '/analytics' route
-          if (!currentLocation.startsWith('/analytics')) router.go('/analytics'); // Placeholder
+          if (!currentLocation.startsWith('/analytics')) router.go('/analytics');
           break;
         case 4:
           if (!currentLocation.startsWith('/settings')) router.go('/settings');
@@ -737,46 +748,44 @@ class AppShell extends ConsumerWidget {
                     ),
                   ),
                   ListTile(
-                    // Using 'Home' icon and label for consistency
-                    leading: const Icon(Icons.home_filled),
-                    title: const Text('Home'), // Changed from Inventory
+                    leading: const Icon(Icons.dashboard_outlined), // Dashboard icon
+                    title: const Text('Dashboard'), // Dashboard label
                     selected: selectedIndex == 0,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
                     onTap: () => _navigate(drawerContext, 0, currentLocation),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.qr_code_scanner), // Placeholder icon
-                    title: const Text('Scan/Add'), // Placeholder label
+                    leading: const Icon(AppIcons.inventory), // Inventory icon
+                    title: const Text('Inventory'), // Inventory label
                     selected: selectedIndex == 1,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 1, currentLocation), // Placeholder
+                    onTap: () => _navigate(drawerContext, 1, currentLocation),
                   ),
                    ListTile(
-                    leading: const Icon(Icons.receipt_long), // Placeholder icon
-                    title: const Text('Sales'), // Placeholder label
+                    leading: const Icon(Icons.attach_money), // Sales icon
+                    title: const Text('Sales'), // Sales label
                     selected: selectedIndex == 2,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
                     onTap: () => _navigate(drawerContext, 2, currentLocation), // Placeholder
                   ),
                   ListTile(
-                    leading: const Icon(Icons.analytics), // Placeholder icon
-                    title: const Text('Analytics'), // Placeholder label
+                    leading: const Icon(AppIcons.analytics), // Analytics icon
+                    title: const Text('Analytics'), // Analytics label
                     selected: selectedIndex == 3,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
                     onTap: () => _navigate(drawerContext, 3, currentLocation), // Placeholder
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.settings),
-                    title: const Text('Settings'),
-                    selected: selectedIndex == 4, // Updated index
+                   ListTile(
+                    leading: const Icon(AppIcons.settings), // Settings icon
+                    title: const Text('Settings'), // Settings label
+                    selected: selectedIndex == 4,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 4, currentLocation), // Updated index
+                    onTap: () => _navigate(drawerContext, 4, currentLocation),
                   ),
                   const Divider(),
                   ListTile(
-                    leading: const Icon(Icons.logout),
-                    title: const Text('Sign Out'),
-                    // Use the drawerContext for ScaffoldMessenger
+                    leading: Icon(Icons.logout, color: Theme.of(drawerContext).colorScheme.error),
+                    title: Text('Sign Out', style: TextStyle(color: Theme.of(drawerContext).colorScheme.error)),
                     onTap: () => _signOut(drawerContext, ref),
                   ),
                 ],
@@ -824,23 +833,27 @@ class AppShell extends ConsumerWidget {
           items: const [
             BottomNavigationBarItem(
               // Using 'Home' icon and label for consistency
-              icon: Icon(Icons.home_filled),
-              label: 'Home', // Changed from Inventory
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard),
+              label: 'Dashboard',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.qr_code_scanner), // Placeholder icon
-              label: 'Scan/Add', // Placeholder label
+              icon: Icon(AppIcons.inventory),
+              activeIcon: Icon(Icons.inventory_2),
+              label: 'Inventory',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.receipt_long), // Placeholder icon
-              label: 'Sales', // Placeholder label
+              icon: Icon(Icons.attach_money),
+              label: 'Sales',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.analytics), // Placeholder icon
-              label: 'Analytics', // Placeholder label
+              icon: Icon(AppIcons.analytics),
+              activeIcon: Icon(Icons.analytics),
+              label: 'Analytics',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
+              icon: Icon(AppIcons.settings),
+              activeIcon: Icon(Icons.settings),
               label: 'Settings',
             ),
           ],
