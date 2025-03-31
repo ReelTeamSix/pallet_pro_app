@@ -132,6 +132,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
                   // Goal Amount Input
                   TextFormField(
+                    key: const ValueKey('dailyGoalField'),
                     controller: _goalAmountController, // Use the single controller
                     decoration: InputDecoration(
                       labelText: '$_selectedGoalFrequency Goal Amount', // Dynamic label
@@ -187,6 +188,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 children: [
                    // Stale Threshold
                   TextFormField(
+                    key: const ValueKey('staleThresholdField'),
                     controller: _staleThresholdController,
                     decoration: const InputDecoration(
                       labelText: 'Stale Item Threshold (Days)',
@@ -668,16 +670,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   // Back button (only show after the first page)
                   if (_currentPage > 0)
                     TextButton.icon(
+                      key: const ValueKey('onboardingBackButton'),
                       onPressed: _isLoading ? null : _previousPage,
                       icon: const Icon(Icons.arrow_back),
                       label: const Text('Back'),
                     ),
 
-                  // Spacer if Back button is hidden
-                  // if (_currentPage == 0) Spacer(),
-
                   // Next / Finish Setup button
                   ElevatedButton.icon(
+                    key: _currentPage < _numPages - 1 
+                        ? const ValueKey('onboardingNextButton')
+                        : const ValueKey('onboardingCompleteButton'),
                     onPressed: _isLoading ? null : _nextPage,
                     icon: _isLoading
                         ? Container( // Use container for sizing

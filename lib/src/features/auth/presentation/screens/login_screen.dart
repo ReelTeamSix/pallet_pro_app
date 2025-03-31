@@ -161,6 +161,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 
                 // Email field
                 TextFormField(
+                  key: const ValueKey('loginEmailField'),
                   controller: _emailController,
                   decoration: InputDecoration(
                     labelText: 'Email',
@@ -174,7 +175,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     }
                     if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
                         .hasMatch(value)) {
-                      return 'Please enter a valid email';
+                      return 'Please enter a valid email address';
                     }
                     return null;
                   },
@@ -183,6 +184,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 
                 // Password field
                 TextFormField(
+                  key: const ValueKey('loginPasswordField'),
                   controller: _passwordController,
                   decoration: InputDecoration(
                     labelText: 'Password',
@@ -218,6 +220,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 
                 // Sign in button
                 ElevatedButton(
+                  key: const ValueKey('loginButton'),
                   onPressed: _isLoading ? null : _signIn,
                   child: _isLoading
                       ? SizedBox(

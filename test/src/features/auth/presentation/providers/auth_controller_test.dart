@@ -32,13 +32,37 @@ ProviderContainer createContainer({
     AuthState(AuthChangeEvent.initialSession, null) // Default to initial signed out
   );
 
+  final mockAuthRepository = authRepository ?? MockAuthRepository();
+  
+  // Ensure all essential methods are stubbed to prevent LateInitializationError
+  if (authRepository == null) {
+    when(() => mockAuthRepository.currentUser).thenReturn(null);
+    when(() => mockAuthRepository.signOut()).thenAnswer((_) async {});
+    when(() => mockAuthRepository.resetPassword(email: any(named: 'email')))
+        .thenAnswer((_) async {});
+    when(() => mockAuthRepository.updatePassword(newPassword: any(named: 'newPassword')))
+        .thenAnswer((_) async {});
+    when(() => mockAuthRepository.signInWithEmail(
+        email: any(named: 'email'), 
+        password: any(named: 'password')))
+        .thenAnswer((_) async => MockAuthResponse());
+    when(() => mockAuthRepository.signUpWithEmail(
+        email: any(named: 'email'), 
+        password: any(named: 'password')))
+        .thenAnswer((_) async => MockAuthResponse());
+    when(() => mockAuthRepository.refreshSession()).thenAnswer((_) async => MockSession());
+    when(() => mockAuthRepository.currentSession).thenReturn(null);
+  }
+
   final container = ProviderContainer(
     overrides: [
-      if (authRepository != null)
-        authRepositoryProvider.overrideWithValue(authRepository),
+      authRepositoryProvider.overrideWithValue(mockAuthRepository),
       // Use the provided stream or the default one
       authStateChangesProvider.overrideWith((ref) => authStateChanges ?? defaultAuthStateChanges),
+      // StateProviders need to use .overrideWith()
       passwordRecoveryTokenProvider.overrideWith((ref) => null),
+      // Add isSigningOutProvider to avoid errors
+      isSigningOutProvider.overrideWith((ref) => false),
     ],
   );
   addTearDown(container.dispose);
