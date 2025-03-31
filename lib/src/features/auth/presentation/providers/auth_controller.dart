@@ -140,29 +140,15 @@ class AuthController extends AsyncNotifier<User?> {
     debugPrint('AuthController: Signing out...');
     
     try {
-      // Set the signing out flag to true before starting the process
       ref.read(isSigningOutProvider.notifier).state = true;
-      
-      // Set loading state *before* performing sign out
       state = const AsyncValue.loading();
-      
-      // Explicit sign out
       await _authRepository.signOut();
-      
-      // Immediately set state to null to force router redirection
       state = const AsyncValue.data(null);
       
-      // Small delay to ensure all cleanup has occurred, not affecting redirection
-      await Future.delayed(const Duration(milliseconds: 200));
-      
-      // Reset the signing out flag after sign out completes
       ref.read(isSigningOutProvider.notifier).state = false;
-      
       debugPrint('AuthController: Sign out successful');
     } catch (e, stackTrace) {
-      // Reset the signing out flag in case of error
       ref.read(isSigningOutProvider.notifier).state = false;
-      
       debugPrint('AuthController: Sign out error: $e');
       state = AsyncValue.error(e, stackTrace);
       rethrow;
@@ -185,18 +171,21 @@ class AuthController extends AsyncNotifier<User?> {
   Future<void> updatePassword(String newPassword) async {
     debugPrint('AuthController: Updating user password...');
     try {
+      // Set explicit loading state
+      state = const AsyncValue.loading();
+
       // Remove the check for state.value == null.
       // Supabase client internally holds the recovery session required for updateUser.
-      // final user = state.value; 
-      // if (user == null) { 
-      //   throw const AuthException('User not authenticated for password update.');
-      // }
       await _authRepository.updatePassword(newPassword: newPassword);
+      
       debugPrint('AuthController: Password updated successfully.');
-      // Optionally, refresh the user state or session if needed, 
-      // but Supabase usually handles this implicitly.
-    } catch (e) {
+      
+      // Set explicit data state with current user (may be null)
+      state = AsyncValue.data(_authRepository.currentUser);
+    } catch (e, stackTrace) {
       debugPrint('AuthController: Password update error: $e');
+      // Set explicit error state
+      state = AsyncValue.error(e, stackTrace);
       rethrow;
     }
   }
