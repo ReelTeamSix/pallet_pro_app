@@ -118,14 +118,14 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
     }
   }
 
-  /// Updates whether to use dark mode.
-  Future<void> updateUseDarkMode(bool useDarkMode) async {
+  /// Updates the theme setting.
+  Future<void> updateTheme(String theme) async {
     // Use optimistic updates pattern
     final currentSettings = state.valueOrNull;
     if (currentSettings != null) {
       // Apply optimistic update
       final optimisticSettings = currentSettings.copyWith(
-        useDarkMode: useDarkMode
+        theme: theme
       );
       
       // Set immediately to optimistic value
@@ -133,7 +133,7 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
       
       try {
         // Perform update in background
-        final updatedSettings = await _userSettingsRepository.updateUseDarkMode(useDarkMode);
+        final updatedSettings = await _userSettingsRepository.updateTheme(theme);
         // Update with server value
         state = AsyncValue.data(updatedSettings);
       } catch (e, stackTrace) {
@@ -147,7 +147,7 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
       // Fall back to old behavior if no current settings
       state = const AsyncValue.loading();
       try {
-        final updatedSettings = await _userSettingsRepository.updateUseDarkMode(useDarkMode);
+        final updatedSettings = await _userSettingsRepository.updateTheme(theme);
         state = AsyncValue.data(updatedSettings);
       } catch (e, stackTrace) {
         state = AsyncValue.error(e, stackTrace);
@@ -409,6 +409,59 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
     }
   }
 
+  /// Updates multiple settings from onboarding data.
+  Future<void> updateSettingsFromOnboarding(Map<String, dynamic> updates) async {
+    // Use optimistic updates pattern
+    final currentSettings = state.valueOrNull;
+    if (currentSettings != null) {
+      // Construct optimistic settings - careful with types!
+      final optimisticSettings = currentSettings.copyWith(
+        hasCompletedOnboarding: true, // Always true after onboarding
+        theme: updates['theme'] as String? ?? currentSettings.theme,
+        costAllocationMethod: updates['cost_allocation_method'] != null
+            ? UserSettings.costAllocationMethodFromString(updates['cost_allocation_method'] as String)
+            : currentSettings.costAllocationMethod,
+        dailySalesGoal: (updates['daily_goal'] as num?)?.toDouble() ?? currentSettings.dailySalesGoal,
+        weeklySalesGoal: (updates['weekly_goal'] as num?)?.toDouble() ?? currentSettings.weeklySalesGoal,
+        monthlySalesGoal: (updates['monthly_goal'] as num?)?.toDouble() ?? currentSettings.monthlySalesGoal,
+        yearlySalesGoal: (updates['yearly_goal'] as num?)?.toDouble() ?? currentSettings.yearlySalesGoal,
+        staleThresholdDays: updates['stale_threshold_days'] as int? ?? currentSettings.staleThresholdDays,
+        showBreakEvenPrice: updates['show_break_even'] as bool? ?? currentSettings.showBreakEvenPrice,
+        useBiometricAuth: updates['enable_biometric_unlock'] as bool? ?? currentSettings.useBiometricAuth,
+        usePinAuth: updates['enable_pin_unlock'] as bool? ?? currentSettings.usePinAuth,
+        pinHash: updates['pin_hash'] as String? ?? currentSettings.pinHash,
+      );
+
+      // Set immediately to optimistic value
+      state = AsyncValue.data(optimisticSettings);
+
+      try {
+        // Perform update in background using the new repository method
+        final updatedSettings = await _userSettingsRepository.updateSettingsFromOnboarding(updates);
+        // Update with server value
+        state = AsyncValue.data(updatedSettings);
+        debugPrint('UserSettingsController: Bulk settings update successful.');
+      } catch (e, stackTrace) {
+        // On error, revert to previous settings
+        state = AsyncValue.data(currentSettings);
+        // Report error but don't store in state
+        final _ = AsyncValue<UserSettings?>.error(e, stackTrace);
+        debugPrint('UserSettingsController: Error during bulk settings update: $e');
+        rethrow;
+      }
+    } else {
+      // Fallback: Should ideally not happen if called after initial settings load
+      state = const AsyncValue.loading();
+      try {
+        final updatedSettings = await _userSettingsRepository.updateSettingsFromOnboarding(updates);
+        state = AsyncValue.data(updatedSettings);
+      } catch (e, stackTrace) {
+        state = AsyncValue.error(e, stackTrace);
+        rethrow;
+      }
+    }
+  }
+
   /// Refreshes the user settings.
   Future<void> refreshSettings() async {
     debugPrint('UserSettingsController.refreshSettings: Starting refresh');
@@ -460,7 +513,7 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
   bool _areSettingsEqual(UserSettings a, UserSettings b) {
     return a.userId == b.userId &&
            a.hasCompletedOnboarding == b.hasCompletedOnboarding &&
-           a.useDarkMode == b.useDarkMode &&
+           a.theme == b.theme &&
            a.useBiometricAuth == b.useBiometricAuth &&
            a.usePinAuth == b.usePinAuth &&
            a.pinHash == b.pinHash &&

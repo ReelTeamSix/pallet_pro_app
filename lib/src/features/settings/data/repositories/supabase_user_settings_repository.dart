@@ -191,26 +191,28 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
   }
 
   @override
-  Future<UserSettings> updateUseDarkMode(bool useDarkMode) async {
+  Future<UserSettings> updateTheme(String theme) async {
     try {
       final user = _client.auth.currentUser;
       if (user == null) {
         throw const AuthException('User not authenticated');
       }
 
-      // Use 'theme' instead of 'use_dark_mode' and set to 'dark' or 'system'
-      final theme = useDarkMode ? 'dark' : 'system';
-      
+      // Validate theme value (optional but good practice)
+      if (!['light', 'dark', 'system'].contains(theme)) {
+        throw ValidationException.invalidInput('theme', 'Invalid theme value: $theme');
+      }
+
       final response = await _client
           .from(_tableName)
           .update({'theme': theme})
-          .eq('id', user.id)  // Use 'id' instead of 'user_id'
+          .eq('id', user.id)
           .select()
           .single();
 
       return UserSettings.fromJson(response);
     } catch (e) {
-      throw DatabaseException.updateFailed('dark mode setting', e.toString());
+      throw DatabaseException.updateFailed('theme setting', e.toString());
     }
   }
 
@@ -385,6 +387,45 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
       return UserSettings.fromJson(response);
     } catch (e) {
       throw DatabaseException.updateFailed('PIN settings', e.toString());
+    }
+  }
+
+  @override
+  Future<UserSettings> updateSettingsFromOnboarding(Map<String, dynamic> updates) async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        throw const AuthException('User not authenticated');
+      }
+
+      // Ensure onboarding is marked as complete
+      updates['has_completed_onboarding'] = true;
+
+      // Remove the 'id' field if present, as it's used for the query condition
+      updates.remove('id');
+      
+      // Ensure all values are of acceptable types (handle potential nulls/conversions if needed)
+      // Example: ensure numeric values are not null before update
+      updates['daily_goal'] ??= 0;
+      updates['weekly_goal'] ??= 0;
+      updates['monthly_goal'] ??= 0;
+      updates['yearly_goal'] ??= 0;
+      updates['stale_threshold_days'] ??= 30;
+
+      debugPrint('SupabaseUserSettingsRepository: Bulk updating settings from onboarding: $updates');
+
+      final response = await _client
+          .from(_tableName)
+          .update(updates)
+          .eq('id', user.id) // Ensure we update the correct user
+          .select()
+          .single();
+
+      debugPrint('SupabaseUserSettingsRepository: Bulk update successful.');
+      return UserSettings.fromJson(response);
+    } catch (e) {
+      debugPrint('SupabaseUserSettingsRepository: Error in bulk update: $e');
+      throw DatabaseException.updateFailed('user settings from onboarding', e.toString());
     }
   }
 }

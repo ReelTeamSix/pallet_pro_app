@@ -11,8 +11,8 @@ abstract class UserSettingsRepository {
   /// Updates whether the user has completed onboarding.
   Future<UserSettings> updateHasCompletedOnboarding(bool hasCompleted);
 
-  /// Updates whether to use dark mode.
-  Future<UserSettings> updateUseDarkMode(bool useDarkMode);
+  /// Updates the theme setting.
+  Future<UserSettings> updateTheme(String theme);
 
   /// Updates whether to use biometric authentication.
   Future<UserSettings> updateUseBiometricAuth(bool useBiometricAuth);
@@ -39,4 +39,9 @@ abstract class UserSettingsRepository {
     required bool usePinAuth,
     String? pinHash,
   });
+
+  /// Updates multiple settings at once, typically used after onboarding.
+  /// The map should contain the database column names and their new values.
+  /// This method should ensure 'has_completed_onboarding' is set to true.
+  Future<UserSettings> updateSettingsFromOnboarding(Map<String, dynamic> updates);
 }

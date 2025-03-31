@@ -31,4 +31,8 @@ abstract class AuthRepository {
 
   /// Resets the password for the given email.
   Future<void> resetPassword({required String email});
+
+  /// Updates the current user's password.
+  /// Requires the user to be authenticated (e.g., via recovery link session).
+  Future<void> updatePassword({required String newPassword});
 }

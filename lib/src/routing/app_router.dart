@@ -14,11 +14,15 @@ import 'package:pallet_pro_app/src/features/auth/presentation/screens/login_scre
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/signup_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_setup_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_auth_screen.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/screens/forgot_password_screen.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/screens/reset_password_screen.dart';
+import 'package:pallet_pro_app/src/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/inventory_screen.dart';
 import 'package:pallet_pro_app/src/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/screens/settings_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
+import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide UserSettings;
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
 
@@ -46,6 +50,12 @@ final routerProvider = Provider<GoRouter>((ref) {
 final routerNotifierProvider =
     NotifierProvider<RouterNotifier, void>(RouterNotifier.new);
 
+/// Enum to represent specific navigation targets after certain auth flows.
+enum _PostAuthNavigationTarget {
+  none,
+  homeAfterForcedLogin,
+}
+
 /// Manages routing logic and triggers refreshes based on auth/settings state.
 class RouterNotifier extends Notifier<void> implements Listenable {
   VoidCallback? _routerListener;
@@ -53,11 +63,25 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   bool _isNotifying = false;
   bool _isOnSettingsScreen = false;
   // Flag to track if the *initial* authentication check after login has passed.
-  bool _initialAuthDone = false; 
+  bool _initialAuthDone = false;
+  // --- NEW STATE ---
+  // Track specific navigation intent after forced sign-out
+  // Using a backing field pattern to add debug logging on changes
+  _PostAuthNavigationTarget _postAuthTargetValue = _PostAuthNavigationTarget.none;
+  
+  // Getter and setter with debug logging
+  _PostAuthNavigationTarget get _postAuthTarget => _postAuthTargetValue;
+  set _postAuthTarget(_PostAuthNavigationTarget value) {
+    if (_postAuthTargetValue != value) {
+      debugPrint('RouterNotifier: _postAuthTarget changing from $_postAuthTargetValue to $value');
+      _postAuthTargetValue = value;
+    }
+  }
+  // --- END NEW STATE ---
   DateTime _lastNotification = DateTime.now();
   final DateTime _appStartTime = DateTime.now();
   // Timestamp for the last successful authentication (initial or resume)
-  DateTime? _lastAuthCompletionTime; 
+  DateTime? _lastAuthCompletionTime;
   static const Duration _authCooldownDuration = Duration(seconds: 1);
   static const Duration _maxSplashWaitTime = Duration(seconds: 3);
   Timer? _splashTimeoutTimer;
@@ -75,11 +99,29 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     // Listen for sign-out events to reset the initial auth flag.
     ref.listen<AsyncValue<User?>>(authControllerProvider, (previous, next) {
       final userJustSignedOut = previous?.hasValue == true && previous?.value != null && 
-                                next?.hasValue == true && next?.value == null;
+                              next?.hasValue == true && next?.value == null;
+                              
+      final userJustSignedIn = previous?.hasValue == true && previous?.value == null &&
+                             next?.hasValue == true && next?.value != null;
+
       if (userJustSignedOut) {
-        debugPrint('RouterNotifier: User signed out, resetting _initialAuthDone.');
+        debugPrint('RouterNotifier: User signed out, resetting initial auth/resume flags.');
+        // Explicitly preserve _postAuthTarget when signing out
+        final targetBeforeSignOut = _postAuthTarget;
+        debugPrint('RouterNotifier: Preserving post-auth target during sign-out: $targetBeforeSignOut');
+        
         _initialAuthDone = false;
+        _wasResumed = false; // Reset resume flag on sign out
+        
+        // Explicitly restore _postAuthTarget to preserve it during sign-out
+        _postAuthTarget = targetBeforeSignOut;
+      } else if (userJustSignedIn) {
+        // For sign in, preserve the post auth target
+        final targetBeforeSignIn = _postAuthTarget;
+        debugPrint('RouterNotifier: User signed in, current postAuthTarget: $targetBeforeSignIn');
+        // Don't reset or change _postAuthTarget here
       }
+      
       _handleProviderChange(previous, next, 'AuthController');
     });
 
@@ -124,15 +166,39 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                           (next as AsyncData<User?>).value == null;
     
     if (isSignOutEvent) {
-      // Sign-out deserves immediate notification regardless of debounce
-      debugPrint('RouterNotifier: Sign-out detected, immediately notifying');
+      // Preserve our post-auth target during sign-out
+      final currentTarget = _postAuthTarget;
+      debugPrint('RouterNotifier: Sign-out detected, immediately notifying. Preserving postAuthTarget: $currentTarget');
+      
       _lastNotification = DateTime.now();
       // Force immediate redirect on sign-out without debouncing
       Future.microtask(() {
-        debugPrint('RouterNotifier: Force immediate redirect for sign-out');
-        notifyListeners(); 
+        debugPrint('RouterNotifier: Force immediate redirect for sign-out. PostAuthTarget: $currentTarget');
+        
+        // Save the current target before notifying listeners
+        final savedTarget = _postAuthTarget;
+        notifyListeners();
+        
+        // Restore the target after notifying, as it may have been reset during redirection
+        if (_postAuthTarget != savedTarget) {
+          debugPrint('RouterNotifier: Restoring postAuthTarget after sign-out redirect: $savedTarget');
+          _postAuthTarget = savedTarget;
+        }
       });
       return;
+    }
+
+    // Check for sign-in event
+    final isSignInEvent = providerName == 'AuthController' && 
+                         previous is AsyncData<User?> && 
+                         next is AsyncData<User?> && 
+                         (previous as AsyncData<User?>).value == null && 
+                         (next as AsyncData<User?>).value != null;
+                         
+    if (isSignInEvent) {
+      // Preserve our post-auth target during sign-in
+      final currentTarget = _postAuthTarget;
+      debugPrint('RouterNotifier: Sign-in detected. Current postAuthTarget: $currentTarget');
     }
 
     // Ignore UserSettings changes if within settings context - use a cached location value
@@ -158,7 +224,17 @@ class RouterNotifier extends Notifier<void> implements Listenable {
         return;
       }
       
+      // Save current target before refresh
+      final savedTarget = _postAuthTarget;
       _debouncedNotifyListeners();
+      
+      // After debounced notification, check if we need to restore the target
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (_postAuthTarget != savedTarget && savedTarget != _PostAuthNavigationTarget.none) {
+          debugPrint('RouterNotifier: Restoring postAuthTarget after state change: $savedTarget');
+          _postAuthTarget = savedTarget;
+        }
+      });
     }
   }
   
@@ -239,6 +315,28 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     // No need to notify here, the navigation from cancel action will trigger _redirectLogic
   }
 
+  /// Sets the state to ensure the next redirect after login goes directly home,
+  /// bypassing the initial auth check.
+  /// Called by LoginScreen upon successful login *if* coming from forced sign-out.
+  void prepareForForcedLoginRedirect() {
+      debugPrint('RouterNotifier: Preparing for post-forced-sign-out redirect to home.');
+      _postAuthTarget = _PostAuthNavigationTarget.homeAfterForcedLogin;
+  }
+
+  /// Resets the post-auth target if it was set, e.g., after login failure.
+  void resetPostAuthTarget() {
+    if (_postAuthTarget != _PostAuthNavigationTarget.none) {
+      debugPrint('RouterNotifier: Resetting post-auth target due to login failure or cancellation.');
+      _postAuthTarget = _PostAuthNavigationTarget.none;
+    }
+  }
+
+  /// Debug method to get the current post auth target value.
+  _PostAuthNavigationTarget debugGetPostAuthTarget() {
+    debugPrint('RouterNotifier: Current _postAuthTarget = $_postAuthTarget');
+    return _postAuthTarget;
+  }
+
   /// The core redirect logic.
   String? _redirectLogic(BuildContext context, GoRouterState state) {
     final location = state.matchedLocation;
@@ -246,11 +344,36 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     final from = queryParams['from'] ?? '';
     final reason = queryParams['reason'] ?? '';
 
+    final isFromAuth = from == 'biometric' || from == 'pin' || from == 'cancel_initial';
+    if (isFromAuth && location == '/login') {
+      debugPrint('RouterNotifier: Login screen has auth source query parameter: $from');
+      if (_postAuthTarget == _PostAuthNavigationTarget.none) {
+        debugPrint('RouterNotifier: Setting postAuthTarget to homeAfterForcedLogin from query param');
+        _postAuthTarget = _PostAuthNavigationTarget.homeAfterForcedLogin;
+      }
+    }
+
     debugPrint(
-        'RouterNotifier: Redirect check | Location: $location | Params: $queryParams | Reason: $reason | From: $from | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
+        'RouterNotifier: Redirect check | Location: $location | Params: $queryParams | Reason: $reason | From: $from | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed | PostAuthTarget: $_postAuthTarget');
 
     try {
-      // Snapshot providers
+      // --- 0. Handle Password Recovery --- 
+      final recoveryToken = ref.read(passwordRecoveryTokenProvider);
+      if (recoveryToken != null) {
+        debugPrint('RouterNotifier: Password recovery token found. Redirecting.');
+        
+        // Redirect to reset password screen if not already there
+        if (location != '/reset-password') {
+          // Pass the token via query parameters? Or rely on AuthController having it?
+          // For simplicity, let's assume ResetPasswordScreen will retrieve it later.
+          return '/reset-password?from=recovery_link';
+        } else {
+          // Already on the correct screen, stay put.
+          return null;
+        }
+      }
+      
+      // Snapshot providers (after recovery check)
       final authActionState = ref.read(authControllerProvider);
       final rawAuthState = ref.read(authStateChangesProvider);
       final settingsState = ref.read(userSettingsControllerProvider);
@@ -262,6 +385,8 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       final isPinAuthRoute = location == '/pin-auth';
       final isBiometricSetupRoute = location == '/biometric-setup';
       final isPinSetupRoute = location == '/pin-setup';
+      final isForgotPasswordRoute = location == '/forgot-password';
+      final isResetPasswordRoute = location == '/reset-password';
 
       // --- 1. Handle VERY Initial Raw Auth Load ---
       final isRawAuthLoading = !rawAuthState.hasValue && !rawAuthState.hasError;
@@ -301,7 +426,13 @@ class RouterNotifier extends Notifier<void> implements Listenable {
 
       // --- 4a. Not Logged In ---
       if (!isLoggedIn) {
-        if (!isLoginOrSignupRoute && location != '/splash') {
+        final isAllowedPublicRoute = isLoginOrSignupRoute || 
+                                   isForgotPasswordRoute || 
+                                   isResetPasswordRoute || 
+                                   location == '/splash';
+                                   
+        debugPrint('RouterNotifier: Executing 4a (Not Logged In). Location: $location, Allowed Public: $isAllowedPublicRoute');
+        if (!isAllowedPublicRoute) {
             debugPrint('RouterNotifier: Not logged in. Redirecting to /login.');
             _initialAuthDone = false; _wasResumed = false;
             return '/login?from=not_logged_in';
@@ -340,6 +471,27 @@ class RouterNotifier extends Notifier<void> implements Listenable {
          return '/splash?from=waiting_settings_race';
       }
 
+      // --- 5a. Handle Forced Login Redirect ---
+      // Check this *before* onboarding or standard auth checks
+      debugPrint('RouterNotifier: Checking for forced login redirect. PostAuthTarget: $_postAuthTarget');
+      
+      // Set the target if we're on login with from=biometric or from=pin, even if not already set
+      if ((from == 'biometric' || from == 'pin' || from == 'cancel_initial') && isLoginOrSignupRoute && _postAuthTarget == _PostAuthNavigationTarget.none) {
+        debugPrint('RouterNotifier: On login with auth source, setting home redirect flag');
+        _postAuthTarget = _PostAuthNavigationTarget.homeAfterForcedLogin;
+      }
+      
+      if (_postAuthTarget == _PostAuthNavigationTarget.homeAfterForcedLogin) {
+        debugPrint('RouterNotifier: REDIRECTING - Post-forced-sign-out login detected, going directly to home.');
+        _postAuthTarget = _PostAuthNavigationTarget.none; // Consume the target state
+        _initialAuthDone = true; // Mark initial auth as complete for this session
+        _wasResumed = false; // Ensure resume check doesn't trigger immediately
+        return '/home?from=forced_login_complete'; // Go directly to home
+      } else {
+        debugPrint('RouterNotifier: No forced login redirect needed.');
+      }
+      // --- End Forced Login Handling ---
+
       debugPrint('RouterNotifier: Logged In & Settings Loaded | Onboarding: ${userSettings.hasCompletedOnboarding} | UseBio: ${userSettings.useBiometricAuth} | UsePIN: ${userSettings.usePinAuth} | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
 
       final isAuthRelatedRoute = isLoginOrSignupRoute || isOnboardingRoute || isBiometricAuthRoute || isBiometricSetupRoute || isPinAuthRoute || isPinSetupRoute || isSplash;
@@ -358,9 +510,26 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       String? authRoute;
       String authReason = '';
       bool bioAvailableAndEnabled = canUseBiometrics && (userSettings.useBiometricAuth ?? false);
-      bool pinEnabled = userSettings.usePinAuth ?? false;
+      final bool pinEnabled = userSettings.usePinAuth ?? false;
       bool isResumeCheck = _wasResumed && isOnProtectedLocation;
-      bool isInitialLaunchCheck = !_initialAuthDone; // Check if initial flag is not yet set
+      
+      // Skip initial auth check on a direct login from auth screens
+      final isDirectLogin = from == 'biometric' || from == 'pin' || from == 'cancel_initial';
+      
+      // If we had a post auth target set (or have one now), we should skip the initial auth check
+      final shouldSkipInitialAuth = _postAuthTarget == _PostAuthNavigationTarget.homeAfterForcedLogin || 
+                                   isDirectLogin || 
+                                   from == 'forced_login_complete';
+      
+      // Only perform initial auth check if:
+      // 1. It hasn't been done yet (_initialAuthDone is false)
+      // 2. We're not coming from a forced login flow (shouldSkipInitialAuth is false)
+      bool isInitialLaunchCheck = !_initialAuthDone && !shouldSkipInitialAuth;
+      
+      if (shouldSkipInitialAuth && !_initialAuthDone) {
+        debugPrint('RouterNotifier: Skipping initial auth check due to direct login or target flag');
+        _initialAuthDone = true; // Mark as done since we're bypassing
+      }
       
       if (isResumeCheck) {
          // Consume the resume flag
@@ -371,7 +540,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
             authRoute = '/biometric-auth';
             authReason = 'resume_auth';
             debugPrint('RouterNotifier: Resume Check: Needs Biometric.');
-         } else if (pinEnabled) {
+         } else if (pinEnabled && !kIsWeb) {
             needsAuthCheck = true;
             authRoute = '/pin-auth';
             authReason = 'resume_auth';
@@ -381,12 +550,13 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       // Only do initial launch check if NOT resuming and initial auth isn't done
       else if (isInitialLaunchCheck) {
          debugPrint('RouterNotifier: Evaluating Initial Launch Auth Check.');
-          if (bioAvailableAndEnabled) {
+         // --- Original Initial Check Logic ---
+         if (bioAvailableAndEnabled) {
             needsAuthCheck = true;
             authRoute = '/biometric-auth';
             authReason = 'initial_launch_auth';
             debugPrint('RouterNotifier: Initial Launch Check: Needs Biometric.');
-         } else if (pinEnabled) {
+         } else if (pinEnabled && !kIsWeb) {
             needsAuthCheck = true;
             authRoute = '/pin-auth';
             authReason = 'initial_launch_auth';
@@ -508,6 +678,16 @@ class RouterNotifier extends Notifier<void> implements Listenable {
           ),
         ),
         GoRoute(
+          path: '/forgot-password',
+          name: 'forgot_password',
+          builder: (context, state) => const ForgotPasswordScreen(),
+        ),
+        GoRoute(
+          path: '/reset-password',
+          name: 'reset_password',
+          builder: (context, state) => const ResetPasswordScreen(),
+        ),
+        GoRoute(
           path: '/onboarding',
           name: 'onboarding',
           builder: (context, state) => const OnboardingScreen(),
@@ -544,6 +724,18 @@ class RouterNotifier extends Notifier<void> implements Listenable {
             GoRoute(
               path: '/home',
               name: 'home',
+              pageBuilder: (context, state) => CustomTransitionPage<void>(
+                key: state.pageKey,
+                child: const DashboardScreen(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                transitionDuration: const Duration(milliseconds: 300),
+              ),
+            ),
+            GoRoute(
+              path: '/inventory',
+              name: 'inventory',
               pageBuilder: (context, state) => CustomTransitionPage<void>(
                 key: state.pageKey,
                 child: const InventoryScreen(),
@@ -598,19 +790,19 @@ class AppShell extends ConsumerWidget {
 
   // Helper function to calculate navigation index based on route
   int _calculateSelectedIndex(String currentLocation) {
-    if (currentLocation.startsWith('/scan')) { // Placeholder route name
+    if (currentLocation.startsWith('/inventory')) { // Check inventory first
       return 1;
     }
-    if (currentLocation.startsWith('/sales')) { // Placeholder route name
+    if (currentLocation.startsWith('/sales')) {
       return 2;
     }
-    if (currentLocation.startsWith('/analytics')) { // Placeholder route name
+    if (currentLocation.startsWith('/analytics')) {
       return 3;
     }
     if (currentLocation.startsWith('/settings')) {
-      return 4; // Updated index
+      return 4;
     }
-    // Default to Home/Inventory
+    // Default to Dashboard/Home
     return 0;
   }
 
@@ -640,16 +832,13 @@ class AppShell extends ConsumerWidget {
           if (!currentLocation.startsWith('/home')) router.go('/home');
           break;
         case 1:
-          // TODO: Define and navigate to '/scan' route
-          if (!currentLocation.startsWith('/scan')) router.go('/scan'); // Placeholder
+          if (!currentLocation.startsWith('/inventory')) router.go('/inventory');
           break;
         case 2:
-          // TODO: Define and navigate to '/sales' route
-          if (!currentLocation.startsWith('/sales')) router.go('/sales'); // Placeholder
+          if (!currentLocation.startsWith('/sales')) router.go('/sales');
           break;
         case 3:
-          // TODO: Define and navigate to '/analytics' route
-          if (!currentLocation.startsWith('/analytics')) router.go('/analytics'); // Placeholder
+          if (!currentLocation.startsWith('/analytics')) router.go('/analytics');
           break;
         case 4:
           if (!currentLocation.startsWith('/settings')) router.go('/settings');
@@ -736,46 +925,44 @@ class AppShell extends ConsumerWidget {
                     ),
                   ),
                   ListTile(
-                    // Using 'Home' icon and label for consistency
-                    leading: const Icon(Icons.home_filled),
-                    title: const Text('Home'), // Changed from Inventory
+                    leading: const Icon(Icons.dashboard_outlined), // Dashboard icon
+                    title: const Text('Dashboard'), // Dashboard label
                     selected: selectedIndex == 0,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
                     onTap: () => _navigate(drawerContext, 0, currentLocation),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.qr_code_scanner), // Placeholder icon
-                    title: const Text('Scan/Add'), // Placeholder label
+                    leading: const Icon(AppIcons.inventory), // Inventory icon
+                    title: const Text('Inventory'), // Inventory label
                     selected: selectedIndex == 1,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 1, currentLocation), // Placeholder
+                    onTap: () => _navigate(drawerContext, 1, currentLocation),
                   ),
                    ListTile(
-                    leading: const Icon(Icons.receipt_long), // Placeholder icon
-                    title: const Text('Sales'), // Placeholder label
+                    leading: const Icon(Icons.attach_money), // Sales icon
+                    title: const Text('Sales'), // Sales label
                     selected: selectedIndex == 2,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
                     onTap: () => _navigate(drawerContext, 2, currentLocation), // Placeholder
                   ),
                   ListTile(
-                    leading: const Icon(Icons.analytics), // Placeholder icon
-                    title: const Text('Analytics'), // Placeholder label
+                    leading: const Icon(AppIcons.analytics), // Analytics icon
+                    title: const Text('Analytics'), // Analytics label
                     selected: selectedIndex == 3,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
                     onTap: () => _navigate(drawerContext, 3, currentLocation), // Placeholder
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.settings),
-                    title: const Text('Settings'),
-                    selected: selectedIndex == 4, // Updated index
+                   ListTile(
+                    leading: const Icon(AppIcons.settings), // Settings icon
+                    title: const Text('Settings'), // Settings label
+                    selected: selectedIndex == 4,
                     selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 4, currentLocation), // Updated index
+                    onTap: () => _navigate(drawerContext, 4, currentLocation),
                   ),
                   const Divider(),
                   ListTile(
-                    leading: const Icon(Icons.logout),
-                    title: const Text('Sign Out'),
-                    // Use the drawerContext for ScaffoldMessenger
+                    leading: Icon(Icons.logout, color: Theme.of(drawerContext).colorScheme.error),
+                    title: Text('Sign Out', style: TextStyle(color: Theme.of(drawerContext).colorScheme.error)),
                     onTap: () => _signOut(drawerContext, ref),
                   ),
                 ],
@@ -823,23 +1010,27 @@ class AppShell extends ConsumerWidget {
           items: const [
             BottomNavigationBarItem(
               // Using 'Home' icon and label for consistency
-              icon: Icon(Icons.home_filled),
-              label: 'Home', // Changed from Inventory
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard),
+              label: 'Dashboard',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.qr_code_scanner), // Placeholder icon
-              label: 'Scan/Add', // Placeholder label
+              icon: Icon(AppIcons.inventory),
+              activeIcon: Icon(Icons.inventory_2),
+              label: 'Inventory',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.receipt_long), // Placeholder icon
-              label: 'Sales', // Placeholder label
+              icon: Icon(Icons.attach_money),
+              label: 'Sales',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.analytics), // Placeholder icon
-              label: 'Analytics', // Placeholder label
+              icon: Icon(AppIcons.analytics),
+              activeIcon: Icon(Icons.analytics),
+              label: 'Analytics',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
+              icon: Icon(AppIcons.settings),
+              activeIcon: Icon(Icons.settings),
               label: 'Settings',
             ),
           ],

@@ -13,6 +13,9 @@ final authStateChangesProvider = StreamProvider<AuthState>((ref) {
   return Supabase.instance.client.auth.onAuthStateChange;
 });
 
+/// Provider to hold the access token during password recovery flow.
+final passwordRecoveryTokenProvider = StateProvider<String?>((ref) => null);
+
 /// Provider to track when sign out is in progress
 final isSigningOutProvider = StateProvider<bool>((ref) => false);
 
@@ -29,12 +32,34 @@ class AuthController extends AsyncNotifier<User?> {
     _authRepository = ref.read(authRepositoryProvider);
     
     // Watch the auth state stream provider.
-    // Riverpod will automatically re-run build when the stream emits.
     final authState = ref.watch(authStateChangesProvider);
+    final authEvent = authState.value?.event;
+    final session = authState.value?.session;
+
+    debugPrint('AuthController: Rebuilding | Event: $authEvent | Session: ${session?.accessToken != null ? 'exists' : 'null'}');
+
+    // Handle password recovery specifically
+    if (authEvent == AuthChangeEvent.passwordRecovery && session?.accessToken != null) {
+      debugPrint('AuthController: Password recovery event detected. Setting token.');
+      // Store the access token for the router to pick up
+      // Use Future.microtask to avoid modifying state during build
+      Future.microtask(() {
+         ref.read(passwordRecoveryTokenProvider.notifier).state = session!.accessToken;
+      });
+      // Do NOT update the main auth state here, let the router handle the redirect
+      // Return the PREVIOUS state to avoid premature navigation to home.
+      return state.valueOrNull; 
+    } 
+    // Handle SignedIn event after recovery link was clicked
+    // The token should be cleared AFTER navigation to reset screen occurs.
+    else if (authEvent == AuthChangeEvent.signedIn && ref.read(passwordRecoveryTokenProvider) != null) {
+      debugPrint('AuthController: SignedIn event occurred while recovery token present. Keeping previous state.');
+      // Keep the previous state until the router navigates based on the token.
+      return state.valueOrNull;
+    }
     
-    // When the stream updates (signIn, signOut, etc.), 
-    // simply return the latest user status from the repository.
-    debugPrint('AuthController: Rebuilding due to auth state change: ${authState.value?.event}');
+    // Default behavior: update state based on the current user from the repository.
+    debugPrint('AuthController: Updating state with current user from repository.');
     return _authRepository.currentUser;
   }
 
@@ -115,29 +140,15 @@ class AuthController extends AsyncNotifier<User?> {
     debugPrint('AuthController: Signing out...');
     
     try {
-      // Set the signing out flag to true before starting the process
       ref.read(isSigningOutProvider.notifier).state = true;
-      
-      // Set loading state *before* performing sign out
       state = const AsyncValue.loading();
-      
-      // Explicit sign out
       await _authRepository.signOut();
-      
-      // Immediately set state to null to force router redirection
       state = const AsyncValue.data(null);
       
-      // Small delay to ensure all cleanup has occurred, not affecting redirection
-      await Future.delayed(const Duration(milliseconds: 200));
-      
-      // Reset the signing out flag after sign out completes
       ref.read(isSigningOutProvider.notifier).state = false;
-      
       debugPrint('AuthController: Sign out successful');
     } catch (e, stackTrace) {
-      // Reset the signing out flag in case of error
       ref.read(isSigningOutProvider.notifier).state = false;
-      
       debugPrint('AuthController: Sign out error: $e');
       state = AsyncValue.error(e, stackTrace);
       rethrow;
@@ -152,6 +163,29 @@ class AuthController extends AsyncNotifier<User?> {
       debugPrint('AuthController: Password reset email sent');
     } catch (e) {
       debugPrint('AuthController: Password reset error: $e');
+      rethrow;
+    }
+  }
+
+  /// Updates the current user's password.
+  Future<void> updatePassword(String newPassword) async {
+    debugPrint('AuthController: Updating user password...');
+    try {
+      // Set explicit loading state
+      state = const AsyncValue.loading();
+
+      // Remove the check for state.value == null.
+      // Supabase client internally holds the recovery session required for updateUser.
+      await _authRepository.updatePassword(newPassword: newPassword);
+      
+      debugPrint('AuthController: Password updated successfully.');
+      
+      // Set explicit data state with current user (may be null)
+      state = AsyncValue.data(_authRepository.currentUser);
+    } catch (e, stackTrace) {
+      debugPrint('AuthController: Password update error: $e');
+      // Set explicit error state
+      state = AsyncValue.error(e, stackTrace);
       rethrow;
     }
   }

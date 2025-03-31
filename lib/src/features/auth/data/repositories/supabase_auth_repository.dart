@@ -51,6 +51,7 @@ class SupabaseAuthRepository implements AuthRepository {
       final response = await _client.auth.signUp(
         email: trimmedEmail,
         password: password,
+        emailRedirectTo: 'io.supabase.palletproapp://login-callback/',
       );
       
       // Handle user already registered error from Supabase
@@ -121,9 +122,34 @@ class SupabaseAuthRepository implements AuthRepository {
   @override
   Future<void> resetPassword({required String email}) async {
     try {
-      await _client.auth.resetPasswordForEmail(email.trim());
+      // Determine the correct redirect URL based on the platform
+      final redirectUrl = kIsWeb
+          ? 'http://localhost:3000' // Use the standard web URL for testing
+          : 'io.supabase.palletproapp://login-callback/'; // Use the custom scheme for mobile
+      
+      debugPrint('ResetPassword: Using redirect URL: $redirectUrl');
+
+      // Pass the app's deep link scheme as the redirectTo parameter
+      await _client.auth.resetPasswordForEmail(
+        email.trim(),
+        redirectTo: redirectUrl, // Use the determined URL
+      );
     } catch (e) {
       throw AuthException('Failed to reset password: ${e.toString()}');
+    }
+  }
+
+  @override
+  Future<void> updatePassword({required String newPassword}) async {
+    // The user should be authenticated via the recovery link session at this point.
+    try {
+      await _client.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+    } on gotrue.AuthException catch (e) {
+       throw AuthException('Failed to update password: ${e.message}');
+    } catch (e) {
+      throw AuthException('Failed to update password: ${e.toString()}');
     }
   }
 }

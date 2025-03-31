@@ -69,24 +69,43 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             duration: Duration(seconds: 5),
           ),
         );
+
+        // Navigate back to the login screen after successful signup request
+        context.goNamed('login', queryParameters: {'from': 'signup_success'});
       }
     } catch (e) {
-      debugPrint('SignupScreen: Error signing up: $e');
+      debugPrint('SignupScreen: ENTERED CATCH BLOCK for error: $e');
       
-      // Handle duplicate user error specifically
       String errorMsg;
-      if (e.toString().contains('User already registered')) {
-        errorMsg = 'An account with this email already exists. Please use a different email or try signing in.';
+      // Check if the error is likely a Supabase AuthException
+      // Note: Supabase might wrap exceptions, so checking type directly might fail.
+      // Relying on message content is fragile but often necessary if specific codes aren't exposed clearly.
+      final errorString = e.toString().toLowerCase();
+      
+      if (e is AuthException) {
+         // Prefer checking specific codes if available, e.g., e.statusCode == '422' or similar
+         if (errorString.contains('user already registered') || errorString.contains('duplicate key value violates unique constraint')) {
+           errorMsg = 'An account with this email already exists. Please use a different email or try signing in.';
+         } else {
+           errorMsg = e.message; // Use Supabase's message if available
+         }
+      } else if (errorString.contains('user already registered') || errorString.contains('duplicate key value violates unique constraint')) {
+         // Fallback check on the string if it wasn't an AuthException type
+         errorMsg = 'An account with this email already exists. Please use a different email or try signing in.';
       } else if (e is AppException) {
         errorMsg = e.message;
       } else {
-        errorMsg = 'Failed to sign up: ${e.toString()}';
+        errorMsg = 'An unexpected error occurred during sign up.'; // More generic
+        // Consider logging the full e.toString() for diagnostics
+        debugPrint('Unhandled signup error: ${e.toString()}');
       }
       
       setState(() {
         _errorMessage = errorMsg;
+        debugPrint('SignupScreen: Set _errorMessage to: $errorMsg');
       });
       
+      // Keep the SnackBar for immediate feedback as well, or remove if redundant
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(errorMsg),
@@ -132,20 +151,25 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 ),
                 SizedBox(height: context.spacingXl),
                 
-                // Error message
+                // Error message display
                 if (_errorMessage != null) ...[
-                  Container(
-                    padding: EdgeInsets.all(context.spacingMd),
-                    decoration: BoxDecoration(
-                      color: context.errorColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(context.borderRadiusMd),
-                    ),
-                    child: Text(
-                      _errorMessage!,
-                      style: TextStyle(color: context.errorColor),
+                  Padding(
+                    padding: EdgeInsets.only(bottom: context.spacingMd), // Add padding
+                    child: Container(
+                      padding: EdgeInsets.all(context.spacingMd),
+                      decoration: BoxDecoration(
+                        color: context.errorColor.withOpacity(0.1),
+                        border: Border.all(color: context.errorColor), // Add border
+                        borderRadius: BorderRadius.circular(context.borderRadiusMd),
+                      ),
+                      child: Text(
+                        _errorMessage!,
+                        style: context.bodyMedium?.copyWith(color: context.errorColor), // Use theme style
+                        textAlign: TextAlign.center, // Center align
+                      ),
                     ),
                   ),
-                  SizedBox(height: context.spacingMd),
+                  // SizedBox(height: context.spacingMd), // Remove redundant SizedBox if using Padding
                 ],
                 
                 // Email field

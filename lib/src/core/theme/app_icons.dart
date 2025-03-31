@@ -117,4 +117,10 @@ class AppIcons {
   // Utility Icons
   /// Retry icon.
   static const IconData retry = Icons.refresh;
+
+  // Placeholder: Replace with actual icons from your chosen font package (e.g., FontAwesome, MaterialCommunityIcons, or custom)
+  static const IconData goals = Icons.flag_outlined; // Placeholder for goals
+  static const IconData security = Icons.security_outlined; // Placeholder for security
+  static const IconData barcode = Icons.qr_code_scanner; // Added
+  static const IconData report = Icons.description_outlined; // Added
 }

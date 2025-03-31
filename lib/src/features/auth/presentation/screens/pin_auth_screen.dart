@@ -109,22 +109,60 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
     }
   }
 
-  // Function to handle cancellation (invoked by user action)
+  // Function to handle cancellation (invoked ONLY by PopScope during initial auth)
   void _cancelAuthentication() {
-    final isInitialAuth = widget.reason == 'initial_auth';
-    debugPrint("PinAuthScreen: Cancelled by user (isInitialAuth: $isInitialAuth)");
+    final isInitialAuth = widget.reason == 'initial_auth' || widget.reason == 'initial_launch_auth';
+    debugPrint("PinAuthScreen: Back navigation during initial auth (isInitialAuth: $isInitialAuth)");
 
+    // Only navigate if it truly was initial auth. Should not be called on resume.
     if (isInitialAuth) {
-      // If cancelling initial required auth, go to login
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          debugPrint("PinAuthScreen: Initial auth cancelled, navigating to /login?from=cancel_initial");
+          debugPrint("PinAuthScreen: Initial auth back navigation, navigating to /login");
+          ref.read(routerNotifierProvider.notifier).resetPostAuthTarget();
           context.go('/login?from=cancel_initial');
         }
       });
     } else {
-      // If cancelling resume auth, notify router and go home
-      ref.read(routerNotifierProvider.notifier).cancelResumeCheck();
+       // This case should ideally not be reached if PopScope logic is correct
+       debugPrint("PinAuthScreen: _cancelAuthentication called unexpectedly during resume. Forcing sign out.");
+       _forceSignOutAndLogin();
+    }
+  }
+
+  // Helper function to force sign out (used by back button on resume)
+  Future<void> _forceSignOutAndLogin() async {
+     if (mounted) {
+      // Show loading indicator (optional, but good UX)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Signing out...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      try {
+         // Prepare the router BEFORE signing out
+         ref.read(routerNotifierProvider.notifier).prepareForForcedLoginRedirect();
+         
+         await ref.read(authControllerProvider.notifier).signOut();
+         
+         // Navigate to login AFTER sign out completes
+         if (mounted) { // Re-check mounted status after async operation
+            debugPrint("PinAuthScreen: Navigating to /login after forced sign-out.");
+            context.go('/login?from=pin');
+         }
+      } catch (e) {
+         // If sign out fails, reset the prepared state
+         ref.read(routerNotifierProvider.notifier).resetPostAuthTarget();
+         if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             SnackBar(
+               content: Text('Sign out failed: $e'),
+               backgroundColor: Theme.of(context).colorScheme.error,
+             ),
+           );
+         }
+      }
     }
   }
 
@@ -138,7 +176,22 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
       canPop: !_isLoading,
       onPopInvoked: (didPop) {
         if (didPop) return;
-        _cancelAuthentication();
+        final isInitialAuth = widget.reason == 'initial_auth' || widget.reason == 'initial_launch_auth';
+        debugPrint("PinAuthScreen: Back navigation attempt (isInitialAuth: $isInitialAuth)");
+
+        if (isInitialAuth) {
+           // For initial auth, back means go to login
+           debugPrint("PinAuthScreen: Back navigation during initial auth, navigating to /login");
+           ref.read(routerNotifierProvider.notifier).resetPostAuthTarget();
+           // Use original cancel logic which navigates to login
+           _cancelAuthentication();
+        } else {
+           // For resume auth, back means force sign out to prevent bypass
+           debugPrint("PinAuthScreen: Back navigation during resume auth, forcing sign out.");
+           // Prepare the router BEFORE signing out
+           ref.read(routerNotifierProvider.notifier).prepareForForcedLoginRedirect();
+           _forceSignOutAndLogin(); // Call sign out (which navigates to /login)
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -171,11 +224,23 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
                   controller: _pinController,
                   autofocus: true, // Focus PIN field immediately
                   decoration: InputDecoration(
+                    // Keep labelText for the floating label effect
                     labelText: 'PIN',
-                    hintText: 'Enter 4 digits',
+                    // Use a more common and compact hint
+                    hintText: '****',
+                    hintStyle: TextStyle(
+                      fontSize: 20, // Adjust size as needed
+                      letterSpacing: 10, // Match input style spacing
+                      color: Theme.of(context).hintColor.withOpacity(0.5),
+                    ),
                     prefixIcon: const Icon(Icons.pin),
                     border: const OutlineInputBorder(),
                     errorText: _errorMessage,
+                    // Add padding inside the text field
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 10.0),
+                    isDense: true, // Reduce default vertical padding
+                    // Center the hint text vertically
+                    alignLabelWithHint: true, 
                     suffixIcon: IconButton(
                       icon: Icon(_obscurePin ? Icons.visibility_off : Icons.visibility),
                       onPressed: () {
@@ -189,7 +254,8 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   maxLength: 4,
                   obscureText: _obscurePin,
-                  textAlign: TextAlign.center, // Center PIN input
+                  textAlign: TextAlign.center, // Center PIN input digits
+                  textAlignVertical: TextAlignVertical.center, // Ensure vertical centering
                   style: const TextStyle(fontSize: 24, letterSpacing: 10), // Larger PIN digits
                   onChanged: (value) {
                     // Clear error message when user starts typing
@@ -219,14 +285,7 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
                       : const Text('Unlock'),
                 ),
                 const SizedBox(height: 16),
-                // Cancel Button
-                TextButton(
-                  onPressed: _isLoading ? null : _cancelAuthentication,
-                  child: const Text('Cancel'),
-                ),
-                
-                // --- NEW: Add "Sign Out & Login" Button ---
-                const SizedBox(height: 16), // Add some spacing
+                // --- Button to explicitly Sign Out & Login with Password ---
                 TextButton(
                   onPressed: () async {
                     if (mounted) {
@@ -238,11 +297,19 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
                         ),
                       );
                       try {
-                         // Import AuthController if not already done
-                         // import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
+                         // Prepare the router BEFORE signing out
+                         ref.read(routerNotifierProvider.notifier).prepareForForcedLoginRedirect();
+                         
                          await ref.read(authControllerProvider.notifier).signOut();
-                         // Router will handle redirect to login
+                         
+                         // Navigate after sign out
+                         if (mounted) {
+                            debugPrint("PinAuthScreen: Navigating to /login after forced sign-out (via button).");
+                            context.go('/login?from=pin');
+                         }
                       } catch (e) {
+                         // Reset target on failure
+                         ref.read(routerNotifierProvider.notifier).resetPostAuthTarget();
                          if (mounted) {
                            ScaffoldMessenger.of(context).showSnackBar(
                              SnackBar(
