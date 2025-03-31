@@ -14,6 +14,8 @@ import 'package:pallet_pro_app/src/features/auth/presentation/screens/login_scre
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/signup_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_setup_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_auth_screen.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/screens/forgot_password_screen.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/screens/reset_password_screen.dart';
 import 'package:pallet_pro_app/src/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/inventory_screen.dart';
 import 'package:pallet_pro_app/src/features/onboarding/presentation/screens/onboarding_screen.dart';
@@ -252,7 +254,23 @@ class RouterNotifier extends Notifier<void> implements Listenable {
         'RouterNotifier: Redirect check | Location: $location | Params: $queryParams | Reason: $reason | From: $from | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
 
     try {
-      // Snapshot providers
+      // --- 0. Handle Password Recovery --- 
+      final recoveryToken = ref.read(passwordRecoveryTokenProvider);
+      if (recoveryToken != null) {
+        debugPrint('RouterNotifier: Password recovery token found. Redirecting.');
+        
+        // Redirect to reset password screen if not already there
+        if (location != '/reset-password') {
+          // Pass the token via query parameters? Or rely on AuthController having it?
+          // For simplicity, let's assume ResetPasswordScreen will retrieve it later.
+          return '/reset-password?from=recovery_link';
+        } else {
+          // Already on the correct screen, stay put.
+          return null;
+        }
+      }
+      
+      // Snapshot providers (after recovery check)
       final authActionState = ref.read(authControllerProvider);
       final rawAuthState = ref.read(authStateChangesProvider);
       final settingsState = ref.read(userSettingsControllerProvider);
@@ -264,6 +282,8 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       final isPinAuthRoute = location == '/pin-auth';
       final isBiometricSetupRoute = location == '/biometric-setup';
       final isPinSetupRoute = location == '/pin-setup';
+      final isForgotPasswordRoute = location == '/forgot-password';
+      final isResetPasswordRoute = location == '/reset-password';
 
       // --- 1. Handle VERY Initial Raw Auth Load ---
       final isRawAuthLoading = !rawAuthState.hasValue && !rawAuthState.hasError;
@@ -303,8 +323,13 @@ class RouterNotifier extends Notifier<void> implements Listenable {
 
       // --- 4a. Not Logged In ---
       if (!isLoggedIn) {
-        debugPrint('RouterNotifier: Executing 4a (Not Logged In). Location: $location, isLoginOrSignupRoute: $isLoginOrSignupRoute');
-        if (!isLoginOrSignupRoute && location != '/splash') {
+        final isAllowedPublicRoute = isLoginOrSignupRoute || 
+                                   isForgotPasswordRoute || 
+                                   isResetPasswordRoute || 
+                                   location == '/splash';
+                                   
+        debugPrint('RouterNotifier: Executing 4a (Not Logged In). Location: $location, Allowed Public: $isAllowedPublicRoute');
+        if (!isAllowedPublicRoute) {
             debugPrint('RouterNotifier: Not logged in. Redirecting to /login.');
             _initialAuthDone = false; _wasResumed = false;
             return '/login?from=not_logged_in';
@@ -509,6 +534,16 @@ class RouterNotifier extends Notifier<void> implements Listenable {
           builder: (context, state) => SignupScreen(
             from: state.uri.queryParameters['from'],
           ),
+        ),
+        GoRoute(
+          path: '/forgot-password',
+          name: 'forgot_password',
+          builder: (context, state) => const ForgotPasswordScreen(),
+        ),
+        GoRoute(
+          path: '/reset-password',
+          name: 'reset_password',
+          builder: (context, state) => const ResetPasswordScreen(),
         ),
         GoRoute(
           path: '/onboarding',

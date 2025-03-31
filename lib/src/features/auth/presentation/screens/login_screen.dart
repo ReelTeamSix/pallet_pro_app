@@ -158,7 +158,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   },
                   onFieldSubmitted: (_) => _signIn(),
                 ),
-                SizedBox(height: context.spacingXl),
+                SizedBox(height: context.spacingSm),
+                
+                // Forgot Password link
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _isLoading 
+                        ? null 
+                        : () {
+                            // Navigate to the forgot password screen
+                            context.pushNamed('forgot_password'); 
+                          },
+                    child: const Text('Forgot Password?'),
+                  ),
+                ),
+                
+                SizedBox(height: context.spacingMd),
                 
                 // Sign in button
                 ElevatedButton(
