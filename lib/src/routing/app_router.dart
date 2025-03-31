@@ -301,6 +301,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
 
       // --- 4a. Not Logged In ---
       if (!isLoggedIn) {
+        debugPrint('RouterNotifier: Executing 4a (Not Logged In). Location: $location, isLoginOrSignupRoute: $isLoginOrSignupRoute');
         if (!isLoginOrSignupRoute && location != '/splash') {
             debugPrint('RouterNotifier: Not logged in. Redirecting to /login.');
             _initialAuthDone = false; _wasResumed = false;

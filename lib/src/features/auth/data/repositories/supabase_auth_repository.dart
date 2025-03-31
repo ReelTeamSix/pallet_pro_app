@@ -51,6 +51,7 @@ class SupabaseAuthRepository implements AuthRepository {
       final response = await _client.auth.signUp(
         email: trimmedEmail,
         password: password,
+        emailRedirectTo: 'io.supabase.palletproapp://login-callback/',
       );
       
       // Handle user already registered error from Supabase
