@@ -50,6 +50,12 @@ final routerProvider = Provider<GoRouter>((ref) {
 final routerNotifierProvider =
     NotifierProvider<RouterNotifier, void>(RouterNotifier.new);
 
+/// Enum to represent specific navigation targets after certain auth flows.
+enum _PostAuthNavigationTarget {
+  none,
+  homeAfterForcedLogin,
+}
+
 /// Manages routing logic and triggers refreshes based on auth/settings state.
 class RouterNotifier extends Notifier<void> implements Listenable {
   VoidCallback? _routerListener;
@@ -57,13 +63,27 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   bool _isNotifying = false;
   bool _isOnSettingsScreen = false;
   // Flag to track if the *initial* authentication check after login has passed.
-  bool _initialAuthDone = false; 
+  bool _initialAuthDone = false;
+  // --- NEW STATE ---
+  // Track specific navigation intent after forced sign-out
+  // Using a backing field pattern to add debug logging on changes
+  _PostAuthNavigationTarget _postAuthTargetValue = _PostAuthNavigationTarget.none;
+  
+  // Getter and setter with debug logging
+  _PostAuthNavigationTarget get _postAuthTarget => _postAuthTargetValue;
+  set _postAuthTarget(_PostAuthNavigationTarget value) {
+    if (_postAuthTargetValue != value) {
+      debugPrint('RouterNotifier: _postAuthTarget changing from $_postAuthTargetValue to $value');
+      _postAuthTargetValue = value;
+    }
+  }
+  // --- END NEW STATE ---
   DateTime _lastNotification = DateTime.now();
   final DateTime _appStartTime = DateTime.now();
   // Timestamp for the last successful authentication (initial or resume)
-  DateTime? _lastAuthCompletionTime; 
+  DateTime? _lastAuthCompletionTime;
   static const Duration _authCooldownDuration = Duration(seconds: 1);
-  static const Duration _maxSplashWaitTime = Duration(seconds: 3);
+  static const Duration _maxSplashWaitTime = Duration(seconds: 7);
   Timer? _splashTimeoutTimer;
   final _routeObserver = _RouterObserver();
   
@@ -79,11 +99,29 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     // Listen for sign-out events to reset the initial auth flag.
     ref.listen<AsyncValue<User?>>(authControllerProvider, (previous, next) {
       final userJustSignedOut = previous?.hasValue == true && previous?.value != null && 
-                                next?.hasValue == true && next?.value == null;
+                              next?.hasValue == true && next?.value == null;
+                              
+      final userJustSignedIn = previous?.hasValue == true && previous?.value == null &&
+                             next?.hasValue == true && next?.value != null;
+
       if (userJustSignedOut) {
-        debugPrint('RouterNotifier: User signed out, resetting _initialAuthDone.');
+        debugPrint('RouterNotifier: User signed out, resetting initial auth/resume flags.');
+        // Explicitly preserve _postAuthTarget when signing out
+        final targetBeforeSignOut = _postAuthTarget;
+        debugPrint('RouterNotifier: Preserving post-auth target during sign-out: $targetBeforeSignOut');
+        
         _initialAuthDone = false;
+        _wasResumed = false; // Reset resume flag on sign out
+        
+        // Explicitly restore _postAuthTarget to preserve it during sign-out
+        _postAuthTarget = targetBeforeSignOut;
+      } else if (userJustSignedIn) {
+        // For sign in, preserve the post auth target
+        final targetBeforeSignIn = _postAuthTarget;
+        debugPrint('RouterNotifier: User signed in, current postAuthTarget: $targetBeforeSignIn');
+        // Don't reset or change _postAuthTarget here
       }
+      
       _handleProviderChange(previous, next, 'AuthController');
     });
 
@@ -128,15 +166,39 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                           (next as AsyncData<User?>).value == null;
     
     if (isSignOutEvent) {
-      // Sign-out deserves immediate notification regardless of debounce
-      debugPrint('RouterNotifier: Sign-out detected, immediately notifying');
+      // Preserve our post-auth target during sign-out
+      final currentTarget = _postAuthTarget;
+      debugPrint('RouterNotifier: Sign-out detected, immediately notifying. Preserving postAuthTarget: $currentTarget');
+      
       _lastNotification = DateTime.now();
       // Force immediate redirect on sign-out without debouncing
       Future.microtask(() {
-        debugPrint('RouterNotifier: Force immediate redirect for sign-out');
-        notifyListeners(); 
+        debugPrint('RouterNotifier: Force immediate redirect for sign-out. PostAuthTarget: $currentTarget');
+        
+        // Save the current target before notifying listeners
+        final savedTarget = _postAuthTarget;
+        notifyListeners();
+        
+        // Restore the target after notifying, as it may have been reset during redirection
+        if (_postAuthTarget != savedTarget) {
+          debugPrint('RouterNotifier: Restoring postAuthTarget after sign-out redirect: $savedTarget');
+          _postAuthTarget = savedTarget;
+        }
       });
       return;
+    }
+
+    // Check for sign-in event
+    final isSignInEvent = providerName == 'AuthController' && 
+                         previous is AsyncData<User?> && 
+                         next is AsyncData<User?> && 
+                         (previous as AsyncData<User?>).value == null && 
+                         (next as AsyncData<User?>).value != null;
+                         
+    if (isSignInEvent) {
+      // Preserve our post-auth target during sign-in
+      final currentTarget = _postAuthTarget;
+      debugPrint('RouterNotifier: Sign-in detected. Current postAuthTarget: $currentTarget');
     }
 
     // Ignore UserSettings changes if within settings context - use a cached location value
@@ -162,7 +224,17 @@ class RouterNotifier extends Notifier<void> implements Listenable {
         return;
       }
       
+      // Save current target before refresh
+      final savedTarget = _postAuthTarget;
       _debouncedNotifyListeners();
+      
+      // After debounced notification, check if we need to restore the target
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (_postAuthTarget != savedTarget && savedTarget != _PostAuthNavigationTarget.none) {
+          debugPrint('RouterNotifier: Restoring postAuthTarget after state change: $savedTarget');
+          _postAuthTarget = savedTarget;
+        }
+      });
     }
   }
   
@@ -243,6 +315,28 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     // No need to notify here, the navigation from cancel action will trigger _redirectLogic
   }
 
+  /// Sets the state to ensure the next redirect after login goes directly home,
+  /// bypassing the initial auth check.
+  /// Called by LoginScreen upon successful login *if* coming from forced sign-out.
+  void prepareForForcedLoginRedirect() {
+      debugPrint('RouterNotifier: Preparing for post-forced-sign-out redirect to home.');
+      _postAuthTarget = _PostAuthNavigationTarget.homeAfterForcedLogin;
+  }
+
+  /// Resets the post-auth target if it was set, e.g., after login failure.
+  void resetPostAuthTarget() {
+    if (_postAuthTarget != _PostAuthNavigationTarget.none) {
+      debugPrint('RouterNotifier: Resetting post-auth target due to login failure or cancellation.');
+      _postAuthTarget = _PostAuthNavigationTarget.none;
+    }
+  }
+
+  /// Debug method to get the current post auth target value.
+  _PostAuthNavigationTarget debugGetPostAuthTarget() {
+    debugPrint('RouterNotifier: Current _postAuthTarget = $_postAuthTarget');
+    return _postAuthTarget;
+  }
+
   /// The core redirect logic.
   String? _redirectLogic(BuildContext context, GoRouterState state) {
     final location = state.matchedLocation;
@@ -250,8 +344,17 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     final from = queryParams['from'] ?? '';
     final reason = queryParams['reason'] ?? '';
 
+    final isFromAuth = from == 'biometric' || from == 'pin' || from == 'cancel_initial';
+    if (isFromAuth && location == '/login') {
+      debugPrint('RouterNotifier: Login screen has auth source query parameter: $from');
+      if (_postAuthTarget == _PostAuthNavigationTarget.none) {
+        debugPrint('RouterNotifier: Setting postAuthTarget to homeAfterForcedLogin from query param');
+        _postAuthTarget = _PostAuthNavigationTarget.homeAfterForcedLogin;
+      }
+    }
+
     debugPrint(
-        'RouterNotifier: Redirect check | Location: $location | Params: $queryParams | Reason: $reason | From: $from | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
+        'RouterNotifier: Redirect check | Location: $location | Params: $queryParams | Reason: $reason | From: $from | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed | PostAuthTarget: $_postAuthTarget');
 
     try {
       // --- 0. Handle Password Recovery --- 
@@ -368,6 +471,27 @@ class RouterNotifier extends Notifier<void> implements Listenable {
          return '/splash?from=waiting_settings_race';
       }
 
+      // --- 5a. Handle Forced Login Redirect ---
+      // Check this *before* onboarding or standard auth checks
+      debugPrint('RouterNotifier: Checking for forced login redirect. PostAuthTarget: $_postAuthTarget');
+      
+      // Set the target if we're on login with from=biometric or from=pin, even if not already set
+      if ((from == 'biometric' || from == 'pin' || from == 'cancel_initial') && isLoginOrSignupRoute && _postAuthTarget == _PostAuthNavigationTarget.none) {
+        debugPrint('RouterNotifier: On login with auth source, setting home redirect flag');
+        _postAuthTarget = _PostAuthNavigationTarget.homeAfterForcedLogin;
+      }
+      
+      if (_postAuthTarget == _PostAuthNavigationTarget.homeAfterForcedLogin) {
+        debugPrint('RouterNotifier: REDIRECTING - Post-forced-sign-out login detected, going directly to home.');
+        _postAuthTarget = _PostAuthNavigationTarget.none; // Consume the target state
+        _initialAuthDone = true; // Mark initial auth as complete for this session
+        _wasResumed = false; // Ensure resume check doesn't trigger immediately
+        return '/home?from=forced_login_complete'; // Go directly to home
+      } else {
+        debugPrint('RouterNotifier: No forced login redirect needed.');
+      }
+      // --- End Forced Login Handling ---
+
       debugPrint('RouterNotifier: Logged In & Settings Loaded | Onboarding: ${userSettings.hasCompletedOnboarding} | UseBio: ${userSettings.useBiometricAuth} | UsePIN: ${userSettings.usePinAuth} | InitialAuthDone: $_initialAuthDone | WasResumed: $_wasResumed');
 
       final isAuthRelatedRoute = isLoginOrSignupRoute || isOnboardingRoute || isBiometricAuthRoute || isBiometricSetupRoute || isPinAuthRoute || isPinSetupRoute || isSplash;
@@ -386,9 +510,26 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       String? authRoute;
       String authReason = '';
       bool bioAvailableAndEnabled = canUseBiometrics && (userSettings.useBiometricAuth ?? false);
-      bool pinEnabled = userSettings.usePinAuth ?? false;
+      final bool pinEnabled = userSettings.usePinAuth ?? false;
       bool isResumeCheck = _wasResumed && isOnProtectedLocation;
-      bool isInitialLaunchCheck = !_initialAuthDone; // Check if initial flag is not yet set
+      
+      // Skip initial auth check on a direct login from auth screens
+      final isDirectLogin = from == 'biometric' || from == 'pin' || from == 'cancel_initial';
+      
+      // If we had a post auth target set (or have one now), we should skip the initial auth check
+      final shouldSkipInitialAuth = _postAuthTarget == _PostAuthNavigationTarget.homeAfterForcedLogin || 
+                                   isDirectLogin || 
+                                   from == 'forced_login_complete';
+      
+      // Only perform initial auth check if:
+      // 1. It hasn't been done yet (_initialAuthDone is false)
+      // 2. We're not coming from a forced login flow (shouldSkipInitialAuth is false)
+      bool isInitialLaunchCheck = !_initialAuthDone && !shouldSkipInitialAuth;
+      
+      if (shouldSkipInitialAuth && !_initialAuthDone) {
+        debugPrint('RouterNotifier: Skipping initial auth check due to direct login or target flag');
+        _initialAuthDone = true; // Mark as done since we're bypassing
+      }
       
       if (isResumeCheck) {
          // Consume the resume flag
@@ -409,7 +550,8 @@ class RouterNotifier extends Notifier<void> implements Listenable {
       // Only do initial launch check if NOT resuming and initial auth isn't done
       else if (isInitialLaunchCheck) {
          debugPrint('RouterNotifier: Evaluating Initial Launch Auth Check.');
-          if (bioAvailableAndEnabled) {
+         // --- Original Initial Check Logic ---
+         if (bioAvailableAndEnabled) {
             needsAuthCheck = true;
             authRoute = '/biometric-auth';
             authReason = 'initial_launch_auth';

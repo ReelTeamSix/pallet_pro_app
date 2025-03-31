@@ -153,9 +153,22 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
         ),
       );
       try {
+          // Prepare the router BEFORE signing out
+          ref.read(routerNotifierProvider.notifier).prepareForForcedLoginRedirect();
+          
           await ref.read(authControllerProvider.notifier).signOut();
-          // Router will handle redirect to login
+          
+          // Navigate to login AFTER sign out completes. The router will handle
+          // the redirect eventually, but navigating explicitly ensures the user sees 
+          // the login screen promptly.
+          if (mounted) { // Re-check mounted status after async operation
+             debugPrint("BiometricAuthScreen: Navigating to /login after forced sign-out.");
+             // Pass 'from=biometric' to help LoginScreen identify the flow
+             context.go('/login?from=biometric');
+          }
       } catch (e) {
+          // If sign out fails, reset the prepared state
+          ref.read(routerNotifierProvider.notifier).resetPostAuthTarget();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -175,12 +188,29 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
         .select((value) => value.valueOrNull?.usePinAuth ?? false));
         
     return PopScope(
-      // Prevent back navigation while authenticating or if locked out
+      // Prevent back navigation while authenticating
       canPop: !_isAuthenticating,
       onPopInvoked: (didPop) {
         if (didPop) return;
-        // If pop was prevented, treat it as cancellation
-        _cancelAuthentication();
+        final isInitialAuth = widget.reason == 'initial_auth' || widget.reason == 'initial_launch_auth';
+        debugPrint("BiometricAuthScreen: Back navigation attempt (isInitialAuth: $isInitialAuth)");
+
+        if (isInitialAuth) {
+          debugPrint("BiometricAuthScreen: Back navigation during initial auth, navigating to /login");
+          // If cancelling initial auth, don't prepare for forced login
+          ref.read(routerNotifierProvider.notifier).resetPostAuthTarget(); 
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             if (mounted) {
+                context.go('/login?from=cancel_initial'); // Explicitly indicate this came from cancelled auth
+             }
+          });
+        } else {
+          // For resume auth, back means force sign out to prevent bypass
+          debugPrint("BiometricAuthScreen: Back navigation during resume auth, forcing sign out.");
+          // Prepare the router BEFORE signing out
+          ref.read(routerNotifierProvider.notifier).prepareForForcedLoginRedirect();
+          _signOutAndLogin(); // Call sign out (which will navigate to /login)
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -217,46 +247,34 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
                 // Show progress indicator when authenticating
                 if (_isAuthenticating)
                   const Center(child: CircularProgressIndicator()),
-                // Show Retry button if there was an error
-                if (_errorMessage != null)
-                  ElevatedButton.icon(
-                     icon: const Icon(Icons.refresh),
-                     label: const Text('Retry'),
-                     onPressed: _authenticate, // Re-run the authentication process
-                     style: ElevatedButton.styleFrom(
-                       foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
-                       backgroundColor: Theme.of(context).colorScheme.errorContainer,
-                     ),
-                  ),
-                const SizedBox(height: 16),
-                // Show Cancel button OR Use PIN button
+                // Show action buttons when not authenticating or when error occurred
                 if (!_isAuthenticating || _errorMessage != null) ...[
-                  // Option 1: Use PIN (if enabled)
+                  // Option 1: Retry (Only shown on error)
+                  if (_errorMessage != null)
+                    ElevatedButton.icon(
+                       icon: const Icon(Icons.refresh),
+                       label: const Text('Retry'),
+                       onPressed: _authenticate, // Re-run the authentication process
+                       style: ElevatedButton.styleFrom(
+                         foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+                         backgroundColor: Theme.of(context).colorScheme.errorContainer,
+                       ),
+                    ),
+                  if (_errorMessage != null) const SizedBox(height: 16), // Spacing after retry
+
+                  // Option 2: Use PIN (if enabled)
                   if (pinAuthEnabled)
                      TextButton(
                       onPressed: _navigateToPinAuth,
                       child: const Text('Use PIN Instead'),
                     ),
-                  
-                  // Option 2: Cancel OR Sign Out button
-                  TextButton(
-                    // If PIN is enabled, this is just a 'Cancel'.
-                    // If PIN is disabled, this becomes the 'Sign Out' fallback.
-                    onPressed: () {
-                      if (pinAuthEnabled) {
-                        _cancelAuthentication(); // Normal cancel (goes back or to home)
-                      } else {
-                        // Explicitly sign out if PIN is disabled
-                        _signOutAndLogin(); // Reuse the sign out logic
-                      }
-                    },
-                    child: Text(pinAuthEnabled ? 'Cancel' : 'Sign Out'), // Updated label
-                  ),
-                  
+                  if (pinAuthEnabled) const SizedBox(height: 8), // Spacing after PIN
+
                   // Option 3: Always show "Login with Password" as the ultimate fallback
-                  const SizedBox(height: 24), // Add some spacing
+                  // Add spacing only if PIN button wasn't shown
+                  if (!pinAuthEnabled) const SizedBox(height: 24),
                   TextButton(
-                    onPressed: _signOutAndLogin, // Reuse the sign out logic
+                    onPressed: _signOutAndLogin, // Calls the updated logic
                     child: Text(
                       'Login with Password Instead',
                       style: TextStyle(color: Theme.of(context).colorScheme.secondary)
