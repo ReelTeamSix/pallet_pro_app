@@ -23,8 +23,9 @@ class MockRealtimeClient extends Mock implements RealtimeClient {} // Needed for
 class MockFunctionsClient extends Mock implements FunctionsClient {} // Needed for SupabaseClient mock
 class MockSupabaseStorageClient extends Mock implements SupabaseStorageClient {} // Needed for SupabaseClient mock
 class MockPostgrestClient extends Mock implements PostgrestClient {} // Needed for SupabaseClient mock
-class MockPostgrestFilterBuilder<T> extends Mock implements PostgrestFilterBuilder<T> {} // Moved up
-class MockSupabaseQueryBuilder extends Mock implements SupabaseQueryBuilder {} // Moved up
+class MockPostgrestFilterBuilder<T> extends Mock implements PostgrestFilterBuilder<T> {}
+class MockPostgrestTransformBuilder<T> extends Mock implements PostgrestTransformBuilder<T> {}
+class MockSupabaseQueryBuilder extends Mock implements SupabaseQueryBuilder {}
 class MockSupabaseQuerySchema extends Mock implements SupabaseQuerySchema {}
 class MockUser extends Mock implements supabase.User {}
 // Added Mocks previously in widget_test.dart
@@ -208,6 +209,12 @@ void registerFallbackValues() {
   
   // Add map fallback for various map parameters
   registerFallbackValue(<String, dynamic>{});
+  
+  // Add fallbacks for PostgrestBuilder types
+  registerFallbackValue(MockPostgrestFilterBuilder<Map<String, dynamic>>());
+  registerFallbackValue(MockPostgrestFilterBuilder<List<Map<String, dynamic>>>());
+  registerFallbackValue(MockPostgrestTransformBuilder<Map<String, dynamic>>());
+  registerFallbackValue(MockPostgrestTransformBuilder<List<Map<String, dynamic>>>());
 }
 
 
