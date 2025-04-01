@@ -11,7 +11,9 @@ enum CostAllocationMethod {
   @JsonValue('lifo')
   lifo,
   @JsonValue('specific')
-  specific
+  specific,
+  @JsonValue('manual')
+  manual
 }
 
 /// Model representing user settings
@@ -80,6 +82,7 @@ class UserSettings {
   });
 
   factory UserSettings.fromJson(Map<String, dynamic> json) => _$UserSettingsFromJson(json);
+  
   Map<String, dynamic> toJson() => _$UserSettingsToJson(this);
 
   /// Converts a string to a CostAllocationMethod
@@ -93,6 +96,8 @@ class UserSettings {
         return CostAllocationMethod.lifo;
       case 'specific':
         return CostAllocationMethod.specific;
+      case 'manual':
+        return CostAllocationMethod.manual;
       default:
         return CostAllocationMethod.average;
     }

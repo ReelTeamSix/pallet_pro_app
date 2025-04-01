@@ -371,6 +371,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
          if (previousSettings != null) {
              _cachedSettings = previousSettings;
          }
+      }
+    } finally {
+      // Always ensure loading state is reset, whether update succeeds or fails
+      if (mounted) {
         setState(() {
           _isLoading = false;
         });

@@ -1,19 +1,21 @@
-/// Base exception class for all application-specific exceptions.
+/// Base class for all application exceptions.
 abstract class AppException implements Exception {
-  /// Creates a new [AppException] with the given [message].
-  const AppException(this.message);
-
-  /// The error message.
   final String message;
+  final dynamic originalException;
+
+  const AppException(this.message, [this.originalException]);
 
   @override
-  String toString() => message;
+  String toString() => 'AppException: $message';
 }
 
-/// Exception thrown when authentication fails.
+/// Exception for authentication-related errors.
 class AuthException extends AppException {
-  /// Creates a new [AuthException] with the given [message].
-  const AuthException(super.message);
+  const AuthException(String message, [dynamic originalException])
+      : super(message, originalException);
+
+  @override
+  String toString() => 'AuthException: $message';
 
   /// Creates a new [AuthException] for sign-in failure.
   factory AuthException.signInFailed(String details) =>
@@ -32,28 +34,13 @@ class AuthException extends AppException {
       const AuthException('Your session has expired. Please sign in again.');
 }
 
-/// Exception thrown when a network request fails.
-class NetworkException extends AppException {
-  /// Creates a new [NetworkException] with the given [message].
-  const NetworkException(super.message);
-
-  /// Creates a new [NetworkException] for connection failure.
-  factory NetworkException.connectionFailed() =>
-      const NetworkException('Unable to connect to the server. Please check your internet connection.');
-
-  /// Creates a new [NetworkException] for timeout.
-  factory NetworkException.timeout() =>
-      const NetworkException('The request timed out. Please try again.');
-
-  /// Creates a new [NetworkException] for server error.
-  factory NetworkException.serverError(String details) =>
-      NetworkException('Server error: $details');
-}
-
-/// Exception thrown when a database operation fails.
+/// Exception for database-related errors.
 class DatabaseException extends AppException {
-  /// Creates a new [DatabaseException] with the given [message].
-  const DatabaseException(super.message);
+  const DatabaseException(String message, [dynamic originalException])
+      : super(message, originalException);
+
+  @override
+  String toString() => 'DatabaseException: $message';
 
   /// Creates a new [DatabaseException] for creation failure.
   factory DatabaseException.creationFailed(String entity, String details) =>
@@ -72,10 +59,13 @@ class DatabaseException extends AppException {
       DatabaseException('Failed to fetch $entity: $details');
 }
 
-/// Exception thrown when a storage operation fails.
+/// Exception for storage-related errors.
 class StorageException extends AppException {
-  /// Creates a new [StorageException] with the given [message].
-  const StorageException(super.message);
+  const StorageException(String message, [dynamic originalException])
+      : super(message, originalException);
+
+  @override
+  String toString() => 'StorageException: $message';
 
   /// Creates a new [StorageException] for upload failure.
   factory StorageException.uploadFailed(String details) =>
@@ -90,10 +80,34 @@ class StorageException extends AppException {
       StorageException('Failed to delete file: $details');
 }
 
-/// Exception thrown when validation fails.
+/// Exception for network-related errors.
+class NetworkException extends AppException {
+  const NetworkException(String message, [dynamic originalException])
+      : super(message, originalException);
+
+  @override
+  String toString() => 'NetworkException: $message';
+
+  /// Creates a new [NetworkException] for connection failure.
+  factory NetworkException.connectionFailed() =>
+      const NetworkException('Unable to connect to the server. Please check your internet connection.');
+
+  /// Creates a new [NetworkException] for timeout.
+  factory NetworkException.timeout() =>
+      const NetworkException('The request timed out. Please try again.');
+
+  /// Creates a new [NetworkException] for server error.
+  factory NetworkException.serverError(String details) =>
+      NetworkException('Server error: $details');
+}
+
+/// Exception for validation errors.
 class ValidationException extends AppException {
-  /// Creates a new [ValidationException] with the given [message].
-  const ValidationException(super.message);
+  const ValidationException(String message, [dynamic originalException])
+      : super(message, originalException);
+
+  @override
+  String toString() => 'ValidationException: $message';
 
   /// Creates a new [ValidationException] for invalid input.
   factory ValidationException.invalidInput(String field, String details) =>
@@ -102,6 +116,33 @@ class ValidationException extends AppException {
   /// Creates a new [ValidationException] for required field.
   factory ValidationException.requiredField(String field) =>
       ValidationException('$field is required');
+}
+
+/// Exception for not found errors.
+class NotFoundException extends AppException {
+  const NotFoundException(String message, [dynamic originalException])
+      : super(message, originalException);
+
+  @override
+  String toString() => 'NotFoundException: $message';
+}
+
+/// Exception for forbidden actions.
+class ForbiddenException extends AppException {
+  const ForbiddenException(String message, [dynamic originalException])
+      : super(message, originalException);
+
+  @override
+  String toString() => 'ForbiddenException: $message';
+}
+
+/// Exception for unexpected or unknown errors.
+class UnexpectedException extends AppException {
+  const UnexpectedException(String message, [dynamic originalException])
+      : super(message, originalException);
+
+  @override
+  String toString() => 'UnexpectedException: $message';
 }
 
 /// Exception thrown when a permission is denied.

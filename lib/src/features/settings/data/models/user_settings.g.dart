@@ -60,4 +60,5 @@ const _$CostAllocationMethodEnumMap = {
   CostAllocationMethod.fifo: 'fifo',
   CostAllocationMethod.lifo: 'lifo',
   CostAllocationMethod.specific: 'specific',
+  CostAllocationMethod.manual: 'manual',
 };

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
+import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
 import 'package:pallet_pro_app/src/features/settings/data/repositories/user_settings_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
@@ -15,30 +16,29 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
   final String _tableName = 'user_settings';
 
   @override
-  Future<UserSettings> getUserSettings() async {
+  Future<Result<UserSettings?>> getUserSettings() async {
     try {
       final user = _client.auth.currentUser;
       if (user == null) {
-        throw const AuthException('User not authenticated');
+        return Result.failure(const AuthException('User not authenticated'));
       }
 
       try {
-      final response = await _client
-          .from(_tableName)
-          .select()
-          .eq('id', user.id)  // 'id' not 'user_id'
-          .single();
+        final response = await _client
+            .from(_tableName)
+            .select()
+            .eq('id', user.id)
+            .single();
 
-      debugPrint('SupabaseUserSettingsRepository: Raw JSON response: $response');
-
-        return UserSettings.fromJson(response);
+        debugPrint('SupabaseUserSettingsRepository: Raw JSON response: $response');
+        return Result.success(UserSettings.fromJson(response));
       } on PostgrestException catch (e) {
         if (e.code == 'PGRST116') {
           // No settings found, create default settings
           debugPrint('No user settings found for user ${user.id}, creating default settings');
           return _createDefaultSettings();
         }
-        rethrow;
+        return Result.failure(DatabaseException('Failed to fetch user settings', e));
       }
     } on PostgrestException catch (e) {
       debugPrint('PostgrestException in getUserSettings: ${e.message}, code: ${e.code}');
@@ -46,7 +46,7 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
         // No settings found for this user, create default settings
         return _createDefaultSettings();
       }
-      throw DatabaseException.fetchFailed('user settings', e.message);
+      return Result.failure(DatabaseException('Failed to fetch user settings', e));
     } catch (e) {
       debugPrint('Exception in getUserSettings: ${e.toString()}');
       
@@ -57,16 +57,20 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
         return _createDefaultSettings();
       }
       
-      throw DatabaseException.fetchFailed('user settings', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to fetch user settings', e)
+      );
     }
   }
 
-  Future<UserSettings> _createDefaultSettings() async {
+  Future<Result<UserSettings>> _createDefaultSettings() async {
     try {
       final user = _client.auth.currentUser;
       if (user == null) {
         debugPrint('_createDefaultSettings: No current user');
-        throw const AuthException('User not authenticated');
+        return Result.failure(const AuthException('User not authenticated'));
       }
 
       debugPrint('_createDefaultSettings: Creating settings for user ${user.id}');
@@ -76,7 +80,7 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
         'theme': 'system',
         'has_completed_onboarding': false,
         'stale_threshold_days': 30,
-        'cost_allocation_method': 'even',
+        'cost_allocation_method': 'average',
         'enable_biometric_unlock': false,
         'show_break_even': true,
         'daily_goal': 0,
@@ -95,337 +99,348 @@ class SupabaseUserSettingsRepository implements UserSettingsRepository {
             .single();
 
         debugPrint('_createDefaultSettings: Created settings successfully');
-        return UserSettings.fromJson(response);
+        return Result.success(UserSettings.fromJson(response));
       } catch (e) {
         debugPrint('_createDefaultSettings: Error creating settings: $e');
         
         // If settings already exist, try to retrieve them
         if (e is PostgrestException && e.code == '23505') {  // Unique constraint violation
           debugPrint('_createDefaultSettings: Settings already exist, retrieving');
-          final response = await _client
-              .from(_tableName)
-              .select()
-              .eq('id', user.id)  // Use 'id' instead of 'user_id'
-              .single();
-              
-          return UserSettings.fromJson(response);
+          try {
+            final response = await _client
+                .from(_tableName)
+                .select()
+                .eq('id', user.id)
+                .single();
+                
+            return Result.success(UserSettings.fromJson(response));
+          } catch (retrieveError) {
+            return Result.failure(DatabaseException('Failed to retrieve existing settings', retrieveError));
+          }
         }
-        rethrow;
+        return Result.failure(DatabaseException('Failed to create default settings', e));
       }
     } catch (e) {
       debugPrint('_createDefaultSettings error: $e');
-      throw DatabaseException.creationFailed('user settings', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to create default settings', e)
+      );
     }
   }
 
   @override
-  Future<UserSettings> updateUserSettings(UserSettings settings) async {
+  Future<Result<UserSettings>> updateUserSettings(UserSettings settings) async {
     try {
       final user = _client.auth.currentUser;
       if (user == null) {
-        throw const AuthException('User not authenticated');
+        return Result.failure(const AuthException('User not authenticated'));
       }
 
       if (settings.userId != user.id) {
-        throw const ValidationException('Cannot update settings for another user');
+        return Result.failure(const ValidationException('Cannot update settings for another user'));
       }
 
       final response = await _client
           .from(_tableName)
           .update(settings.toJson())
-          .eq('id', user.id)  // Use 'id' instead of 'user_id'
+          .eq('id', user.id)
           .select()
           .single();
 
-      return UserSettings.fromJson(response);
+      return Result.success(UserSettings.fromJson(response));
     } catch (e) {
-      throw DatabaseException.updateFailed('user settings', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update user settings', e)
+      );
     }
   }
 
   @override
-  Future<UserSettings> updateHasCompletedOnboarding(bool hasCompleted) async {
+  Future<Result<UserSettings>> updateHasCompletedOnboarding(bool hasCompleted) async {
     try {
       final user = _client.auth.currentUser;
       if (user == null) {
-        throw const AuthException('User not authenticated');
+        return Result.failure(const AuthException('User not authenticated'));
       }
       
       debugPrint('SupabaseUserSettingsRepository: Updating has_completed_onboarding to $hasCompleted');
       
       // First get existing settings to make sure we update with valid data
-      final existingSettings = await _client
-          .from(_tableName)
-          .select()
-          .eq('id', user.id)
-          .single();
+      final existingSettingsResponse = await getUserSettings();
+      if (existingSettingsResponse.isFailure) {
+        return Result.failure(existingSettingsResponse.error);
+      }
       
-      debugPrint('SupabaseUserSettingsRepository: Existing settings: $existingSettings');
+      final existingSettings = existingSettingsResponse.value;
+      if (existingSettings == null) {
+        return Result.failure(const DatabaseException('No existing settings found'));
+      }
       
-      // Update only the has_completed_onboarding field, keeping all other fields as they are
-      final response = await _client
-          .from(_tableName)
-          .update({
-            'has_completed_onboarding': hasCompleted,
-            // Keep existing values for type-sensitive fields
-            'theme': existingSettings['theme'],
-            'cost_allocation_method': existingSettings['cost_allocation_method'],
-            'daily_goal': existingSettings['daily_goal'],
-            'weekly_goal': existingSettings['weekly_goal'],
-            'monthly_goal': existingSettings['monthly_goal'],
-            'yearly_goal': existingSettings['yearly_goal'],
-            'stale_threshold_days': existingSettings['stale_threshold_days'],
-            'enable_biometric_unlock': existingSettings['enable_biometric_unlock'],
-            'show_break_even': existingSettings['show_break_even'],
-          })
-          .eq('id', user.id)
-          .select()
-          .single();
+      // Update only the has_completed_onboarding field
+      final updatedSettings = existingSettings.copyWith(
+        hasCompletedOnboarding: hasCompleted
+      );
       
-      debugPrint('SupabaseUserSettingsRepository: Updated settings successfully');
-      return UserSettings.fromJson(response);
+      return updateUserSettings(updatedSettings);
     } catch (e) {
       debugPrint('SupabaseUserSettingsRepository: Error updating onboarding status: $e');
-      throw DatabaseException.updateFailed('onboarding status', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update onboarding status', e)
+      );
     }
   }
 
   @override
-  Future<UserSettings> updateTheme(String theme) async {
+  Future<Result<UserSettings>> updateTheme(String theme) async {
     try {
       final user = _client.auth.currentUser;
       if (user == null) {
-        throw const AuthException('User not authenticated');
+        return Result.failure(const AuthException('User not authenticated'));
       }
 
-      // Validate theme value (optional but good practice)
+      // Validate theme value
       if (!['light', 'dark', 'system'].contains(theme)) {
-        throw ValidationException.invalidInput('theme', 'Invalid theme value: $theme');
+        return Result.failure(ValidationException('Invalid theme value: $theme'));
       }
 
-      final response = await _client
-          .from(_tableName)
-          .update({'theme': theme})
-          .eq('id', user.id)
-          .select()
-          .single();
-
-      return UserSettings.fromJson(response);
+      final existingSettingsResponse = await getUserSettings();
+      if (existingSettingsResponse.isFailure) {
+        return Result.failure(existingSettingsResponse.error);
+      }
+      
+      final existingSettings = existingSettingsResponse.value;
+      if (existingSettings == null) {
+        return Result.failure(const DatabaseException('No existing settings found'));
+      }
+      
+      final updatedSettings = existingSettings.copyWith(theme: theme);
+      return updateUserSettings(updatedSettings);
     } catch (e) {
-      throw DatabaseException.updateFailed('theme setting', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update theme setting', e)
+      );
     }
   }
 
   @override
-  Future<UserSettings> updateUseBiometricAuth(bool useBiometricAuth) async {
+  Future<Result<UserSettings>> updateUseBiometricAuth(bool useBiometricAuth) async {
     try {
-      final user = _client.auth.currentUser;
-      if (user == null) {
-        throw const AuthException('User not authenticated');
+      final existingSettingsResponse = await getUserSettings();
+      if (existingSettingsResponse.isFailure) {
+        return Result.failure(existingSettingsResponse.error);
       }
-
-      final response = await _client
-          .from(_tableName)
-          .update({'enable_biometric_unlock': useBiometricAuth})  // Use 'enable_biometric_unlock' instead of 'use_biometric_auth'
-          .eq('id', user.id)  // Use 'id' instead of 'user_id'
-          .select()
-          .single();
-
-      return UserSettings.fromJson(response);
+      
+      final existingSettings = existingSettingsResponse.value;
+      if (existingSettings == null) {
+        return Result.failure(const DatabaseException('No existing settings found'));
+      }
+      
+      final updatedSettings = existingSettings.copyWith(useBiometricAuth: useBiometricAuth);
+      return updateUserSettings(updatedSettings);
     } catch (e) {
-      throw DatabaseException.updateFailed('biometric auth setting', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update biometric auth setting', e)
+      );
     }
   }
 
   @override
-  Future<UserSettings> updateCostAllocationMethod(CostAllocationMethod method) async {
+  Future<Result<UserSettings>> updatePinSettings({
+    required bool usePinAuth,
+    String? pinHash,
+  }) async {
     try {
-      final user = _client.auth.currentUser;
-      if (user == null) {
-        throw const AuthException('User not authenticated');
+      final existingSettingsResponse = await getUserSettings();
+      if (existingSettingsResponse.isFailure) {
+        return Result.failure(existingSettingsResponse.error);
       }
-
-      // Convert the enum to the string value expected by the database
-      String dbValue;
-      switch (method) {
-        case CostAllocationMethod.fifo:
-          dbValue = 'even'; // Map to 'even' in DB
-          break;
-        case CostAllocationMethod.lifo:
-          dbValue = 'proportional'; // Map to 'proportional' in DB
-          break;
-        case CostAllocationMethod.average:
-        default:
-          dbValue = 'manual'; // Map to 'manual' in DB
-          break;
+      
+      final existingSettings = existingSettingsResponse.value;
+      if (existingSettings == null) {
+        return Result.failure(const DatabaseException('No existing settings found'));
       }
-
-      final response = await _client
-          .from(_tableName)
-          .update({'cost_allocation_method': dbValue})
-          .eq('id', user.id)  // Use 'id' instead of 'user_id'
-          .select()
-          .single();
-
-      return UserSettings.fromJson(response);
+      
+      final updatedSettings = existingSettings.copyWith(
+        usePinAuth: usePinAuth,
+        pinHash: pinHash
+      );
+      
+      return updateUserSettings(updatedSettings);
     } catch (e) {
-      throw DatabaseException.updateFailed('cost allocation method', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update PIN settings', e)
+      );
     }
   }
 
   @override
-  Future<UserSettings> updateShowBreakEvenPrice(bool showBreakEvenPrice) async {
+  Future<Result<UserSettings>> updateCostAllocationMethod(CostAllocationMethod method) async {
     try {
-      final user = _client.auth.currentUser;
-      if (user == null) {
-        throw const AuthException('User not authenticated');
+      final existingSettingsResponse = await getUserSettings();
+      if (existingSettingsResponse.isFailure) {
+        return Result.failure(existingSettingsResponse.error);
       }
-
-      final response = await _client
-          .from(_tableName)
-          .update({'show_break_even': showBreakEvenPrice})  // Use 'show_break_even' instead of 'show_break_even_price'
-          .eq('id', user.id)  // Use 'id' instead of 'user_id'
-          .select()
-          .single();
-
-      return UserSettings.fromJson(response);
+      
+      final existingSettings = existingSettingsResponse.value;
+      if (existingSettings == null) {
+        return Result.failure(const DatabaseException('No existing settings found'));
+      }
+      
+      final updatedSettings = existingSettings.copyWith(costAllocationMethod: method);
+      return updateUserSettings(updatedSettings);
     } catch (e) {
-      throw DatabaseException.updateFailed('break-even price setting', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update cost allocation method', e)
+      );
     }
   }
 
   @override
-  Future<UserSettings> updateStaleThresholdDays(int days) async {
+  Future<Result<UserSettings>> updateShowBreakEvenPrice(bool showBreakEvenPrice) async {
     try {
-      final user = _client.auth.currentUser;
-      if (user == null) {
-        throw const AuthException('User not authenticated');
+      final existingSettingsResponse = await getUserSettings();
+      if (existingSettingsResponse.isFailure) {
+        return Result.failure(existingSettingsResponse.error);
       }
+      
+      final existingSettings = existingSettingsResponse.value;
+      if (existingSettings == null) {
+        return Result.failure(const DatabaseException('No existing settings found'));
+      }
+      
+      final updatedSettings = existingSettings.copyWith(showBreakEvenPrice: showBreakEvenPrice);
+      return updateUserSettings(updatedSettings);
+    } catch (e) {
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update break-even price setting', e)
+      );
+    }
+  }
 
+  @override
+  Future<Result<UserSettings>> updateStaleThresholdDays(int days) async {
+    try {
       if (days < 1) {
-        throw ValidationException.invalidInput(
-          'stale threshold days',
-          'Must be at least 1',
-        );
+        return Result.failure(ValidationException('Stale threshold days must be at least 1'));
       }
 
-      final response = await _client
-          .from(_tableName)
-          .update({'stale_threshold_days': days})
-          .eq('id', user.id)  // Use 'id' instead of 'user_id'
-          .select()
-          .single();
-
-      return UserSettings.fromJson(response);
+      final existingSettingsResponse = await getUserSettings();
+      if (existingSettingsResponse.isFailure) {
+        return Result.failure(existingSettingsResponse.error);
+      }
+      
+      final existingSettings = existingSettingsResponse.value;
+      if (existingSettings == null) {
+        return Result.failure(const DatabaseException('No existing settings found'));
+      }
+      
+      final updatedSettings = existingSettings.copyWith(staleThresholdDays: days);
+      return updateUserSettings(updatedSettings);
     } catch (e) {
-      throw DatabaseException.updateFailed('stale threshold', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update stale threshold', e)
+      );
     }
   }
 
   @override
-  Future<UserSettings> updateSalesGoals({
+  Future<Result<UserSettings>> updateSalesGoals({
     double? dailyGoal,
     double? weeklyGoal,
     double? monthlyGoal,
     double? yearlyGoal,
   }) async {
     try {
-      final user = _client.auth.currentUser;
-      if (user == null) {
-        throw const AuthException('User not authenticated');
+      final existingSettingsResponse = await getUserSettings();
+      if (existingSettingsResponse.isFailure) {
+        return Result.failure(existingSettingsResponse.error);
       }
-
-      // Use correct column names as per DB schema
-      final updates = <String, dynamic>{};
-      if (dailyGoal != null) updates['daily_goal'] = dailyGoal;  // 'daily_goal' instead of 'daily_sales_goal'
-      if (weeklyGoal != null) updates['weekly_goal'] = weeklyGoal;  // 'weekly_goal' instead of 'weekly_sales_goal'
-      if (monthlyGoal != null) updates['monthly_goal'] = monthlyGoal;  // 'monthly_goal' instead of 'monthly_sales_goal'
-      if (yearlyGoal != null) updates['yearly_goal'] = yearlyGoal;  // 'yearly_goal' instead of 'yearly_sales_goal'
-
-      if (updates.isEmpty) {
-        // No updates, just return current settings
-        return getUserSettings();
-      }
-
-      final response = await _client
-          .from(_tableName)
-          .update(updates)
-          .eq('id', user.id)  // Use 'id' instead of 'user_id'
-          .select()
-          .single();
-
-      return UserSettings.fromJson(response);
-    } catch (e) {
-      throw DatabaseException.updateFailed('sales goals', e.toString());
-    }
-  }
-
-  @override
-  Future<UserSettings> updatePinSettings({
-    required bool usePinAuth,
-    String? pinHash,
-  }) async {
-    try {
-      final user = _client.auth.currentUser;
-      if (user == null) {
-        throw const AuthException('User not authenticated');
-      }
-
-      // Prepare updates using DB column names
-      final updates = <String, dynamic>{
-        'enable_pin_unlock': usePinAuth,
-        'pin_hash': pinHash, // Pass hash directly (can be null to clear it)
-      };
-
-      final response = await _client
-          .from(_tableName)
-          .update(updates)
-          .eq('id', user.id) // Ensure we update the correct user
-          .select()
-          .single();
-
-      return UserSettings.fromJson(response);
-    } catch (e) {
-      throw DatabaseException.updateFailed('PIN settings', e.toString());
-    }
-  }
-
-  @override
-  Future<UserSettings> updateSettingsFromOnboarding(Map<String, dynamic> updates) async {
-    try {
-      final user = _client.auth.currentUser;
-      if (user == null) {
-        throw const AuthException('User not authenticated');
-      }
-
-      // Ensure onboarding is marked as complete
-      updates['has_completed_onboarding'] = true;
-
-      // Remove the 'id' field if present, as it's used for the query condition
-      updates.remove('id');
       
-      // Ensure all values are of acceptable types (handle potential nulls/conversions if needed)
-      // Example: ensure numeric values are not null before update
-      updates['daily_goal'] ??= 0;
-      updates['weekly_goal'] ??= 0;
-      updates['monthly_goal'] ??= 0;
-      updates['yearly_goal'] ??= 0;
-      updates['stale_threshold_days'] ??= 30;
+      final existingSettings = existingSettingsResponse.value;
+      if (existingSettings == null) {
+        return Result.failure(const DatabaseException('No existing settings found'));
+      }
+      
+      final updatedSettings = existingSettings.copyWith(
+        dailySalesGoal: dailyGoal ?? existingSettings.dailySalesGoal,
+        weeklySalesGoal: weeklyGoal ?? existingSettings.weeklySalesGoal,
+        monthlySalesGoal: monthlyGoal ?? existingSettings.monthlySalesGoal,
+        yearlySalesGoal: yearlyGoal ?? existingSettings.yearlySalesGoal,
+      );
+      
+      return updateUserSettings(updatedSettings);
+    } catch (e) {
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update sales goals', e)
+      );
+    }
+  }
 
-      debugPrint('SupabaseUserSettingsRepository: Bulk updating settings from onboarding: $updates');
+  @override
+  Future<Result<UserSettings>> updateSettingsFromOnboarding(Map<String, dynamic> updates) async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return Result.failure(const AuthException('User not authenticated'));
+      }
 
-      final response = await _client
-          .from(_tableName)
-          .update(updates)
-          .eq('id', user.id) // Ensure we update the correct user
-          .select()
-          .single();
-
-      debugPrint('SupabaseUserSettingsRepository: Bulk update successful.');
-      return UserSettings.fromJson(response);
+      // Get existing settings first
+      final existingSettingsResponse = await getUserSettings();
+      if (existingSettingsResponse.isFailure) {
+        return Result.failure(existingSettingsResponse.error);
+      }
+      
+      final existingSettings = existingSettingsResponse.value;
+      if (existingSettings == null) {
+        return Result.failure(const DatabaseException('No existing settings found'));
+      }
+      
+      // Create a new settings object with updates
+      final updatedSettings = existingSettings.copyWith(
+        hasCompletedOnboarding: true, // Always true after onboarding
+        theme: updates['theme'] as String? ?? existingSettings.theme,
+        costAllocationMethod: updates['cost_allocation_method'] != null
+            ? UserSettings.costAllocationMethodFromString(updates['cost_allocation_method'] as String)
+            : existingSettings.costAllocationMethod,
+        dailySalesGoal: (updates['daily_goal'] as num?)?.toDouble() ?? existingSettings.dailySalesGoal,
+        weeklySalesGoal: (updates['weekly_goal'] as num?)?.toDouble() ?? existingSettings.weeklySalesGoal,
+        monthlySalesGoal: (updates['monthly_goal'] as num?)?.toDouble() ?? existingSettings.monthlySalesGoal,
+        yearlySalesGoal: (updates['yearly_goal'] as num?)?.toDouble() ?? existingSettings.yearlySalesGoal,
+        staleThresholdDays: updates['stale_threshold_days'] as int? ?? existingSettings.staleThresholdDays,
+        showBreakEvenPrice: updates['show_break_even'] as bool? ?? existingSettings.showBreakEvenPrice,
+        useBiometricAuth: updates['enable_biometric_unlock'] as bool? ?? existingSettings.useBiometricAuth,
+        usePinAuth: updates['enable_pin_unlock'] as bool? ?? existingSettings.usePinAuth,
+        pinHash: updates['pin_hash'] as String? ?? existingSettings.pinHash,
+      );
+      
+      return updateUserSettings(updatedSettings);
     } catch (e) {
       debugPrint('SupabaseUserSettingsRepository: Error in bulk update: $e');
-      throw DatabaseException.updateFailed('user settings from onboarding', e.toString());
+      return Result.failure(
+        e is AppException 
+          ? e 
+          : DatabaseException('Failed to update settings from onboarding', e)
+      );
     }
   }
 }
