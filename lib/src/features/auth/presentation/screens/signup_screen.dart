@@ -200,7 +200,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   decoration: InputDecoration(
                     labelText: 'Password',
                     prefixIcon: Icon(AppIcons.password),
-                    helperText: 'Password must be at least 8 characters long',
+                    helperText: 'Must be 8+ chars, include upper, lower, digit.',
                   ),
                   obscureText: true,
                   textInputAction: TextInputAction.next,
@@ -210,6 +210,18 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     }
                     if (value.length < 8) {
                       return 'Password must be at least 8 characters long';
+                    }
+                    // Check for uppercase letter
+                    if (!RegExp(r'[A-Z]').hasMatch(value)) {
+                      return 'Password must contain an uppercase letter';
+                    }
+                    // Check for lowercase letter
+                    if (!RegExp(r'[a-z]').hasMatch(value)) {
+                      return 'Password must contain a lowercase letter';
+                    }
+                    // Check for digit
+                    if (!RegExp(r'[0-9]').hasMatch(value)) {
+                      return 'Password must contain a digit';
                     }
                     return null;
                   },

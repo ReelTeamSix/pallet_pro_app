@@ -142,6 +142,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                     decoration: InputDecoration(
                       labelText: 'New Password',
                       prefixIcon: Icon(AppIcons.password),
+                      helperText: 'Must be 8+ chars, include upper, lower, digit.',
                     ),
                     obscureText: true,
                     textInputAction: TextInputAction.next,
@@ -149,8 +150,20 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter a new password';
                       }
-                      if (value.length < 6) { // Example validation
-                        return 'Password must be at least 6 characters';
+                      if (value.length < 8) {
+                        return 'Password must be at least 8 characters';
+                      }
+                      // Check for uppercase letter
+                      if (!RegExp(r'[A-Z]').hasMatch(value)) {
+                        return 'Password must contain an uppercase letter';
+                      }
+                      // Check for lowercase letter
+                      if (!RegExp(r'[a-z]').hasMatch(value)) {
+                        return 'Password must contain a lowercase letter';
+                      }
+                      // Check for digit
+                      if (!RegExp(r'[0-9]').hasMatch(value)) {
+                        return 'Password must contain a digit';
                       }
                       return null;
                     },
