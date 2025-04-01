@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:bcrypt/bcrypt.dart'; // For PIN hashing
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
+// Import global widgets
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
 
 /// Screen for setting up or changing the user's PIN.
 class PinSetupScreen extends ConsumerStatefulWidget {
@@ -114,27 +117,24 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
               ),
               const SizedBox(height: 32),
               // PIN Input Field
-              TextFormField(
+              StyledTextField(
                 controller: _pinController,
-                decoration: InputDecoration(
-                  labelText: 'New PIN',
-                  hintText: 'Enter 4 digits',
-                  prefixIcon: const Icon(Icons.pin),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscurePin ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePin = !_obscurePin;
-                      });
-                    },
-                  ),
-                ),
+                labelText: 'New PIN',
+                hintText: 'Enter 4 digits',
+                prefixIcon: const Icon(Icons.pin),
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
                 maxLength: 4,
                 obscureText: _obscurePin,
                 textAlign: TextAlign.center,
+                suffixIcon: IconButton(
+                  icon: Icon(_obscurePin ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePin = !_obscurePin;
+                    });
+                  },
+                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter a PIN';
@@ -147,27 +147,24 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
               ),
               const SizedBox(height: 16),
               // Confirm PIN Input Field
-              TextFormField(
+              StyledTextField(
                 controller: _confirmPinController,
-                decoration: InputDecoration(
-                  labelText: 'Confirm PIN',
-                  hintText: 'Re-enter 4 digits',
-                  prefixIcon: const Icon(Icons.pin),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureConfirmPin ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () {
-                      setState(() {
-                        _obscureConfirmPin = !_obscureConfirmPin;
-                      });
-                    },
-                  ),
-                ),
+                labelText: 'Confirm PIN',
+                hintText: 'Re-enter 4 digits',
+                prefixIcon: const Icon(Icons.pin),
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
                 maxLength: 4,
                 obscureText: _obscureConfirmPin,
                 textAlign: TextAlign.center,
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureConfirmPin ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () {
+                    setState(() {
+                      _obscureConfirmPin = !_obscureConfirmPin;
+                    });
+                  },
+                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please confirm your PIN';
@@ -183,16 +180,10 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
               ),
               const SizedBox(height: 32),
               // Save Button
-              ElevatedButton(
+              PrimaryButton(
+                text: 'Save PIN',
                 onPressed: _isLoading ? null : _savePin,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 24, width: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Save PIN'),
+                isLoading: _isLoading,
               ),
             ],
           ),

@@ -8,6 +8,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart'; 
 import '../../../../../test_helpers.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
 
 // --- Mocks ---
 class MockLocalAuthentication extends Mock implements LocalAuthentication {}
@@ -116,10 +117,10 @@ class _BiometricUnlockPromptState extends State<BiometricUnlockPrompt> {
         const SizedBox(height: 24),
         // Retry button for testing
         if (_errorMessage != null)
-          ElevatedButton(
+          PrimaryButton(
             key: const ValueKey('retryButton'),
+            text: 'Retry',
             onPressed: _authenticate,
-            child: const Text('Retry'),
           ),
       ],
     );

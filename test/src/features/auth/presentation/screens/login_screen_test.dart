@@ -7,6 +7,8 @@ import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_con
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/login_screen.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../../../../../test_helpers.dart'; // Assuming test_helpers are in root test folder
 
@@ -128,12 +130,11 @@ void main() {
       await pumpLoginScreen(tester);
 
       // Act & Assert
-      expect(find.byKey(const ValueKey('loginEmailField')), findsOneWidget);
-      expect(find.byKey(const ValueKey('loginPasswordField')), findsOneWidget);
-      expect(find.byKey(const ValueKey('loginButton')), findsOneWidget);
-      // Add checks for other expected widgets (e.g., title, sign-up link)
-      expect(find.text('Sign In'), findsWidgets); // Check for button text instead of "Login"
-      expect(find.textContaining("Don't have an account?"), findsOneWidget);
+      expect(find.widgetWithText(StyledTextField, 'Email'), findsOneWidget);
+      expect(find.widgetWithText(StyledTextField, 'Password'), findsOneWidget);
+      expect(find.byType(PrimaryButton), findsOneWidget);
+      expect(find.textContaining('Forgot Password?'), findsOneWidget);
+      expect(find.textContaining('Don\'t have an account? Sign Up'), findsOneWidget);
     });
 
     testWidgets('Shows error message for empty email', (WidgetTester tester) async {
@@ -141,7 +142,7 @@ void main() {
       final testController = await pumpLoginScreen(tester);
 
       // Act: Tap login button without entering email
-      await tester.tap(find.byKey(const ValueKey('loginButton')));
+      await tester.tap(find.byType(PrimaryButton));
       await tester.pumpAndSettle(); // Allow time for validation and rebuild
 
       // Assert: Check for email validation error text
@@ -155,9 +156,9 @@ void main() {
       final testController = await pumpLoginScreen(tester);
 
       // Act: Enter invalid email and tap login
-      await tester.enterText(find.byKey(const ValueKey('loginEmailField')), 'invalid-email');
-      await tester.enterText(find.byKey(const ValueKey('loginPasswordField')), 'password'); // Need valid password for this test
-      await tester.tap(find.byKey(const ValueKey('loginButton')));
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Email'), 'invalid-email');
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Password'), 'password'); // Need valid password for this test
+      await tester.tap(find.byType(PrimaryButton));
       await tester.pumpAndSettle();
 
       // Assert: Check for invalid email format error text
@@ -173,9 +174,9 @@ void main() {
       const testPassword = 'password123';
 
       // Act: Enter valid credentials and tap login
-      await tester.enterText(find.byKey(const ValueKey('loginEmailField')), testEmail);
-      await tester.enterText(find.byKey(const ValueKey('loginPasswordField')), testPassword);
-      await tester.tap(find.byKey(const ValueKey('loginButton')));
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Email'), testEmail);
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Password'), testPassword);
+      await tester.tap(find.byType(PrimaryButton));
       await tester.pump(); // Start the process
 
       // Assert: Verify signInWithEmail was called with correct parameters
@@ -194,11 +195,10 @@ void main() {
       final testController = await pumpLoginScreen(tester, signInError: exception);
 
       // Act: Enter credentials and tap login
-      await tester.enterText(find.byKey(const ValueKey('loginEmailField')), testEmail);
-      await tester.enterText(find.byKey(const ValueKey('loginPasswordField')), testPassword);
-      await tester.tap(find.byKey(const ValueKey('loginButton')));
-      await tester.pump(); // One frame to start the sign-in process
-      await tester.pump(); // Another to process the exception
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Email'), testEmail);
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Password'), testPassword);
+      await tester.tap(find.byType(PrimaryButton));
+      await tester.pumpAndSettle(); // Let the async operation complete
       
       // Assert: Check for the error message in a Text widget
       expect(find.text('Failed to sign in: Exception: Invalid credentials'), findsOneWidget);

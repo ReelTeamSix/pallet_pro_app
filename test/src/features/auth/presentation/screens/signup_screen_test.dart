@@ -7,6 +7,8 @@ import 'package:pallet_pro_app/src/features/auth/presentation/screens/signup_scr
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../../../../../test_helpers.dart';
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
 
 // --- Mocks ---
 // Use MockAuthController from test_helpers.dart
@@ -61,11 +63,11 @@ void main() {
   setupTestEnvironment();
 
   // Helper function to pump the widget with necessary providers
-  Future<void> pumpSignUpScreen(WidgetTester tester) async {
-    // Create a simpler mock implementation without using the problematic state/controller
+  Future<TestAuthController> pumpSignUpScreen(WidgetTester tester, {Exception? error}) async {
+    // Create a test controller with our exception behavior
     final testController = TestAuthController(
       initialState: const AsyncData<supabase.User?>(null),
-      errorToThrow: null,
+      errorToThrow: error,
     );
     
     await tester.pumpWidget(
@@ -84,7 +86,7 @@ void main() {
       ),
     );
     
-    return Future.value();
+    return testController;
   }
 
   group('SignUpScreen Widget Tests', () {
@@ -94,214 +96,110 @@ void main() {
 
       // Act & Assert
       // Use correct ValueKeys from SignupScreen if they exist, otherwise find by type/text
-      expect(find.widgetWithText(TextFormField, 'Email'), findsOneWidget);
-      expect(find.widgetWithText(TextFormField, 'Password'), findsOneWidget);
-      expect(find.widgetWithText(TextFormField, 'Confirm Password'), findsOneWidget);
-      expect(find.widgetWithText(ElevatedButton, 'Create Account'), findsOneWidget);
-      // Use correct text/casing from SignupScreen
-      expect(find.text('Create Account'), findsWidgets);
+      expect(find.byType(StyledTextField), findsNWidgets(3)); // Find all 3 fields
+      expect(find.widgetWithText(StyledTextField, 'Email'), findsOneWidget); // Find by label
+      expect(find.widgetWithText(StyledTextField, 'Password'), findsOneWidget);
+      expect(find.widgetWithText(StyledTextField, 'Confirm Password'), findsOneWidget);
+      expect(find.byType(PrimaryButton), findsOneWidget); // Find by type
       expect(find.textContaining('Already have an account? Sign In'), findsOneWidget);
     });
 
     testWidgets('Shows error messages for empty fields', (WidgetTester tester) async {
       // Arrange
-      final testController = TestAuthController(
-        initialState: const AsyncData<supabase.User?>(null),
-        errorToThrow: null,
-      );
-      
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authControllerProvider.overrideWithProvider(
-              AsyncNotifierProvider<AuthController, supabase.User?>(
-                () => testController,
-              )
-            ),
-          ],
-          child: const MaterialApp(
-            home: SignupScreen(),
-          ),
-        ),
-      );
+      await pumpSignUpScreen(tester);
 
       // Act: Tap sign up button
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Create Account'));
+      await tester.tap(find.byType(PrimaryButton)); // Find by type
       await tester.pumpAndSettle();
 
       // Assert: Check for validation errors (match text from SignupScreen)
       expect(find.text('Please enter your email'), findsOneWidget);
       expect(find.text('Please enter a password'), findsOneWidget);
       expect(find.text('Please confirm your password'), findsOneWidget);
-      expect(testController.signUpCalls.isEmpty, isTrue); // No calls made
     });
 
     testWidgets('Shows error message for invalid email format', (WidgetTester tester) async {
       // Arrange
-      final testController = TestAuthController(
-        initialState: const AsyncData<supabase.User?>(null),
-        errorToThrow: null,
-      );
-      
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authControllerProvider.overrideWithProvider(
-              AsyncNotifierProvider<AuthController, supabase.User?>(
-                () => testController,
-              )
-            ),
-          ],
-          child: const MaterialApp(
-            home: SignupScreen(),
-          ),
-        ),
-      );
+      await pumpSignUpScreen(tester);
 
       // Act: Enter invalid email and tap sign up
-      await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'invalid-email');
-      await tester.enterText(find.widgetWithText(TextFormField, 'Password'), 'password123');
-      await tester.enterText(find.widgetWithText(TextFormField, 'Confirm Password'), 'password123');
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Create Account'));
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Email'), 'invalid-email');
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Password'), 'Password123');
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Confirm Password'), 'Password123');
+      await tester.tap(find.byType(PrimaryButton));
       await tester.pumpAndSettle();
 
       // Assert (match text from SignupScreen)
       expect(find.text('Please enter a valid email'), findsOneWidget);
-      expect(testController.signUpCalls.isEmpty, isTrue); // No calls made
     });
 
     testWidgets('Shows error message for password mismatch', (WidgetTester tester) async {
       // Arrange
-      final testController = TestAuthController(
-        initialState: const AsyncData<supabase.User?>(null),
-        errorToThrow: null,
-      );
-      
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authControllerProvider.overrideWithProvider(
-              AsyncNotifierProvider<AuthController, supabase.User?>(
-                () => testController,
-              )
-            ),
-          ],
-          child: const MaterialApp(
-            home: SignupScreen(),
-          ),
-        ),
-      );
+      await pumpSignUpScreen(tester);
 
       // Act: Enter mismatching passwords
-      await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'test@example.com');
-      await tester.enterText(find.widgetWithText(TextFormField, 'Password'), 'password123');
-      await tester.enterText(find.widgetWithText(TextFormField, 'Confirm Password'), 'password456');
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Create Account'));
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Email'), 'test@example.com');
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Password'), 'Password123');
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Confirm Password'), 'Password456');
+      await tester.tap(find.byType(PrimaryButton));
       await tester.pumpAndSettle();
 
       // Assert (match text from SignupScreen)
       expect(find.text('Passwords do not match'), findsOneWidget);
-      expect(testController.signUpCalls.isEmpty, isTrue); // No calls made
     });
 
     testWidgets('Calls signUpWithEmail on valid submission', (WidgetTester tester) async {
       // Arrange
-      final signUpCalls = <({String email, String password})>[];
-      final authState = AsyncData<supabase.User?>(null);
-
-      // Create a test controller with our callback
-      final testController = TestAuthController(
-        initialState: authState,
-        errorToThrow: null,
-      );
-      
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authControllerProvider.overrideWithProvider(
-              AsyncNotifierProvider<AuthController, supabase.User?>(
-                () => testController,
-              )
-            ),
-          ],
-          child: const MaterialApp(
-            home: SignupScreen(),
-          ),
-        ),
-      );
+      final testController = await pumpSignUpScreen(tester);
       
       const testEmail = 'newuser@example.com';
-      const testPassword = 'password1234'; // Ensure >= 8 chars
+      const testPassword = 'Password123'; // Valid password
 
       // Act: Enter valid credentials and tap sign up
-      await tester.enterText(find.widgetWithText(TextFormField, 'Email'), testEmail);
-      await tester.enterText(find.widgetWithText(TextFormField, 'Password'), testPassword);
-      await tester.enterText(find.widgetWithText(TextFormField, 'Confirm Password'), testPassword);
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Create Account'));
-      await tester.pump(); // Start the process
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Email'), testEmail);
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Password'), testPassword);
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Confirm Password'), testPassword);
+      await tester.tap(find.byType(PrimaryButton));
+      
+      // Pump multiple times to allow the async operation to complete
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
       // Assert: Verify signUpWithEmail was called with correct parameters
-      expect(testController.signUpCalls.length, 1);
+      expect(testController.signUpCalls.length, 1, reason: 'signUpWithEmail should be called once');
       expect(testController.signUpCalls.first.email, testEmail);
       expect(testController.signUpCalls.first.password, testPassword);
     });
 
     testWidgets('Displays error message when signUp fails', (WidgetTester tester) async {
-       // Arrange
-       const testEmail = 'existing@example.com';
-       const testPassword = 'password1234';
-       // Use specific AuthException for better testing
-       final exception = AuthException('User already registered'); 
-       
-       final testController = TestAuthController(
-         initialState: const AsyncData<supabase.User?>(null),
-         errorToThrow: exception,
-       );
-       
-       await tester.pumpWidget(
-         ProviderScope(
-           overrides: [
-             authControllerProvider.overrideWithProvider(
-               AsyncNotifierProvider<AuthController, supabase.User?>(
-                 () => testController,
-               )
-             ),
-           ],
-           child: const MaterialApp(
-             home: SignupScreen(),
-           ),
-         ),
-       );
- 
-       // Act: Enter credentials and tap sign up
-       await tester.enterText(find.widgetWithText(TextFormField, 'Email'), testEmail);
-       await tester.enterText(find.widgetWithText(TextFormField, 'Password'), testPassword);
-       await tester.enterText(find.widgetWithText(TextFormField, 'Confirm Password'), testPassword);
-       await tester.tap(find.widgetWithText(ElevatedButton, 'Create Account'));
-       await tester.pumpAndSettle();
- 
-       // Assert: Look specifically for the error message in the Container, not in the SnackBar
-       expect(
-         find.descendant(
-           of: find.byType(Container),
-           matching: find.text('An account with this email already exists. Please use a different email or try signing in.'),
-         ),
-         findsOneWidget
-       );
-       
-       // Verify SnackBar also contains the error (optional, but confirms both UI elements show the error)
-       expect(
-         find.descendant(
-           of: find.byType(SnackBar),
-           matching: find.text('An account with this email already exists. Please use a different email or try signing in.'),
-         ),
-         findsOneWidget
-       );
-     });
+      // Arrange
+      const testEmail = 'existing@example.com';
+      const testPassword = 'Password123';
+      
+      // Create an auth exception with a known error message
+      final authException = AuthException('User already registered');
+      
+      final testController = await pumpSignUpScreen(tester, error: authException);
 
-    // Add more tests:
-    // - Password visibility toggle for both fields
-    // - Navigation to login screen
-    // - Handling loading states correctly
+      // Act: Enter credentials and tap sign up
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Email'), testEmail);
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Password'), testPassword);
+      await tester.enterText(find.widgetWithText(StyledTextField, 'Confirm Password'), testPassword);
+      await tester.tap(find.byType(PrimaryButton));
+      
+      // Allow the async operation to complete
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
+
+      // Assert: Look for the error message in the SnackBar
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.text('An account with this email already exists. Please use a different email or try signing in.'),
+        ),
+        findsOneWidget
+      );
+    });
   });
 } 

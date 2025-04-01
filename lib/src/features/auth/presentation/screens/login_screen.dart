@@ -5,6 +5,8 @@ import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
 
 /// The login screen.
@@ -160,13 +162,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
                 
                 // Email field
-                TextFormField(
+                StyledTextField(
                   key: const ValueKey('loginEmailField'),
                   controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(AppIcons.email),
-                  ),
+                  labelText: 'Email',
+                  prefixIcon: Icon(AppIcons.email),
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
                   validator: (value) {
@@ -183,13 +183,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 SizedBox(height: context.spacingMd),
                 
                 // Password field
-                TextFormField(
+                StyledTextField(
                   key: const ValueKey('loginPasswordField'),
                   controller: _passwordController,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: Icon(AppIcons.password),
-                  ),
+                  labelText: 'Password',
+                  prefixIcon: Icon(AppIcons.password),
                   obscureText: true,
                   textInputAction: TextInputAction.done,
                   validator: (value) {
@@ -219,19 +217,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 SizedBox(height: context.spacingMd),
                 
                 // Sign in button
-                ElevatedButton(
+                PrimaryButton(
                   key: const ValueKey('loginButton'),
+                  text: 'Sign In',
                   onPressed: _isLoading ? null : _signIn,
-                  child: _isLoading
-                      ? SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: context.onPrimaryColor,
-                          ),
-                        )
-                      : Text('Sign In'),
+                  isLoading: _isLoading,
                 ),
                 SizedBox(height: context.spacingMd),
                 

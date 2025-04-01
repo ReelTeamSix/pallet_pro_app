@@ -5,6 +5,9 @@ import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart'; // Assuming this will handle reset logic
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart'; 
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
+// Import global widgets
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -127,12 +130,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 ],
 
                 // Email Field
-                TextFormField(
+                StyledTextField(
                   controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(AppIcons.email),
-                  ),
+                  labelText: 'Email',
+                  prefixIcon: Icon(AppIcons.email),
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.done,
                   validator: (value) {
@@ -151,18 +152,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 SizedBox(height: context.spacingXl),
 
                 // Send Reset Link Button
-                ElevatedButton(
+                PrimaryButton(
+                  text: 'Send Reset Link',
                   onPressed: _isLoading || _successMessage != null ? null : _sendResetLink,
-                  child: _isLoading
-                      ? SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: context.onPrimaryColor,
-                          ),
-                        )
-                      : const Text('Send Reset Link'),
+                  isLoading: _isLoading,
                 ),
                  SizedBox(height: context.spacingMd),
                  

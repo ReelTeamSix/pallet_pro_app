@@ -6,6 +6,7 @@ import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/features/auth/data/services/biometric_service.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
 
 /// The biometric setup screen.
 class BiometricSetupScreen extends ConsumerStatefulWidget {
@@ -143,31 +144,15 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
               ),
               SizedBox(height: context.spacingLg),
               if (_isBiometricAvailable && !_useBiometricAuth)
-                ElevatedButton.icon(
+                PrimaryButton(
+                  text: 'Enable Biometric Authentication',
                   onPressed: _isLoading ? null : _enableBiometricAuth,
-                  icon: const Icon(Icons.fingerprint),
-                  label: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text('Enable Biometric Authentication'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                  ),
+                  isLoading: _isLoading,
                 ),
               if (_useBiometricAuth)
-                ElevatedButton.icon(
+                PrimaryButton(
+                  text: 'Continue',
                   onPressed: () => context.go('/home'),
-                  icon: const Icon(Icons.check),
-                  label: const Text('Continue'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: Colors.green,
-                  ),
                 ),
               SizedBox(height: context.spacingMd),
               TextButton(

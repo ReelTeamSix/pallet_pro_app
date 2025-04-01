@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart'; // Import GoRouter
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
+// Import global widgets
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
 
 /// The inventory screen.
 class InventoryScreen extends StatefulWidget {
@@ -42,12 +44,9 @@ class _InventoryScreenState extends State<InventoryScreen>
     return Scaffold(
       appBar: AppBar(
         title: _isSearching
-            ? TextField(
+            ? StyledTextField(
                 controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search inventory...',
-                  border: InputBorder.none,
-                ),
+                hintText: 'Search inventory...',
                 autofocus: true,
                 onChanged: (value) {
                   // TODO: Implement search functionality

@@ -5,6 +5,9 @@ import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
+// Import global widgets
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
 
 class ResetPasswordScreen extends ConsumerStatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -137,13 +140,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                 // Don't show fields if password updated successfully
                 if (!_passwordUpdated) ...[
                   // New Password Field
-                  TextFormField(
+                  StyledTextField(
                     controller: _passwordController,
-                    decoration: InputDecoration(
-                      labelText: 'New Password',
-                      prefixIcon: Icon(AppIcons.password),
-                      helperText: 'Must be 8+ chars, include upper, lower, digit.',
-                    ),
+                    labelText: 'New Password',
+                    prefixIcon: Icon(AppIcons.password),
+                    hintText: 'Must be 8+ chars, include upper, lower, digit.',
                     obscureText: true,
                     textInputAction: TextInputAction.next,
                     validator: (value) {
@@ -172,12 +173,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                   SizedBox(height: context.spacingMd),
 
                   // Confirm Password Field
-                  TextFormField(
+                  StyledTextField(
                     controller: _confirmPasswordController,
-                    decoration: InputDecoration(
-                      labelText: 'Confirm New Password',
-                      prefixIcon: Icon(AppIcons.password),
-                    ),
+                    labelText: 'Confirm New Password',
+                    prefixIcon: Icon(AppIcons.password),
                     obscureText: true,
                     textInputAction: TextInputAction.done,
                     validator: (value) {
@@ -197,22 +196,15 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                 
                 // Button Area
                 if (!_passwordUpdated)
-                  ElevatedButton(
+                  PrimaryButton(
+                    text: 'Update Password',
                     onPressed: _isLoading ? null : _updatePassword,
-                    child: _isLoading
-                        ? SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: context.onPrimaryColor,
-                            ),
-                          )
-                        : const Text('Update Password'),
+                    isLoading: _isLoading,
                   ),
                   
                 if (_passwordUpdated)
-                   ElevatedButton(
+                   PrimaryButton(
+                    text: 'Back to Login',
                     onPressed: () async { // Make async
                       // Sign out the user after successful password reset
                       await ref.read(authControllerProvider.notifier).signOut();
@@ -222,7 +214,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                           context.go('/login?from=reset_success'); // Add param for clarity
                       }
                     },
-                    child: const Text('Back to Login'),
                   ),
 
               ],

@@ -5,19 +5,26 @@ import 'package:mocktail/mocktail.dart';
 import 'package:pallet_pro_app/src/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
+import 'package:pallet_pro_app/src/features/auth/data/providers/biometric_service_provider.dart';
+import 'package:pallet_pro_app/src/features/auth/data/services/biometric_service.dart';
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
 import '../../../../../test_helpers.dart';
 
 // --- Mocks ---
-// Use MockUserSettingsController from test_helpers.dart
+// Mock for Biometric Service
+class MockBiometricService extends Mock implements BiometricService {}
 
 // Define a simple test-only implementation of UserSettingsController
 class TestUserSettingsController extends UserSettingsController {
   final AsyncValue<UserSettings?> initialState;
   List<bool> onboardingCompletedCalls = [];
   List<Map<String, dynamic>> settingsUpdateCalls = [];
+  final Exception? errorToThrow;
   
   TestUserSettingsController({
     required this.initialState,
+    this.errorToThrow,
   });
   
   @override
@@ -25,6 +32,9 @@ class TestUserSettingsController extends UserSettingsController {
   
   @override
   Future<UserSettings?> build() async {
+    if (errorToThrow != null) {
+      throw errorToThrow!;
+    }
     return initialState.valueOrNull;
   }
   
@@ -53,92 +63,115 @@ class TestUserSettingsController extends UserSettingsController {
 void main() {
   setupTestEnvironment();
 
-  // Helper function to pump the widget
+  // Helper function to pump the widget with necessary providers
+  // Return the controller instance for tests to use
   Future<TestUserSettingsController> pumpOnboardingScreen(WidgetTester tester) async {
-    // Create not-onboarded settings
-    const userSettings = UserSettings(
-      userId: 'mock-user-id',
-      hasCompletedOnboarding: false,
-      theme: 'system',
-      useBiometricAuth: false,
-      usePinAuth: false,
-      costAllocationMethod: CostAllocationMethod.average,
-      showBreakEvenPrice: false,
-      staleThresholdDays: 60,
-      dailySalesGoal: 100,
-      weeklySalesGoal: 700,
-      monthlySalesGoal: 3000,
-      yearlySalesGoal: 36500,
-    );
-    
-    // Create test controller with not-onboarded state
     final testController = TestUserSettingsController(
-      initialState: const AsyncData<UserSettings?>(userSettings),
+      initialState: const AsyncData<UserSettings?>(null),
+      errorToThrow: null,
     );
+
+    // Mock Biometric Service for provider override
+    final mockBiometricService = MockBiometricService();
+    // Stub isBiometricAvailable to return true by default for testing setup flows
+    when(() => mockBiometricService.isBiometricAvailable()).thenAnswer((_) async => true);
+
+    // Define a fixed screen size for tests
+    const testScreenSize = Size(400, 800);
+    await tester.binding.setSurfaceSize(testScreenSize);
+    tester.view.physicalSize = testScreenSize;
+    tester.view.devicePixelRatio = 1.0;
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           userSettingsControllerProvider.overrideWithProvider(
-            AsyncNotifierProvider<UserSettingsController, UserSettings?>(
-              () => testController,
-            )
+             AsyncNotifierProvider<UserSettingsController, UserSettings?>(
+               () => testController,
+             )
           ),
+          // Provide the mocked biometric service
+          biometricServiceProvider.overrideWithValue(mockBiometricService),
         ],
-        child: const MaterialApp(
-          home: OnboardingScreen(),
+        child: SizedBox(
+          width: testScreenSize.width,
+          height: testScreenSize.height,
+          child: MaterialApp(
+            home: OnboardingScreen(),
+            // Add button theme to ensure proper sizing in tests
+            theme: ThemeData(
+              elevatedButtonTheme: ElevatedButtonThemeData(
+                style: ElevatedButton.styleFrom(
+                  fixedSize: const Size(200, 48),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
-    
+
+    await tester.pumpAndSettle();
+    // Return the controller for tests to access call history etc.
     return testController;
   }
 
   // Helper to advance to next page in onboarding
   Future<void> advanceToNextPage(WidgetTester tester) async {
-    await tester.tap(find.byKey(const ValueKey('onboardingNextButton')));
+    // Find button text rather than the widget type, as it's more reliable in test environment
+    final nextButtonFinder = find.text('NEXT');
+    final finishButtonFinder = find.text('FINISH SETUP');
+
+    // Try for Next button first, then Finish button if we're on the last page
+    final buttonFinder = nextButtonFinder.evaluate().isNotEmpty 
+        ? nextButtonFinder 
+        : finishButtonFinder;
+    
+    expect(buttonFinder, findsOneWidget, reason: 'Could not find NEXT or FINISH SETUP button');
+    await tester.tap(buttonFinder);
     await tester.pumpAndSettle();
   }
 
   group('OnboardingScreen Widget Tests', () {
     testWidgets('Renders initial onboarding content and controls', (WidgetTester tester) async {
       // Arrange
-      final testController = await pumpOnboardingScreen(tester);
+      await pumpOnboardingScreen(tester);
 
       // Act & Assert
-      expect(find.textContaining('Welcome'), findsOneWidget); // Welcome page title
-      expect(find.byType(PageView), findsOneWidget); // Verify PageView exists
-      expect(find.byKey(const ValueKey('onboardingNextButton')), findsOneWidget); // Next button should be present
-      
+      expect(find.textContaining('Welcome'), findsOneWidget);
+      expect(find.byType(PageView), findsOneWidget);
+      // Find PrimaryButton instead of by key
+      expect(find.byType(PrimaryButton), findsOneWidget);
+
       // Back button should not be visible on first page
-      expect(find.byKey(const ValueKey('onboardingBackButton')), findsNothing);
+      expect(find.widgetWithIcon(TextButton, Icons.arrow_back), findsNothing);
     });
 
     testWidgets('Calls updateSettingsFromOnboarding on final step completion', (WidgetTester tester) async {
       // Arrange
-      final testController = await pumpOnboardingScreen(tester);
+      final testController = await pumpOnboardingScreen(tester); // Get the controller
 
       // Act: Navigate through all pages
       // Page 0 -> 1: Welcome to Goal
       await advanceToNextPage(tester);
-      
-      // Enter goal value
-      await tester.enterText(find.byKey(const ValueKey('dailyGoalField')), '100');
-      
+
+      // Enter goal value - Find by type or more specific ancestor if key fails
+      await tester.enterText(find.byType(StyledTextField).at(0), '100');
+
       // Page 1 -> 2: Goal to Preferences
       await advanceToNextPage(tester);
-      
-      // Enter stale threshold
-      await tester.enterText(find.byKey(const ValueKey('staleThresholdField')), '30');
-      
+
+      // Enter stale threshold - Find by type or more specific ancestor
+      await tester.enterText(find.byType(StyledTextField).at(0), '30'); // Assuming it's the first on this page
+
       // Page 2 -> 3: Preferences to Security
       await advanceToNextPage(tester);
-      
+
       // Page 3 -> 4: Security to Final
       await advanceToNextPage(tester);
-      
-      // Complete onboarding on final page
-      await tester.tap(find.byKey(const ValueKey('onboardingCompleteButton')));
+
+      // Complete onboarding on final page - Use text finder instead of type finder
+      await tester.tap(find.text('FINISH SETUP')); 
       await tester.pumpAndSettle();
 
       // Assert: Check that the controller method was called with settings update
@@ -147,30 +180,32 @@ void main() {
 
     testWidgets('Handles input fields and updates settings', (WidgetTester tester) async {
       // Arrange
-      final testController = await pumpOnboardingScreen(tester);
+      final testController = await pumpOnboardingScreen(tester); // Get the controller
 
       // Navigate to goals page (page 1)
       await advanceToNextPage(tester);
-      
-      // Enter goal amount
-      await tester.enterText(find.byKey(const ValueKey('dailyGoalField')), '200');
-      
+
+      // Enter goal amount - Find by type
+      await tester.enterText(find.byType(StyledTextField).first, '200');
+
       // Navigate to preferences page (page 2)
       await advanceToNextPage(tester);
-      
-      // Enter stale threshold
-      await tester.enterText(find.byKey(const ValueKey('staleThresholdField')), '45');
-      
+
+      // Enter stale threshold - Find by type
+      await tester.enterText(find.byType(StyledTextField).first, '45'); // Assuming it's the first on this page
+
       // Navigate to remaining pages and complete
       await advanceToNextPage(tester); // To security page
       await advanceToNextPage(tester); // To final page
-      await tester.tap(find.byKey(const ValueKey('onboardingCompleteButton')));
+      
+      // Use text finder instead of PrimaryButton
+      await tester.tap(find.text('FINISH SETUP'));
       await tester.pumpAndSettle();
 
       // Assert: Check settings were updated correctly
       expect(testController.settingsUpdateCalls.length, 1);
       final updates = testController.settingsUpdateCalls.first;
-      
+
       // Since we entered a goal on the "Weekly" frequency (which is the default)
       expect(updates['weekly_goal'], 200.0);
       expect(updates['stale_threshold_days'], 45);

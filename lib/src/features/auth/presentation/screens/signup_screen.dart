@@ -6,6 +6,8 @@ import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
 
 /// The signup screen.
 class SignupScreen extends ConsumerStatefulWidget {
@@ -173,12 +175,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 ],
                 
                 // Email field
-                TextFormField(
+                StyledTextField(
                   controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(AppIcons.email),
-                  ),
+                  labelText: 'Email',
+                  prefixIcon: Icon(AppIcons.email),
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
                   validator: (value) {
@@ -195,13 +195,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 SizedBox(height: context.spacingMd),
                 
                 // Password field
-                TextFormField(
+                StyledTextField(
                   controller: _passwordController,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: Icon(AppIcons.password),
-                    helperText: 'Must be 8+ chars, include upper, lower, digit.',
-                  ),
+                  labelText: 'Password',
+                  prefixIcon: Icon(AppIcons.password),
+                  hintText: 'Must be 8+ chars, include upper, lower, digit.',
                   obscureText: true,
                   textInputAction: TextInputAction.next,
                   validator: (value) {
@@ -229,12 +227,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 SizedBox(height: context.spacingMd),
                 
                 // Confirm password field
-                TextFormField(
+                StyledTextField(
                   controller: _confirmPasswordController,
-                  decoration: InputDecoration(
-                    labelText: 'Confirm Password',
-                    prefixIcon: Icon(AppIcons.password),
-                  ),
+                  labelText: 'Confirm Password',
+                  prefixIcon: Icon(AppIcons.password),
                   obscureText: true,
                   textInputAction: TextInputAction.done,
                   validator: (value) {
@@ -251,18 +247,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 SizedBox(height: context.spacingXl),
                 
                 // Sign up button
-                ElevatedButton(
+                PrimaryButton(
+                  text: 'Sign Up',
                   onPressed: _isLoading ? null : _signUp,
-                  child: _isLoading
-                      ? SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: context.onPrimaryColor,
-                          ),
-                        )
-                      : Text('Create Account'),
+                  isLoading: _isLoading,
                 ),
                 SizedBox(height: context.spacingMd),
                 

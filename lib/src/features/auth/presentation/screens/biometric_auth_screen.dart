@@ -9,6 +9,8 @@ import 'package:pallet_pro_app/src/features/auth/data/providers/biometric_servic
 import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart'; // For resetResumeFlag
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
+// Import global widgets
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
 
 /// Screen for handling biometric authentication on app resume.
 class BiometricAuthScreen extends ConsumerStatefulWidget {
@@ -248,38 +250,30 @@ class _BiometricAuthScreenState extends ConsumerState<BiometricAuthScreen> {
                 if (_isAuthenticating)
                   const Center(child: CircularProgressIndicator()),
                 // Show action buttons when not authenticating or when error occurred
-                if (!_isAuthenticating || _errorMessage != null) ...[
-                  // Option 1: Retry (Only shown on error)
-                  if (_errorMessage != null)
-                    ElevatedButton.icon(
-                       icon: const Icon(Icons.refresh),
-                       label: const Text('Retry'),
-                       onPressed: _authenticate, // Re-run the authentication process
-                       style: ElevatedButton.styleFrom(
-                         foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
-                         backgroundColor: Theme.of(context).colorScheme.errorContainer,
-                       ),
-                    ),
-                  if (_errorMessage != null) const SizedBox(height: 16), // Spacing after retry
-
-                  // Option 2: Use PIN (if enabled)
-                  if (pinAuthEnabled)
-                     TextButton(
-                      onPressed: _navigateToPinAuth,
-                      child: const Text('Use PIN Instead'),
-                    ),
-                  if (pinAuthEnabled) const SizedBox(height: 8), // Spacing after PIN
-
-                  // Option 3: Always show "Login with Password" as the ultimate fallback
-                  // Add spacing only if PIN button wasn't shown
-                  if (!pinAuthEnabled) const SizedBox(height: 24),
-                  TextButton(
-                    onPressed: _signOutAndLogin, // Calls the updated logic
-                    child: Text(
-                      'Login with Password Instead',
-                      style: TextStyle(color: Theme.of(context).colorScheme.secondary)
-                    ),
+                if (!_isAuthenticating) ...[
+                  PrimaryButton(
+                    text: 'Retry Authentication',
+                    onPressed: _authenticate,
+                    // No need for isLoading here as _isAuthenticating controls visibility
                   ),
+                  const SizedBox(height: 16),
+                  // Show PIN button only if PIN is enabled
+                  if (pinAuthEnabled)
+                     TextButton.icon(
+                        icon: const Icon(Icons.pin),
+                        label: const Text('Use PIN Instead'),
+                        onPressed: _navigateToPinAuth,
+                     ),
+                    const SizedBox(height: 8),
+                   // Always show Sign Out / Use other method button
+                   TextButton.icon(
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Sign Out & Use Other Method'),
+                      onPressed: _signOutAndLogin, // Sign out and go to login
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                   )
                 ],
               ],
             ),

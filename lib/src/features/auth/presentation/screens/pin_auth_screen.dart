@@ -6,6 +6,10 @@ import 'package:bcrypt/bcrypt.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
+// Import global widgets
+import 'package:pallet_pro_app/src/global/widgets/primary_button.dart';
+import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
+import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart'; // Added for context extensions
 
 /// Screen for handling PIN authentication on app resume or as fallback.
 class PinAuthScreen extends ConsumerStatefulWidget {
@@ -220,69 +224,73 @@ class _PinAuthScreenState extends ConsumerState<PinAuthScreen> {
                 ),
                 const SizedBox(height: 32),
                 // PIN Input Field
-                TextFormField(
+                StyledTextField(
                   controller: _pinController,
                   autofocus: true, // Focus PIN field immediately
-                  decoration: InputDecoration(
-                    // Keep labelText for the floating label effect
-                    labelText: 'PIN',
-                    // Use a more common and compact hint
-                    hintText: '****',
-                    hintStyle: TextStyle(
-                      fontSize: 20, // Adjust size as needed
-                      letterSpacing: 10, // Match input style spacing
-                      color: Theme.of(context).hintColor.withOpacity(0.5),
-                    ),
-                    prefixIcon: const Icon(Icons.pin),
-                    border: const OutlineInputBorder(),
-                    errorText: _errorMessage,
-                    // Add padding inside the text field
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 10.0),
-                    isDense: true, // Reduce default vertical padding
-                    // Center the hint text vertically
-                    alignLabelWithHint: true, 
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePin ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePin = !_obscurePin;
-                        });
-                      },
-                    ),
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  maxLength: 4,
+                  labelText: 'PIN',
+                  hintText: '****', // Use hintText
+                  prefixIcon: const Icon(Icons.pin),
                   obscureText: _obscurePin,
-                  textAlign: TextAlign.center, // Center PIN input digits
-                  textAlignVertical: TextAlignVertical.center, // Ensure vertical centering
-                  style: const TextStyle(fontSize: 24, letterSpacing: 10), // Larger PIN digits
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(4),
+                  ],
+                  maxLength: 4,
+                  // Center the input text horizontally
+                  textAlign: TextAlign.center,
+                  // Apply styling for better visual appearance of PIN input
+                  // style: const TextStyle(
+                  //   fontSize: 24, // Larger font for PIN digits
+                  //   letterSpacing: 10, // Add spacing between digits
+                  // ),
+                  // decoration: InputDecoration( ... ) properties moved to StyledTextField
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePin ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePin = !_obscurePin;
+                      });
+                    },
+                  ),
+                  validator: (value) {
+                     if (value == null || value.isEmpty) return 'Please enter PIN';
+                     if (value.length != 4) return 'PIN must be 4 digits';
+                     return null; // Return null if valid
+                  },
+                  // Optionally handle error display within StyledTextField or manage externally
+                  // errorText: _errorMessage, // Need to decide how StyledTextField handles errors
                   onChanged: (value) {
                     // Clear error message when user starts typing
                     if (_errorMessage != null) {
-                      setState(() { 
-                        _errorMessage = null; 
+                      setState(() {
+                        _errorMessage = null;
                       });
                     }
-                    
-                    // Automatically attempt verification when 4 digits are entered
-                    if (value.length == 4 && !_isLoading) {
+                    // Automatically submit when 4 digits are entered
+                    if (value.length == 4) {
                       _verifyPin();
                     }
                   },
+                  onFieldSubmitted: (_) => _verifyPin(),
+                  enabled: !_isLoading,
                 ),
-                const SizedBox(height: 32),
-                // Verify Button
-                ElevatedButton(
-                  onPressed: _isLoading || _pinController.text.length != 4 ? null : _verifyPin,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                // Display error message separately below the field if needed
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 24, width: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Unlock'),
+                const SizedBox(height: 32),
+                // Verify PIN Button
+                PrimaryButton( // <-- Replaced ElevatedButton
+                  text: 'Unlock',
+                  onPressed: _isLoading ? null : _verifyPin,
+                  isLoading: _isLoading,
                 ),
                 const SizedBox(height: 16),
                 // --- Button to explicitly Sign Out & Login with Password ---
