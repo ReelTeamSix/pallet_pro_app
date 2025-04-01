@@ -1,18 +1,66 @@
-/// The cost allocation method for items.
+import 'package:json_annotation/json_annotation.dart';
+
+part 'user_settings.g.dart';
+
+/// Enum for cost allocation methods
 enum CostAllocationMethod {
-  /// First-in, first-out.
-  fifo,
-  
-  /// Last-in, first-out..
-  lifo,
-  
-  /// Average cost.
+  @JsonValue('average')
   average,
+  @JsonValue('fifo')
+  fifo,
+  @JsonValue('lifo')
+  lifo,
+  @JsonValue('specific')
+  specific
 }
 
-/// The user settings model.
+/// Model representing user settings
+@JsonSerializable()
 class UserSettings {
-  /// Creates a new [UserSettings] instance.
+  @JsonKey(name: 'id')
+  final String userId;
+  
+  @JsonKey(name: 'has_completed_onboarding')
+  final bool hasCompletedOnboarding;
+  
+  final String theme;
+  
+  @JsonKey(name: 'enable_biometric_unlock')
+  final bool useBiometricAuth;
+  
+  @JsonKey(name: 'enable_pin_unlock')
+  final bool usePinAuth;
+  
+  @JsonKey(name: 'pin_hash')
+  final String? pinHash;
+  
+  @JsonKey(name: 'cost_allocation_method')
+  final CostAllocationMethod costAllocationMethod;
+  
+  @JsonKey(name: 'show_break_even')
+  final bool showBreakEvenPrice;
+  
+  @JsonKey(name: 'stale_threshold_days')
+  final int staleThresholdDays;
+  
+  @JsonKey(name: 'daily_goal')
+  final double dailySalesGoal;
+  
+  @JsonKey(name: 'weekly_goal')
+  final double weeklySalesGoal;
+  
+  @JsonKey(name: 'monthly_goal')
+  final double monthlySalesGoal;
+  
+  @JsonKey(name: 'yearly_goal')
+  final double yearlySalesGoal;
+  
+  @JsonKey(name: 'created_at')
+  final DateTime? createdAt;
+  
+  @JsonKey(name: 'updated_at')
+  final DateTime? updatedAt;
+
   const UserSettings({
     required this.userId,
     this.hasCompletedOnboarding = false,
@@ -23,118 +71,34 @@ class UserSettings {
     this.costAllocationMethod = CostAllocationMethod.average,
     this.showBreakEvenPrice = true,
     this.staleThresholdDays = 90,
-    this.dailySalesGoal = 0,
-    this.weeklySalesGoal = 0,
-    this.monthlySalesGoal = 0,
-    this.yearlySalesGoal = 0,
+    this.dailySalesGoal = 0.0,
+    this.weeklySalesGoal = 0.0,
+    this.monthlySalesGoal = 0.0,
+    this.yearlySalesGoal = 0.0,
     this.createdAt,
     this.updatedAt,
   });
 
-  /// The user ID.
-  final String userId;
-  
-  /// Whether the user has completed onboarding.
-  final bool hasCompletedOnboarding;
-  
-  /// The theme setting ('light', 'dark', 'system').
-  final String theme;
-  
-  /// Whether to use biometric authentication.
-  final bool useBiometricAuth;
-  
-  /// Whether to use PIN authentication.
-  final bool usePinAuth;
-  
-  /// The securely hashed PIN, if set.
-  final String? pinHash;
-  
-  /// The cost allocation method.
-  final CostAllocationMethod costAllocationMethod;
-  
-  /// Whether to show break-even price.
-  final bool showBreakEvenPrice;
-  
-  /// The stale threshold in days.
-  final int staleThresholdDays;
-  
-  /// The daily sales goal.
-  final double dailySalesGoal;
-  
-  /// The weekly sales goal.
-  final double weeklySalesGoal;
-  
-  /// The monthly sales goal.
-  final double monthlySalesGoal;
-  
-  /// The yearly sales goal.
-  final double yearlySalesGoal;
-  
-  /// The created at timestamp.
-  final DateTime? createdAt;
-  
-  /// The updated at timestamp.
-  final DateTime? updatedAt;
+  factory UserSettings.fromJson(Map<String, dynamic> json) => _$UserSettingsFromJson(json);
+  Map<String, dynamic> toJson() => _$UserSettingsToJson(this);
 
-  /// Creates a new [UserSettings] instance from JSON.
-  factory UserSettings.fromJson(Map<String, dynamic> json) {
-    return UserSettings(
-      // Fix: Use 'id' from database instead of 'user_id'
-      userId: json['id'] as String,
-      hasCompletedOnboarding: json['has_completed_onboarding'] as bool? ?? false,
-      // Fix: Use 'theme' with conversion instead of 'use_dark_mode'
-      theme: json['theme'] as String? ?? 'system',
-      // Fix: Use 'enable_biometric_unlock' instead of 'use_biometric_auth'
-      useBiometricAuth: json['enable_biometric_unlock'] as bool? ?? false,
-      // Add parsing for new PIN fields
-      usePinAuth: json['enable_pin_unlock'] as bool? ?? false,
-      pinHash: json['pin_hash'] as String?,
-      costAllocationMethod: costAllocationMethodFromString(json['cost_allocation_method'] as String?),
-      // Fix: Use 'show_break_even' instead of 'show_break_even_price'
-      showBreakEvenPrice: json['show_break_even'] as bool? ?? true,
-      staleThresholdDays: json['stale_threshold_days'] as int? ?? 90,
-      // Fix: Use 'daily_goal' instead of 'daily_sales_goal'
-      dailySalesGoal: (json['daily_goal'] as num?)?.toDouble() ?? 0,
-      weeklySalesGoal: (json['weekly_goal'] as num?)?.toDouble() ?? 0,
-      monthlySalesGoal: (json['monthly_goal'] as num?)?.toDouble() ?? 0,
-      yearlySalesGoal: (json['yearly_goal'] as num?)?.toDouble() ?? 0,
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
-          : null,
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'] as String)
-          : null,
-    );
+  /// Converts a string to a CostAllocationMethod
+  static CostAllocationMethod costAllocationMethodFromString(String value) {
+    switch (value.toLowerCase()) {
+      case 'average':
+        return CostAllocationMethod.average;
+      case 'fifo':
+        return CostAllocationMethod.fifo;
+      case 'lifo':
+        return CostAllocationMethod.lifo;
+      case 'specific':
+        return CostAllocationMethod.specific;
+      default:
+        return CostAllocationMethod.average;
+    }
   }
-
-  /// Converts this [UserSettings] instance to JSON.
-  Map<String, dynamic> toJson() {
-    return {
-      // Fix: Use 'id' for database instead of 'user_id'
-      'id': userId,
-      'has_completed_onboarding': hasCompletedOnboarding,
-      // Fix: Use 'theme' instead of 'use_dark_mode'
-      'theme': theme,
-      // Fix: Use 'enable_biometric_unlock' instead of 'use_biometric_auth'
-      'enable_biometric_unlock': useBiometricAuth,
-      // Add serialization for new PIN fields
-      'enable_pin_unlock': usePinAuth,
-      'pin_hash': pinHash,
-      'cost_allocation_method': _dbCostAllocationMethodFromEnum(costAllocationMethod),
-      // Fix: Use 'show_break_even' instead of 'show_break_even_price'
-      'show_break_even': showBreakEvenPrice,
-      'stale_threshold_days': staleThresholdDays,
-      // Fix: Use 'daily_goal' instead of 'daily_sales_goal'
-      'daily_goal': dailySalesGoal,
-      'weekly_goal': weeklySalesGoal,
-      'monthly_goal': monthlySalesGoal,
-      'yearly_goal': yearlySalesGoal,
-      'created_at': createdAt?.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
-    };
-  }
-
-  /// Creates a copy of this [UserSettings] instance with the given fields replaced.
+  
+  /// Creates a copy of this UserSettings with the given fields replaced
   UserSettings copyWith({
     String? userId,
     bool? hasCompletedOnboarding,
@@ -170,30 +134,39 @@ class UserSettings {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+  
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is UserSettings &&
+          runtimeType == other.runtimeType &&
+          userId == other.userId &&
+          hasCompletedOnboarding == other.hasCompletedOnboarding &&
+          theme == other.theme &&
+          useBiometricAuth == other.useBiometricAuth &&
+          usePinAuth == other.usePinAuth &&
+          pinHash == other.pinHash &&
+          costAllocationMethod == other.costAllocationMethod &&
+          showBreakEvenPrice == other.showBreakEvenPrice &&
+          staleThresholdDays == other.staleThresholdDays &&
+          dailySalesGoal == other.dailySalesGoal &&
+          weeklySalesGoal == other.weeklySalesGoal &&
+          monthlySalesGoal == other.monthlySalesGoal &&
+          yearlySalesGoal == other.yearlySalesGoal;
 
-  /// Converts a string to a [CostAllocationMethod].
-  static CostAllocationMethod costAllocationMethodFromString(String? value) {
-    switch (value) {
-      case 'even':
-        return CostAllocationMethod.fifo; // Map DB 'even' to app 'fifo'
-      case 'proportional':
-        return CostAllocationMethod.lifo; // Map DB 'proportional' to app 'lifo'
-      case 'manual':
-        return CostAllocationMethod.average; // Map DB 'manual' to app 'average'
-      default:
-        return CostAllocationMethod.average;
-    }
-  }
-
-  /// Maps the CostAllocationMethod enum to the DB string value
-  static String _dbCostAllocationMethodFromEnum(CostAllocationMethod method) {
-    switch (method) {
-      case CostAllocationMethod.fifo:
-        return 'even'; // Map app 'fifo' to DB 'even'
-      case CostAllocationMethod.lifo:
-        return 'proportional'; // Map app 'lifo' to DB 'proportional'
-      case CostAllocationMethod.average:
-        return 'manual'; // Map app 'average' to DB 'manual'
-    }
-  }
-}
+  @override
+  int get hashCode =>
+      userId.hashCode ^
+      hasCompletedOnboarding.hashCode ^
+      theme.hashCode ^
+      useBiometricAuth.hashCode ^
+      usePinAuth.hashCode ^
+      pinHash.hashCode ^
+      costAllocationMethod.hashCode ^
+      showBreakEvenPrice.hashCode ^
+      staleThresholdDays.hashCode ^
+      dailySalesGoal.hashCode ^
+      weeklySalesGoal.hashCode ^
+      monthlySalesGoal.hashCode ^
+      yearlySalesGoal.hashCode;
+} 

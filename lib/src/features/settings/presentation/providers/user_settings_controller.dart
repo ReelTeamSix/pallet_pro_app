@@ -480,7 +480,22 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
         final settings = await _userSettingsRepository.getUserSettings();
         
         // Compare with previous settings to minimize state changes
-        if (currentSettings == null || !_areSettingsEqual(currentSettings, settings)) {
+        if (currentSettings == null) {
+          debugPrint('UserSettingsController.refreshSettings: No current settings, updating state');
+          state = AsyncValue.data(settings);
+        } else if (currentSettings?.userId != settings.userId ||
+                  currentSettings?.hasCompletedOnboarding != settings.hasCompletedOnboarding ||
+                  currentSettings?.theme != settings.theme ||
+                  currentSettings?.useBiometricAuth != settings.useBiometricAuth ||
+                  currentSettings?.usePinAuth != settings.usePinAuth ||
+                  currentSettings?.pinHash != settings.pinHash ||
+                  currentSettings?.costAllocationMethod != settings.costAllocationMethod ||
+                  currentSettings?.showBreakEvenPrice != settings.showBreakEvenPrice ||
+                  currentSettings?.staleThresholdDays != settings.staleThresholdDays ||
+                  currentSettings?.dailySalesGoal != settings.dailySalesGoal ||
+                  currentSettings?.weeklySalesGoal != settings.weeklySalesGoal ||
+                  currentSettings?.monthlySalesGoal != settings.monthlySalesGoal ||
+                  currentSettings?.yearlySalesGoal != settings.yearlySalesGoal) {
           debugPrint('UserSettingsController.refreshSettings: Settings changed, updating state');
           state = AsyncValue.data(settings);
         } else {
@@ -507,22 +522,5 @@ class UserSettingsController extends AsyncNotifier<UserSettings?> {
         await Future.delayed(Duration(milliseconds: 500 * attempt));
       }
     }
-  }
-  
-  /// Helper to compare settings for equality to avoid unnecessary updates
-  bool _areSettingsEqual(UserSettings a, UserSettings b) {
-    return a.userId == b.userId &&
-           a.hasCompletedOnboarding == b.hasCompletedOnboarding &&
-           a.theme == b.theme &&
-           a.useBiometricAuth == b.useBiometricAuth &&
-           a.usePinAuth == b.usePinAuth &&
-           a.pinHash == b.pinHash &&
-           a.costAllocationMethod == b.costAllocationMethod &&
-           a.showBreakEvenPrice == b.showBreakEvenPrice &&
-           a.staleThresholdDays == b.staleThresholdDays &&
-           a.dailySalesGoal == b.dailySalesGoal &&
-           a.weeklySalesGoal == b.weeklySalesGoal &&
-           a.monthlySalesGoal == b.monthlySalesGoal &&
-           a.yearlySalesGoal == b.yearlySalesGoal;
   }
 }
