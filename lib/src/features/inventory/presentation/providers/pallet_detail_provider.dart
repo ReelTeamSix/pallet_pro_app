@@ -51,7 +51,7 @@ final palletDetailProvider = FutureProvider.family<SimplePallet?, String>((ref, 
     return SimplePallet.fromJson(palletJson);
   } catch (e) {
     if (e is! AppException) {
-      throw AppException('Failed to fetch pallet: $e');
+      throw UnexpectedException('Failed to fetch pallet: $e');
     }
     rethrow;
   }

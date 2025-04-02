@@ -1,3 +1,5 @@
+import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
+import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,8 +14,8 @@ class SupabaseItemRepository implements ItemRepository {
   String _getCurrentUserId() {
     final user = _supabaseClient.auth.currentUser;
     if (user == null) {
-      // TODO: Replace with AuthException
-      throw Exception('User not authenticated');
+      // TODO: Replace with concrete AuthException (e.g., AuthException.sessionExpired())
+      throw AuthException.sessionExpired();
     }
     return user.id;
   }
@@ -30,11 +32,10 @@ class SupabaseItemRepository implements ItemRepository {
   }
 
   @override
-  Future<Item> createItem(Item item) async {
-    final userId = _getCurrentUserId();
+  Future<Result<Item>> createItem(Item item) async {
     try {
+      final userId = _getCurrentUserId();
       final itemData = item.toJson();
-      // Ensure user_id is set for RLS
       itemData['user_id'] = userId;
       itemData.remove('id');
       itemData['created_at'] ??= DateTime.now().toIso8601String();
@@ -50,191 +51,156 @@ class SupabaseItemRepository implements ItemRepository {
           .select()
           .single();
 
-      return Item.fromJson(response);
+      return Success(Item.fromJson(response));
     } on PostgrestException catch (e) {
-      // TODO: Map to DatabaseException.creationFailed
-      print('Error creating item: ${e.message}');
-      throw Exception('Database error creating item: ${e.message}');
+       // TODO: Map to specific DatabaseException
+      return Failure(DatabaseException.creationFailed('item', e.message));
     } catch (e) {
-      // TODO: Map to generic exception
-      print('Unexpected error creating item: $e');
-      throw Exception('Unexpected error creating item: $e');
+      // TODO: Map to specific AppException or UnexpectedException
+      return Failure(UnexpectedException('Unexpected error creating item', e));
     }
   }
 
   @override
-  Future<Item?> getItemById(String id) async {
-     final userId = _getCurrentUserId(); // Auth check might not be needed if RLS is sufficient
+  Future<Result<Item?>> getItemById(String id) async {
     try {
       final response = await _supabaseClient
           .from(_tableName)
           .select()
           .eq('id', id)
-          // .eq('user_id', userId) // RLS should handle this, potentially remove
           .maybeSingle();
-
-      return response == null ? null : Item.fromJson(response);
+      
+      final item = response == null ? null : Item.fromJson(response);
+      return Success(item);
     } on PostgrestException catch (e) {
-      // TODO: Map to DatabaseException.fetchFailed
-      print('Error fetching item $id: ${e.message}');
-      throw Exception('Database error fetching item: ${e.message}');
+       // TODO: Map to specific DatabaseException
+      return Failure(DatabaseException.fetchFailed('item', e.message));
     } catch (e) {
-      // TODO: Map to generic exception
-      print('Unexpected error fetching item $id: $e');
-      throw Exception('Unexpected error fetching item: $e');
+      return Failure(UnexpectedException('Unexpected error fetching item', e));
     }
   }
 
   @override
-  Future<List<Item>> getAllItems() async {
-     final userId = _getCurrentUserId(); // Auth check might not be needed if RLS is sufficient
+  Future<Result<List<Item>>> getAllItems() async {
     try {
       final response = await _supabaseClient
           .from(_tableName)
           .select()
-          // .eq('user_id', userId) // RLS should handle this
           .order('created_at', ascending: false);
 
-      return response.map((json) => Item.fromJson(json)).toList();
+      final items = response.map((json) => Item.fromJson(json)).toList();
+      return Success(items);
     } on PostgrestException catch (e) {
-      // TODO: Map to DatabaseException.fetchFailed
-      print('Error fetching all items: ${e.message}');
-      throw Exception('Database error fetching items: ${e.message}');
+      return Failure(DatabaseException.fetchFailed('all items', e.message));
     } catch (e) {
-      // TODO: Map to generic exception
-      print('Unexpected error fetching all items: $e');
-      throw Exception('Unexpected error fetching items: $e');
+      return Failure(UnexpectedException('Unexpected error fetching items', e));
     }
   }
 
   @override
-  Future<List<Item>> getItemsByPallet(String palletId) async {
-     final userId = _getCurrentUserId(); // Auth check might not be needed if RLS is sufficient
+  Future<Result<List<Item>>> getItemsByPallet(String palletId) async {
     try {
       final response = await _supabaseClient
           .from(_tableName)
           .select()
           .eq('pallet_id', palletId)
-          // .eq('user_id', userId) // RLS should handle this
-          .order('created_at', ascending: true); // Or order as needed
+          .order('created_at', ascending: true); 
 
-      return response.map((json) => Item.fromJson(json)).toList();
+      final items = response.map((json) => Item.fromJson(json)).toList();
+      return Success(items);
     } on PostgrestException catch (e) {
-      // TODO: Map to DatabaseException.fetchFailed
-      print('Error fetching items for pallet $palletId: ${e.message}');
-      throw Exception('Database error fetching items by pallet: ${e.message}');
+      return Failure(DatabaseException.fetchFailed('items for pallet $palletId', e.message));
     } catch (e) {
-      // TODO: Map to generic exception
-      print('Unexpected error fetching items for pallet $palletId: $e');
-      throw Exception('Unexpected error fetching items by pallet: $e');
+      return Failure(UnexpectedException('Unexpected error fetching items by pallet', e));
     }
   }
 
    @override
-  Future<List<Item>> getItemsByStatus(ItemStatus status) async {
-    final userId = _getCurrentUserId(); // Auth check might not be needed if RLS is sufficient
+  Future<Result<List<Item>>> getItemsByStatus(ItemStatus status) async {
     try {
-      final statusString = _statusToDbString(status); // Convert enum to DB string
+      final statusString = _statusToDbString(status); 
       final response = await _supabaseClient
           .from(_tableName)
           .select()
           .eq('status', statusString)
-          // .eq('user_id', userId) // RLS should handle this
           .order('created_at', ascending: false);
 
-      return response.map((json) => Item.fromJson(json)).toList();
+      final items = response.map((json) => Item.fromJson(json)).toList();
+      return Success(items);
     } on PostgrestException catch (e) {
-       // TODO: Map to DatabaseException.fetchFailed
-      print('Error fetching items by status $status: ${e.message}');
-      throw Exception('Database error fetching items by status: ${e.message}');
+      return Failure(DatabaseException.fetchFailed('items with status $status', e.message));
     } catch (e) {
-      // TODO: Map to generic exception
-      print('Unexpected error fetching items by status $status: $e');
-      throw Exception('Unexpected error fetching items by status: $e');
+       return Failure(UnexpectedException('Unexpected error fetching items by status', e));
     }
   }
 
   @override
-  Future<List<Item>> getStaleItems({required Duration staleThreshold}) async {
-     final userId = _getCurrentUserId(); // Auth check might not be needed if RLS is sufficient
-     try {
-        // Calculate the threshold date
-       final thresholdDate = DateTime.now().subtract(staleThreshold);
-
-       final response = await _supabaseClient
-          .from(_tableName)
-          .select()
-          .eq('status', _statusToDbString(ItemStatus.forSale)) // Only consider items 'for_sale'
-          // Assumes 'acquired_date' or 'created_at' is used for staleness
-          .lt('acquired_date', thresholdDate.toIso8601String())
-          // .eq('user_id', userId) // RLS should handle this
-          .order('acquired_date', ascending: true);
-
-        return response.map((json) => Item.fromJson(json)).toList();
-     } on PostgrestException catch (e) {
-       // TODO: Map to DatabaseException.fetchFailed
-       print('Error fetching stale items: ${e.message}');
-       throw Exception('Database error fetching stale items: ${e.message}');
-     } catch (e) {
-       // TODO: Map to generic exception
-       print('Unexpected error fetching stale items: $e');
-       throw Exception('Unexpected error fetching stale items: $e');
-     }
-  }
-
-
-  @override
-  Future<Item> updateItem(Item item) async {
-    final userId = _getCurrentUserId(); // Auth check might not be needed if RLS is sufficient
+  Future<Result<List<Item>>> getStaleItems({required Duration staleThreshold}) async {
     try {
-      final itemData = item.toJson();
-      itemData.remove('user_id');
-      itemData.remove('id');
-      itemData['updated_at'] = DateTime.now().toIso8601String();
-
-      // Ensure enum fields are correctly serialized if needed (toJson should handle this)
-      // itemData['status'] = _statusToDbString(item.status); // Handled by toJson
-      // itemData['condition'] = item.condition.name; // Assuming DB stores condition name string
+      final thresholdDate = DateTime.now().subtract(staleThreshold);
 
       final response = await _supabaseClient
           .from(_tableName)
+          .select()
+          .eq('status', _statusToDbString(ItemStatus.forSale)) 
+          .lt('acquired_date', thresholdDate.toIso8601String())
+          .order('acquired_date', ascending: true);
+
+      final items = response.map((json) => Item.fromJson(json)).toList();
+      return Success(items);
+    } on PostgrestException catch (e) {
+      return Failure(DatabaseException.fetchFailed('stale items', e.message));
+    } catch (e) {
+      return Failure(UnexpectedException('Unexpected error fetching stale items', e));
+    }
+  }
+
+
+  @override
+  Future<Result<Item>> updateItem(Item item) async {
+    try {
+       final userId = _getCurrentUserId(); // Perform auth check early
+       final itemData = item.toJson();
+       itemData.remove('user_id');
+       itemData.remove('id');
+       itemData['updated_at'] = DateTime.now().toIso8601String();
+
+       // Ensure enum fields are correctly serialized if needed (toJson should handle this)
+       // itemData['status'] = _statusToDbString(item.status); // Handled by toJson
+       // itemData['condition'] = item.condition.name; // Assuming DB stores condition name string
+
+       final response = await _supabaseClient
+          .from(_tableName)
           .update(itemData)
           .eq('id', item.id)
-          // .eq('user_id', userId) // RLS should handle this
+          .eq('user_id', userId) // Ensure user ownership for update
           .select()
           .single();
 
-      return Item.fromJson(response);
+      return Success(Item.fromJson(response));
     } on PostgrestException catch (e) {
-      // TODO: Map to DatabaseException.updateFailed
-      print('Error updating item ${item.id}: ${e.message}');
-      throw Exception('Database error updating item: ${e.message}');
+       return Failure(DatabaseException.updateFailed('item ${item.id}', e.message));
     } catch (e) {
-       // TODO: Map to generic exception
-      print('Unexpected error updating item ${item.id}: $e');
-      throw Exception('Unexpected error updating item: $e');
+      return Failure(UnexpectedException('Unexpected error updating item', e));
     }
   }
 
   @override
-  Future<void> deleteItem(String id) async {
-    final userId = _getCurrentUserId(); // Auth check might not be needed if RLS is sufficient
+  Future<Result<void>> deleteItem(String id) async {
     try {
+      final userId = _getCurrentUserId(); // Perform auth check early
       await _supabaseClient
           .from(_tableName)
           .delete()
-          .eq('id', id);
-          // .eq('user_id', userId); // RLS should handle this
+          .eq('id', id)
+          .eq('user_id', userId); // Ensure user ownership for delete
 
       // Note: May need to delete associated photos, tags (join table records), expenses first.
+      return const Success(null); // Return Success(null) for void results
     } on PostgrestException catch (e) {
-      // TODO: Map to DatabaseException.deleteFailed
-      print('Error deleting item $id: ${e.message}');
-      throw Exception('Database error deleting item: ${e.message}');
+      return Failure(DatabaseException.deletionFailed('item $id', e.message));
     } catch (e) {
-      // TODO: Map to generic exception
-      print('Unexpected error deleting item $id: $e');
-      throw Exception('Unexpected error deleting item: $e');
+       return Failure(UnexpectedException('Unexpected error deleting item', e));
     }
   }
 

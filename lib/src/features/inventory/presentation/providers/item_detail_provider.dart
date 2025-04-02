@@ -40,8 +40,8 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
       if (result.isSuccess) {
         return result.value; // Access the item data
       } else {
-        // Throw the error contained in the Result for AsyncValue to handle
-        throw result.error ?? AppException('Unknown error fetching item'); 
+        // Throw the error contained in the Result or a fallback UnexpectedException
+        throw result.error ?? UnexpectedException('Unknown error fetching item'); 
       }
     } catch (e) {
       // If it's already an AppException (or specific subtype from repo), rethrow
@@ -49,7 +49,7 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
         rethrow;
       }
       // Otherwise, wrap it before rethrowing
-      throw AppException('Failed to fetch item: $e'); // Simplified error wrapping
+      throw UnexpectedException('Failed to fetch item: $e'); // Use UnexpectedException
     }
   }
 

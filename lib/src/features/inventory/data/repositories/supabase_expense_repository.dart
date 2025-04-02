@@ -76,26 +76,26 @@ class SupabaseExpenseRepository implements ExpenseRepository {
   Future<List<Expense>> getAllExpenses({DateTime? startDate, DateTime? endDate}) async {
     final userId = _getCurrentUserId(); // RLS should handle ownership
     try {
-      // Build query with optional date filtering
-      var query = _supabaseClient
+      // Start building the query
+      var queryBuilder = _supabaseClient
           .from(_tableName)
           .select();
           // .eq('user_id', userId) // RLS handles this
           
-      // Apply filters first
+      // Apply filters (returns PostgrestFilterBuilder)
       if (startDate != null) {
-        query = query.gte('date', startDate.toIso8601String());
+        queryBuilder = queryBuilder.gte('date', startDate.toIso8601String());
       }
       if (endDate != null) {
-        // Adjust end date to include the whole day if necessary
         final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
-        query = query.lte('date', endOfDay.toIso8601String());
+        queryBuilder = queryBuilder.lte('date', endOfDay.toIso8601String());
       }
 
-      // Apply order after filters
-      query = query.order('date', ascending: false); // Order by expense date
+      // Apply order (returns PostgrestTransformBuilder)
+      final orderedQuery = queryBuilder.order('date', ascending: false);
 
-      final response = await query;
+      // Await the final transformed query
+      final response = await orderedQuery;
 
       return response.map((json) => Expense.fromJson(json)).toList();
     } on PostgrestException catch (e) {

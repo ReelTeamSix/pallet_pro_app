@@ -714,7 +714,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                  context: context,
                  state: state,
                  child: const Scaffold(
-                   appBar: AppBar(title: Text("Error")),
+                   appBar: AppBar(title: const Text("Error")),
                    body: Center(child: Text("Invalid or missing reset token."))),
                );
              }
@@ -866,8 +866,8 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                          GoRoute(
                            path: '/reports', // Example placeholder
                            name: 'reports',
-                           builder: (context, state) => const Scaffold(
-                             appBar: AppBar(title: Text('Reports')),
+                           builder: (context, state) => Scaffold(
+                             appBar: AppBar(title: const Text('Reports')),
                              body: Center(child: Text('Reports Screen (Placeholder)')),
                            ),
                          ),

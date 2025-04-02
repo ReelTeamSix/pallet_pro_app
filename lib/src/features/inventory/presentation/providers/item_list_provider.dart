@@ -26,7 +26,7 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
     if (result.isSuccess) {
         return result.value;
     } else {
-        throw result.error ?? AppException('Unknown error fetching items');
+        throw result.error ?? UnexpectedException('Unknown error fetching items');
     }
   }
 
@@ -45,6 +45,12 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
 final itemListProvider = AsyncNotifierProvider<ItemListNotifier, List<Item>>(
   ItemListNotifier.new,
 );
+
+// TEMPORARY: Mock data for UI testing until model issues are fixed
+
+// Temporary simple model class for UI testing
+
+// Mock provider that returns fixed data
 
 // TEMPORARY: Mock data for UI testing until model issues are fixed
 final _mockItems = [

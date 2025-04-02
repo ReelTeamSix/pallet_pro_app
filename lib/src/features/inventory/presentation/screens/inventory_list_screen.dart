@@ -6,10 +6,8 @@ import 'package:pallet_pro_app/src/routing/app_router.dart'; // Import route nam
 
 import '../providers/item_list_provider.dart';
 import '../providers/pallet_list_provider.dart';
-import '../../data/models/pallet.dart'; // Import Pallet model
-import '../../data/models/item.dart'; // Import Item model
-import '../../data/models/simple_pallet.dart'; // Import SimplePallet model
-import '../../data/models/simple_item.dart'; // Import SimpleItem model
+import 'package:pallet_pro_app/src/features/inventory/data/models/pallet.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
 // TODO: Import Pallet and Item models if needed for display
 
 // Placeholder ShimmerLoader - Replace with your actual implementation or package
