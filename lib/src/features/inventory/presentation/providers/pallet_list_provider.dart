@@ -20,14 +20,14 @@ class PalletListNotifier extends AsyncNotifier<List<Pallet>> {
   }
 
   Future<List<Pallet>> _fetchPallets() async {
-    final result = await _palletRepository.fetchPallets();
-    switch (result) {
-      case Success(value: final pallets):
-        return pallets;
-      case Failure(exception: final exception):
+    // Corrected repository method name
+    final result = await _palletRepository.getAllPallets();
+    
+    if (result.isSuccess) {
+        return result.value;
+    } else {
         // Re-throw the specific exception to be handled by AsyncValue.error
-        // Or potentially map it to a more user-friendly error state later.
-        throw exception;
+        throw result.error ?? AppException('Unknown error fetching pallets');
     }
   }
 

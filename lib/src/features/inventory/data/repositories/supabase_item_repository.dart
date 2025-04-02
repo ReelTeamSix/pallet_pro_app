@@ -20,17 +20,12 @@ class SupabaseItemRepository implements ItemRepository {
 
   // Helper to convert ItemStatus enum to DB string based on @JsonValue
   String _statusToDbString(ItemStatus status) {
-    // This relies on the enum definition having @JsonValue annotations
-    // A more robust way might involve a switch or map if annotations aren't used
-    try {
-      return status.toJson(); // Uses the generated toJson for enum serialization
-    } catch (_) {
-      // Fallback if toJson isn't generated or fails
-      switch (status) {
-        case ItemStatus.forSale: return 'for_sale';
-        case ItemStatus.sold: return 'sold';
-        case ItemStatus.archived: return 'archived';
-      }
+    // Use a switch statement based on the enum values and their expected @JsonValue
+    switch (status) {
+      case ItemStatus.forSale: return 'for_sale';
+      case ItemStatus.sold: return 'sold';
+      case ItemStatus.archived: return 'archived';
+      // Add a default case or handle potential future statuses if necessary
     }
   }
 

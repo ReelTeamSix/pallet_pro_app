@@ -36,20 +36,20 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
     try {
       // The repository method name might be different - adjust as needed
       final result = await _itemRepository.getItemById(itemId);
-      
-      return result.when(
-        success: (item) => item,
-        failure: (exception) {
-          // Re-throw to let AsyncValue handle the error state.
-          throw exception;
-        },
-      );
-    } catch (e) {
-      // Convert to AppException if it's not already
-      if (e is! AppException) {
-        throw DataException('Failed to fetch item: $e');
+
+      if (result.isSuccess) {
+        return result.value; // Access the item data
+      } else {
+        // Throw the error contained in the Result for AsyncValue to handle
+        throw result.error ?? AppException('Unknown error fetching item'); 
       }
-      rethrow;
+    } catch (e) {
+      // If it's already an AppException (or specific subtype from repo), rethrow
+      if (e is AppException) {
+        rethrow;
+      }
+      // Otherwise, wrap it before rethrowing
+      throw AppException('Failed to fetch item: $e'); // Simplified error wrapping
     }
   }
 

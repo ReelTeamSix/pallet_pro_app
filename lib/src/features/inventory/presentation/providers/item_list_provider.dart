@@ -21,12 +21,12 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
 
   Future<List<Item>> _fetchItems() async {
     // Note: This fetches ALL items. Consider adding filtering by pallet later.
-    final result = await _itemRepository.fetchItems();
-    switch (result) {
-      case Success(value: final items):
-        return items;
-      case Failure(exception: final exception):
-        throw exception;
+    final result = await _itemRepository.getAllItems();
+
+    if (result.isSuccess) {
+        return result.value;
+    } else {
+        throw result.error ?? AppException('Unknown error fetching items');
     }
   }
 

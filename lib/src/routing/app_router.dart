@@ -718,11 +718,10 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                    body: Center(child: Text("Invalid or missing reset token."))),
                );
              }
-             // Pass the validated token to the screen
             return _buildPageWithTransition(
               context: context,
               state: state,
-              child: ResetPasswordScreen(resetToken: token),
+              child: ResetPasswordScreen(),
             );
           }
         ),
@@ -751,28 +750,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
            pageBuilder: (context, state) => _buildPageWithTransition(
             context: context,
             state: state,
-            child: PinAuthScreen(
-              onAuthenticated: (BuildContext authContext) {
-                 debugPrint("RouterNotifier: PIN Auth Success Callback Triggered");
-                // Mark authentication as completed
-                _lastAuthCompletionTime = DateTime.now();
-                _initialAuthDone = true; // Mark initial auth as done
-                _wasResumed = false; // Clear resume flag
-                 _postAuthTarget = _PostAuthNavigationTarget.none; // Clear any specific target
-
-                // Use GoRouter's context to navigate *after* successful auth
-                // Important: Ensure this context is valid for navigation
-                 // Check if context is still mounted before navigating
-                  if (authContext.mounted) {
-                    // Determine the target location - usually 'home' after PIN auth
-                     debugPrint("RouterNotifier: Navigating to Home after PIN Auth");
-                    GoRouter.of(authContext).go(home);
-                  } else {
-                     debugPrint("RouterNotifier: PIN Auth Context not mounted, cannot navigate.");
-                     // Fallback or error handling if context is lost
-                  }
-              },
-            ),
+            child: const PinAuthScreen(),
           ),
         ),
          GoRoute(
@@ -790,21 +768,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
            pageBuilder: (context, state) => _buildPageWithTransition(
             context: context,
             state: state,
-            child: BiometricAuthScreen(
-               onAuthenticated: (BuildContext authContext) {
-                 debugPrint("RouterNotifier: Biometric Auth Success Callback Triggered");
-                _lastAuthCompletionTime = DateTime.now();
-                _initialAuthDone = true;
-                _wasResumed = false;
-                _postAuthTarget = _PostAuthNavigationTarget.none;
-                  if (authContext.mounted) {
-                     debugPrint("RouterNotifier: Navigating to Home after Biometric Auth");
-                     GoRouter.of(authContext).go(home);
-                  } else {
-                     debugPrint("RouterNotifier: Biometric Auth Context not mounted, cannot navigate.");
-                  }
-              },
-            ),
+            child: const BiometricAuthScreen(),
           ),
         ),
         // Shell Route for main app sections with bottom navigation (placeholder)
@@ -903,7 +867,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                            path: '/reports', // Example placeholder
                            name: 'reports',
                            builder: (context, state) => const Scaffold(
-                             appBar: AppBar(title: const Text('Reports')),
+                             appBar: AppBar(title: Text('Reports')),
                              body: Center(child: Text('Reports Screen (Placeholder)')),
                            ),
                          ),
@@ -962,9 +926,9 @@ class RouterNotifier extends Notifier<void> implements Listenable {
           final settingsState = ref.read(userSettingsControllerProvider);
           final user = authState.valueOrNull;
           final settings = settingsState.valueOrNull;
-          final hasPin = settings?.isPinEnabled ?? false;
-          final hasBiometrics = settings?.isBiometricEnabled ?? false;
-          final isBiometricSupported = ref.read(isBiometricSupportedProvider);
+          final hasPin = settings?.usePinAuth ?? false;
+          final hasBiometrics = settings?.useBiometricAuth ?? false;
+          final isBiometricSupported = ref.read(biometricServiceProvider).isBiometricAvailableSync();
           
            // Only trigger refresh if logged in and requires secondary auth
            if (user != null && (hasPin || (hasBiometrics && isBiometricSupported))) {

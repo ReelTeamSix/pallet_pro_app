@@ -79,18 +79,21 @@ class SupabaseExpenseRepository implements ExpenseRepository {
       // Build query with optional date filtering
       var query = _supabaseClient
           .from(_tableName)
-          .select()
+          .select();
           // .eq('user_id', userId) // RLS handles this
-          .order('date', ascending: false); // Order by expense date
-
+          
+      // Apply filters first
       if (startDate != null) {
         query = query.gte('date', startDate.toIso8601String());
       }
-       if (endDate != null) {
-         // Adjust end date to include the whole day if necessary
-         final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
-         query = query.lte('date', endOfDay.toIso8601String());
-       }
+      if (endDate != null) {
+        // Adjust end date to include the whole day if necessary
+        final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+        query = query.lte('date', endOfDay.toIso8601String());
+      }
+
+      // Apply order after filters
+      query = query.order('date', ascending: false); // Order by expense date
 
       final response = await query;
 
