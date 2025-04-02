@@ -2,7 +2,7 @@ import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_repository.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 // TODO: Import custom exceptions
 
 class SupabaseItemRepository implements ItemRepository {
@@ -51,13 +51,13 @@ class SupabaseItemRepository implements ItemRepository {
           .select()
           .single();
 
-      return Success(Item.fromJson(response));
+      return Result.success(Item.fromJson(response));
     } on PostgrestException catch (e) {
        // TODO: Map to specific DatabaseException
-      return Failure(DatabaseException.creationFailed('item', e.message));
+      return Result.failure(DatabaseException.creationFailed('item', e.message));
     } catch (e) {
       // TODO: Map to specific AppException or UnexpectedException
-      return Failure(UnexpectedException('Unexpected error creating item', e));
+      return Result.failure(UnexpectedException('Unexpected error creating item', e));
     }
   }
 
@@ -71,12 +71,12 @@ class SupabaseItemRepository implements ItemRepository {
           .maybeSingle();
       
       final item = response == null ? null : Item.fromJson(response);
-      return Success(item);
+      return Result.success(item);
     } on PostgrestException catch (e) {
        // TODO: Map to specific DatabaseException
-      return Failure(DatabaseException.fetchFailed('item', e.message));
+      return Result.failure(DatabaseException.fetchFailed('item', e.message));
     } catch (e) {
-      return Failure(UnexpectedException('Unexpected error fetching item', e));
+      return Result.failure(UnexpectedException('Unexpected error fetching item', e));
     }
   }
 
@@ -89,11 +89,11 @@ class SupabaseItemRepository implements ItemRepository {
           .order('created_at', ascending: false);
 
       final items = response.map((json) => Item.fromJson(json)).toList();
-      return Success(items);
+      return Result.success(items);
     } on PostgrestException catch (e) {
-      return Failure(DatabaseException.fetchFailed('all items', e.message));
+      return Result.failure(DatabaseException.fetchFailed('all items', e.message));
     } catch (e) {
-      return Failure(UnexpectedException('Unexpected error fetching items', e));
+      return Result.failure(UnexpectedException('Unexpected error fetching items', e));
     }
   }
 
@@ -107,11 +107,11 @@ class SupabaseItemRepository implements ItemRepository {
           .order('created_at', ascending: true); 
 
       final items = response.map((json) => Item.fromJson(json)).toList();
-      return Success(items);
+      return Result.success(items);
     } on PostgrestException catch (e) {
-      return Failure(DatabaseException.fetchFailed('items for pallet $palletId', e.message));
+      return Result.failure(DatabaseException.fetchFailed('items for pallet $palletId', e.message));
     } catch (e) {
-      return Failure(UnexpectedException('Unexpected error fetching items by pallet', e));
+      return Result.failure(UnexpectedException('Unexpected error fetching items by pallet', e));
     }
   }
 
@@ -126,11 +126,11 @@ class SupabaseItemRepository implements ItemRepository {
           .order('created_at', ascending: false);
 
       final items = response.map((json) => Item.fromJson(json)).toList();
-      return Success(items);
+      return Result.success(items);
     } on PostgrestException catch (e) {
-      return Failure(DatabaseException.fetchFailed('items with status $status', e.message));
+      return Result.failure(DatabaseException.fetchFailed('items with status $status', e.message));
     } catch (e) {
-       return Failure(UnexpectedException('Unexpected error fetching items by status', e));
+       return Result.failure(UnexpectedException('Unexpected error fetching items by status', e));
     }
   }
 
@@ -147,11 +147,11 @@ class SupabaseItemRepository implements ItemRepository {
           .order('acquired_date', ascending: true);
 
       final items = response.map((json) => Item.fromJson(json)).toList();
-      return Success(items);
+      return Result.success(items);
     } on PostgrestException catch (e) {
-      return Failure(DatabaseException.fetchFailed('stale items', e.message));
+      return Result.failure(DatabaseException.fetchFailed('stale items', e.message));
     } catch (e) {
-      return Failure(UnexpectedException('Unexpected error fetching stale items', e));
+      return Result.failure(UnexpectedException('Unexpected error fetching stale items', e));
     }
   }
 
@@ -177,11 +177,11 @@ class SupabaseItemRepository implements ItemRepository {
           .select()
           .single();
 
-      return Success(Item.fromJson(response));
+      return Result.success(Item.fromJson(response));
     } on PostgrestException catch (e) {
-       return Failure(DatabaseException.updateFailed('item ${item.id}', e.message));
+       return Result.failure(DatabaseException.updateFailed('item ${item.id}', e.message));
     } catch (e) {
-      return Failure(UnexpectedException('Unexpected error updating item', e));
+      return Result.failure(UnexpectedException('Unexpected error updating item', e));
     }
   }
 
@@ -196,11 +196,11 @@ class SupabaseItemRepository implements ItemRepository {
           .eq('user_id', userId); // Ensure user ownership for delete
 
       // Note: May need to delete associated photos, tags (join table records), expenses first.
-      return const Success(null); // Return Success(null) for void results
+      return const Result.success(null); // Return Success(null) for void results
     } on PostgrestException catch (e) {
-      return Failure(DatabaseException.deletionFailed('item $id', e.message));
+      return Result.failure(DatabaseException.deletionFailed('item $id', e.message));
     } catch (e) {
-       return Failure(UnexpectedException('Unexpected error deleting item', e));
+       return Result.failure(UnexpectedException('Unexpected error deleting item', e));
     }
   }
 

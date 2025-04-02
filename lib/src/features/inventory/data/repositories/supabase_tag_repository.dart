@@ -260,7 +260,7 @@ class SupabaseTagRepository implements TagRepository {
       final tagsResponse = await _supabaseClient
           .from(_tagsTable)
           .select()
-          .in_('id', tagIds);
+          .inFilter('id', tagIds); // Using inFilter instead of in_
           // .order('name', ascending: true); // Optional: Add ordering if needed
 
       return tagsResponse.map((json) => Tag.fromJson(json)).toList();

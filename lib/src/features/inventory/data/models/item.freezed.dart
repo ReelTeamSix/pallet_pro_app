@@ -16,9 +16,11 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Item implements DiagnosticableTreeMixin {
 
- String get id;@JsonKey(name: 'pallet_id') String get palletId; String get name; String? get description; int get quantity;// Default to 1 if not specified
+ String get id;@JsonKey(name: 'pallet_id') String get palletId; String get name; String? get description; int get quantity;// Removed 'required' keyword
 @JsonKey(name: 'purchase_price') double? get purchasePrice;// May be calculated/allocated later
-@JsonKey(name: 'sale_price') double? get salePrice; String? get sku; ItemCondition get condition; ItemStatus get status;@JsonKey(name: 'acquired_date') DateTime? get acquiredDate;// Often same as pallet purchase date
+@JsonKey(name: 'sale_price') double? get salePrice; String? get sku; ItemCondition get condition;// Removed 'required' keyword
+ ItemStatus get status;// Removed 'required' keyword
+@JsonKey(name: 'acquired_date') DateTime? get acquiredDate;// Often same as pallet purchase date
 @JsonKey(name: 'sold_date') DateTime? get soldDate;@JsonKey(name: 'created_at') DateTime? get createdAt;@JsonKey(name: 'updated_at') DateTime? get updatedAt;// Placeholder for relationships - we might adjust how these are stored/fetched later
 // List<ItemPhoto>? photos,
 // List<Tag>? tags,
@@ -107,7 +109,7 @@ as double?,
 @JsonSerializable()
 
 class _Item with DiagnosticableTreeMixin implements Item {
-  const _Item({required this.id, @JsonKey(name: 'pallet_id') required this.palletId, required this.name, this.description, required this.quantity = 1, @JsonKey(name: 'purchase_price') this.purchasePrice, @JsonKey(name: 'sale_price') this.salePrice, this.sku, required this.condition = ItemCondition.newItem, required this.status = ItemStatus.forSale, @JsonKey(name: 'acquired_date') this.acquiredDate, @JsonKey(name: 'sold_date') this.soldDate, @JsonKey(name: 'created_at') this.createdAt, @JsonKey(name: 'updated_at') this.updatedAt, @JsonKey(name: 'allocated_cost') this.allocatedCost});
+  const _Item({required this.id, @JsonKey(name: 'pallet_id') required this.palletId, required this.name, this.description, this.quantity = 1, @JsonKey(name: 'purchase_price') this.purchasePrice, @JsonKey(name: 'sale_price') this.salePrice, this.sku, this.condition = ItemCondition.newItem, this.status = ItemStatus.forSale, @JsonKey(name: 'acquired_date') this.acquiredDate, @JsonKey(name: 'sold_date') this.soldDate, @JsonKey(name: 'created_at') this.createdAt, @JsonKey(name: 'updated_at') this.updatedAt, @JsonKey(name: 'allocated_cost') this.allocatedCost});
   factory _Item.fromJson(Map<String, dynamic> json) => _$ItemFromJson(json);
 
 @override final  String id;
@@ -115,13 +117,15 @@ class _Item with DiagnosticableTreeMixin implements Item {
 @override final  String name;
 @override final  String? description;
 @override@JsonKey() final  int quantity;
-// Default to 1 if not specified
+// Removed 'required' keyword
 @override@JsonKey(name: 'purchase_price') final  double? purchasePrice;
 // May be calculated/allocated later
 @override@JsonKey(name: 'sale_price') final  double? salePrice;
 @override final  String? sku;
 @override@JsonKey() final  ItemCondition condition;
+// Removed 'required' keyword
 @override@JsonKey() final  ItemStatus status;
+// Removed 'required' keyword
 @override@JsonKey(name: 'acquired_date') final  DateTime? acquiredDate;
 // Often same as pallet purchase date
 @override@JsonKey(name: 'sold_date') final  DateTime? soldDate;

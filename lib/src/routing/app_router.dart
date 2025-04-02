@@ -713,8 +713,8 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                return _buildPageWithTransition(
                  context: context,
                  state: state,
-                 child: const Scaffold(
-                   appBar: AppBar(title: const Text("Error")),
+                 child: Scaffold(
+                   appBar: AppBar(title: Text('Error')),
                    body: Center(child: Text("Invalid or missing reset token."))),
                );
              }
@@ -1032,41 +1032,115 @@ class ScaffoldWithNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: navigationShell, // The body is the page content managed by the shell
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_outlined),
-            activeIcon: Icon(Icons.dashboard),
-            label: 'Dashboard',
+      appBar: AppBar(
+        title: _buildTitleForIndex(navigationShell.currentIndex),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => GoRouter.of(context).go('/home/settings'),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-             activeIcon: Icon(Icons.bar_chart),
-            label: 'Reports',
-          ),
-           // Example: Adding Settings as a tab (adjust branches accordingly if used)
-           // BottomNavigationBarItem(
-           //  icon: Icon(AppIcons.settings_outlined), // Use custom icon
-           //  activeIcon: Icon(AppIcons.settings_filled),
-           //  label: 'Settings',
-           //),
         ],
-        currentIndex: navigationShell.currentIndex,
-        onTap: (index) {
-           // Use the shell's goBranch method to navigate branches
-           navigationShell.goBranch(
-             index,
-             // Support navigating back to initial location when tapping current tab
-             initialLocation: index == navigationShell.currentIndex,
-           );
-        },
-        // Customize theme/appearance as needed
-         // type: BottomNavigationBarType.fixed, // Or shifting
-         // selectedItemColor: Theme.of(context).colorScheme.primary,
-         // unselectedItemColor: Colors.grey,
       ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+              ),
+              child: const Text(
+                'Pallet Pro',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.dashboard),
+              title: const Text('Dashboard'),
+              onTap: () {
+                navigationShell.goBranch(0);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.inventory),
+              title: const Text('Inventory'),
+              onTap: () {
+                GoRouter.of(context).go('/home/inventory');
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bar_chart),
+              title: const Text('Reports'),
+              onTap: () {
+                navigationShell.goBranch(1);
+                Navigator.pop(context);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () {
+                GoRouter.of(context).go('/home/settings');
+                Navigator.pop(context);
+              },
+            ),
+            Consumer(
+              builder: (context, ref, _) {
+                return ListTile(
+                  leading: Icon(Icons.logout, color: Colors.red),
+                  title: Text('Log Out', style: TextStyle(color: Colors.red)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    ref.read(authControllerProvider.notifier).signOut();
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+      body: navigationShell,
+      bottomNavigationBar: ResponsiveUtils.isMobile(context) 
+          ? BottomNavigationBar(
+              items: const <BottomNavigationBarItem>[
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.dashboard_outlined),
+                  activeIcon: Icon(Icons.dashboard),
+                  label: 'Dashboard',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.bar_chart_outlined),
+                  activeIcon: Icon(Icons.bar_chart),
+                  label: 'Reports',
+                ),
+              ],
+              currentIndex: navigationShell.currentIndex,
+              onTap: (index) {
+                navigationShell.goBranch(
+                  index,
+                  initialLocation: index == navigationShell.currentIndex,
+                );
+              },
+            )
+          : null,
     );
+  }
+  
+  Widget _buildTitleForIndex(int index) {
+    switch (index) {
+      case 0:
+        return const Text('Pallet Pro'); // Changed from 'Dashboard' to avoid duplication
+      case 1:
+        return const Text('Pallet Pro'); // Changed from 'Reports' to avoid duplication
+      default:
+        return const Text('Pallet Pro');
+    }
   }
 }
 

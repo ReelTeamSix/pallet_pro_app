@@ -2,7 +2,7 @@ import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/pallet.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/pallet_repository.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 // TODO: Import custom exceptions
 // import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 
@@ -36,11 +36,11 @@ class SupabasePalletRepository implements PalletRepository {
           .select()
           .single();
 
-      return Success(Pallet.fromJson(response));
+      return Result.success(Pallet.fromJson(response));
     } on PostgrestException catch (e) {
-      return Failure(DatabaseException.creationFailed('pallet', e.message));
+      return Result.failure(DatabaseException.creationFailed('pallet', e.message));
     } catch (e) {
-      return Failure(UnexpectedException('Unexpected error creating pallet', e));
+      return Result.failure(UnexpectedException('Unexpected error creating pallet', e));
     }
   }
 
@@ -56,11 +56,11 @@ class SupabasePalletRepository implements PalletRepository {
           .maybeSingle();
 
       final pallet = response == null ? null : Pallet.fromJson(response);
-      return Success(pallet);
+      return Result.success(pallet);
     } on PostgrestException catch (e) {
-      return Failure(DatabaseException.fetchFailed('pallet $id', e.message));
+      return Result.failure(DatabaseException.fetchFailed('pallet $id', e.message));
     } catch (e) {
-      return Failure(UnexpectedException('Unexpected error fetching pallet', e));
+      return Result.failure(UnexpectedException('Unexpected error fetching pallet', e));
     }
   }
 
@@ -75,11 +75,11 @@ class SupabasePalletRepository implements PalletRepository {
           .order('created_at', ascending: false); 
 
       final pallets = response.map((json) => Pallet.fromJson(json)).toList();
-      return Success(pallets);
+      return Result.success(pallets);
     } on PostgrestException catch (e) {
-      return Failure(DatabaseException.fetchFailed('all pallets', e.message));
+      return Result.failure(DatabaseException.fetchFailed('all pallets', e.message));
     } catch (e) {
-      return Failure(UnexpectedException('Unexpected error fetching all pallets', e));
+      return Result.failure(UnexpectedException('Unexpected error fetching all pallets', e));
     }
   }
 
@@ -100,11 +100,11 @@ class SupabasePalletRepository implements PalletRepository {
           .select()
           .single();
 
-      return Success(Pallet.fromJson(response));
+      return Result.success(Pallet.fromJson(response));
     } on PostgrestException catch (e) {
-       return Failure(DatabaseException.updateFailed('pallet ${pallet.id}', e.message));
+       return Result.failure(DatabaseException.updateFailed('pallet ${pallet.id}', e.message));
     } catch (e) {
-      return Failure(UnexpectedException('Unexpected error updating pallet', e));
+      return Result.failure(UnexpectedException('Unexpected error updating pallet', e));
     }
   }
 
@@ -118,11 +118,11 @@ class SupabasePalletRepository implements PalletRepository {
           .eq('id', id)
           .eq('user_id', userId); 
 
-      return const Success(null); // Success for void
+      return const Result.success(null); // Success for void
     } on PostgrestException catch (e) {
-      return Failure(DatabaseException.deletionFailed('pallet $id', e.message));
+      return Result.failure(DatabaseException.deletionFailed('pallet $id', e.message));
     } catch (e) {
-       return Failure(UnexpectedException('Unexpected error deleting pallet', e));
+       return Result.failure(UnexpectedException('Unexpected error deleting pallet', e));
     }
   }
 } 

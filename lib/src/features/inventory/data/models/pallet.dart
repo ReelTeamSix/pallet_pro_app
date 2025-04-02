@@ -5,7 +5,7 @@ part 'pallet.freezed.dart';
 part 'pallet.g.dart';
 
 @freezed
-class Pallet with _$Pallet {
+abstract class Pallet with _$Pallet {
   const factory Pallet({
     required String id,
     required String name,

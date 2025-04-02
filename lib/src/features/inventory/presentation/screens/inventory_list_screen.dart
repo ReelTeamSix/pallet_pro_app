@@ -70,107 +70,161 @@ class ShimmerLoader extends StatelessWidget {
   }
 }
 
-
-class InventoryListScreen extends ConsumerWidget {
+class InventoryListScreen extends ConsumerStatefulWidget {
   const InventoryListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final palletsAsync = ref.watch(palletListProvider);
-    final itemsAsync = ref.watch(itemListProvider);
+  ConsumerState<InventoryListScreen> createState() => _InventoryListScreenState();
+}
 
-    // Combine loading/error states for simplicity, or handle separately
-    final isLoading = palletsAsync.isLoading || itemsAsync.isLoading;
-    final error = palletsAsync.error ?? itemsAsync.error;
-    final stackTrace = palletsAsync.stackTrace ?? itemsAsync.stackTrace;
+class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      // Force rebuild when tab changes to update the FAB
+      if (_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
+  }
+  
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Inventory'),
-        // TODO: Add FAB later for adding pallets (Part 5.3)
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.inventory_2),
+              text: 'Pallets',
+            ),
+            Tab(
+              icon: Icon(Icons.category),
+              text: 'Items',
+            ),
+          ],
+        ),
       ),
-      body: isLoading
-          ? const ShimmerLoader()
-          : error != null
-              ? Center(child: Text('Error loading inventory: $error\n$stackTrace'))
-              : RefreshIndicator( // Optional: Add pull-to-refresh
-                  onRefresh: () async {
-                    ref.invalidate(palletListProvider);
-                    ref.invalidate(itemListProvider);
-                    // Allow time for providers to start reloading
-                    await Future.wait([
-                       ref.read(palletListProvider.future),
-                       ref.read(itemListProvider.future)
-                    ]).catchError((_){}); // Ignore errors here, they are handled by the provider state
-                  },
-                  child: ListView(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Text('Pallets', style: Theme.of(context).textTheme.headlineSmall),
-                      ),
-                      palletsAsync.maybeWhen(
-                        data: (pallets) => pallets.isEmpty
-                            ? const Center(child: Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16.0),
-                                child: Text('No pallets found.')))
-                            : ListView.builder(
-                                shrinkWrap: true, // Important inside another ListView
-                                physics: const NeverScrollableScrollPhysics(), // Disable nested scrolling
-                                itemCount: pallets.length,
-                                itemBuilder: (context, index) {
-                                  final Pallet pallet = pallets[index];
-                                  return ListTile(
-                                    title: Text(pallet.supplier ?? 'Unknown Supplier'),
-                                    subtitle: Text('Type: ${pallet.type ?? "Unknown"}, ID: ${pallet.id}'),
-                                    trailing: const Icon(Icons.chevron_right),
-                                    onTap: () {
-                                      // Navigate to PalletDetailScreen
-                                      context.goNamed(
-                                        RouterNotifier.palletDetail,
-                                        pathParameters: {'pid': pallet.id} // Pass pallet ID
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                        orElse: () => Container(), // Handled by combined loading/error state above
-                      ),
-                      const Divider(height: 32.0, thickness: 1),
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Text('Items', style: Theme.of(context).textTheme.headlineSmall),
-                      ),
-                       itemsAsync.maybeWhen(
-                        data: (items) => items.isEmpty
-                            ? const Center(child: Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16.0),
-                                child: Text('No items found.')))
-                            : ListView.builder(
-                                shrinkWrap: true, // Important inside another ListView
-                                physics: const NeverScrollableScrollPhysics(), // Disable nested scrolling
-                                itemCount: items.length,
-                                itemBuilder: (context, index) {
-                                  final Item item = items[index];
-                                  return ListTile(
-                                    title: Text(item.name ?? 'No description'),
-                                    subtitle: Text('Condition: ${item.condition}, Qty: ${item.quantity}, ID: ${item.id}'),
-                                    trailing: const Icon(Icons.chevron_right),
-                                    onTap: () {
-                                      // Navigate to ItemDetailScreen
-                                      context.goNamed(
-                                        RouterNotifier.itemDetail,
-                                        pathParameters: {'iid': item.id} // Pass item ID
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                        orElse: () => Container(), // Handled by combined loading/error state above
-                      ),
-                    ],
+      body: TabBarView(
+        controller: _tabController,
+        children: const [
+          _PalletsTab(),
+          _ItemsTab(),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          final String message = _tabController.index == 0
+              ? 'Add Pallet feature coming in Phase 5.3'
+              : 'Add Item feature coming in Phase 5.4';
+              
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message))
+          );
+        },
+        icon: const Icon(Icons.add),
+        label: Text(_tabController.index == 0 ? 'Add Pallet' : 'Add Item'),
+      ),
+    );
+  }
+}
+
+class _PalletsTab extends ConsumerWidget {
+  const _PalletsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palletsAsync = ref.watch(simplePalletListProvider);
+    
+    return palletsAsync.when(
+      loading: () => const ShimmerLoader(),
+      error: (error, stackTrace) => Center(
+        child: Text('Error loading pallets: $error'),
+      ),
+      data: (pallets) => RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(simplePalletListProvider);
+        },
+        child: pallets.isEmpty
+          ? const Center(child: Text('No pallets found.'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: pallets.length,
+              itemBuilder: (context, index) {
+                final pallet = pallets[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: ListTile(
+                    title: Text(pallet.name),
+                    subtitle: Text('${pallet.supplier ?? "Unknown"} | \$${pallet.cost.toStringAsFixed(2)}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      context.goNamed(
+                        RouterNotifier.palletDetail,
+                        pathParameters: {'pid': pallet.id}
+                      );
+                    },
                   ),
-                ),
+                );
+              },
+            ),
+      ),
+    );
+  }
+}
+
+class _ItemsTab extends ConsumerWidget {
+  const _ItemsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final itemsAsync = ref.watch(simpleItemListProvider);
+    
+    return itemsAsync.when(
+      loading: () => const ShimmerLoader(),
+      error: (error, stackTrace) => Center(
+        child: Text('Error loading items: $error'),
+      ),
+      data: (items) => RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(simpleItemListProvider);
+        },
+        child: items.isEmpty
+          ? const Center(child: Text('No items found.'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: ListTile(
+                    title: Text(item.name ?? 'Unnamed Item'),
+                    subtitle: Text('Condition: ${item.condition} | Qty: ${item.quantity}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      context.goNamed(
+                        RouterNotifier.itemDetail,
+                        pathParameters: {'iid': item.id}
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+      ),
     );
   }
 } 

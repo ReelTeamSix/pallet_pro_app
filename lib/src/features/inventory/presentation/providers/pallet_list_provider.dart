@@ -66,10 +66,93 @@ final palletListProvider =
 );
 
 // TEMPORARY: Mock data for UI testing until model issues are fixed
-// Removed _mockPallets list
+final _mockPallets = [
+  {
+    'id': 'p1',
+    'name': 'Electronics Pallet #1',
+    'description': 'Mixed lot of consumer electronics',
+    'purchase_price': 450.00,
+    'purchase_date': '2023-10-15T00:00:00.000Z',
+    'source': 'ABC Liquidators',
+    'status': 'active',
+    'created_at': '2023-10-16T10:00:00.000Z',
+  },
+  {
+    'id': 'p2',
+    'name': 'Clothing Pallet #1',
+    'description': 'Assorted brand name clothing items',
+    'purchase_price': 350.00,
+    'purchase_date': '2023-11-20T00:00:00.000Z',
+    'source': 'Fashion Wholesale',
+    'status': 'active',
+    'created_at': '2023-11-21T09:30:00.000Z',
+  },
+  {
+    'id': 'p3',
+    'name': 'Home Goods Pallet',
+    'description': 'Kitchen and bathroom items',
+    'purchase_price': 275.50,
+    'purchase_date': '2023-12-05T00:00:00.000Z',
+    'source': 'Home Liquidation Co',
+    'status': 'active',
+    'created_at': '2023-12-06T14:00:00.000Z',
+  }
+];
 
 // Temporary simple model class for UI testing
-// Removed SimplePallet class definition
+class SimplePallet {
+  final String id;
+  final String name;
+  final String? description;
+  final double? purchasePrice;
+  final DateTime? purchaseDate;
+  final String? source;
+  final String status;
+  final DateTime? createdAt;
+  final double cost;
+  final String? supplier;
+  final String? type;
+  
+  SimplePallet({
+    required this.id,
+    required this.name,
+    this.description,
+    this.purchasePrice,
+    this.purchaseDate,
+    this.source,
+    required this.status,
+    this.createdAt,
+    required this.cost,
+    this.supplier,
+    this.type,
+  });
+  
+  factory SimplePallet.fromJson(Map<String, dynamic> json) {
+    return SimplePallet(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      description: json['description'] as String?,
+      purchasePrice: json['purchase_price'] as double?,
+      purchaseDate: json['purchase_date'] != null 
+        ? DateTime.parse(json['purchase_date'] as String)
+        : null,
+      source: json['source'] as String?,
+      status: json['status'] as String,
+      createdAt: json['created_at'] != null 
+        ? DateTime.parse(json['created_at'] as String)
+        : null,
+      cost: (json['cost'] as num?)?.toDouble() ?? 0.0,
+      supplier: json['supplier'] as String?,
+      type: json['type'] as String?,
+    );
+  }
+}
 
-// Mock provider that returns fixed data
-// Removed duplicate palletListProvider (FutureProvider) definition 
+// Mock provider for SimplePallet as an alternative to the main provider
+final simplePalletListProvider = FutureProvider<List<SimplePallet>>((ref) async {
+  // Simulate network delay
+  await Future.delayed(const Duration(seconds: 1));
+  
+  // Return mock data
+  return _mockPallets.map((json) => SimplePallet.fromJson(json)).toList();
+}); 

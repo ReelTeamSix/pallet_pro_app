@@ -140,7 +140,7 @@ final itemDetailProviderMock = FutureProvider.family<SimpleItem?, String>((ref, 
     return SimpleItem.fromJson(itemJson);
   } catch (e) {
     if (e is! AppException) {
-      throw AppException('Failed to fetch item: $e');
+      throw UnexpectedException('Failed to fetch item: $e');
     }
     rethrow;
   }

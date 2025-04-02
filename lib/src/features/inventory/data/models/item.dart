@@ -27,18 +27,18 @@ enum ItemStatus {
 }
 
 @freezed
-class Item with _$Item {
+abstract class Item with _$Item {
   const factory Item({
     required String id,
     @JsonKey(name: 'pallet_id') required String palletId,
     required String name,
     String? description,
-    @Default(1) required int quantity, // Default to 1 if not specified
+    @Default(1) int quantity, // Removed 'required' keyword
     @JsonKey(name: 'purchase_price') double? purchasePrice, // May be calculated/allocated later
     @JsonKey(name: 'sale_price') double? salePrice,
     String? sku,
-    @Default(ItemCondition.newItem) required ItemCondition condition,
-    @Default(ItemStatus.forSale) required ItemStatus status,
+    @Default(ItemCondition.newItem) ItemCondition condition, // Removed 'required' keyword
+    @Default(ItemStatus.forSale) ItemStatus status, // Removed 'required' keyword
     @JsonKey(name: 'acquired_date') DateTime? acquiredDate, // Often same as pallet purchase date
     @JsonKey(name: 'sold_date') DateTime? soldDate,
     @JsonKey(name: 'created_at') DateTime? createdAt,
