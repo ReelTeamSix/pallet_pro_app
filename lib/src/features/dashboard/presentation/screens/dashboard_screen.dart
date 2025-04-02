@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:pallet_pro_app/src/routing/app_router.dart';
 
 /// Placeholder screen for the main dashboard.
 class DashboardScreen extends StatelessWidget {
@@ -11,10 +13,22 @@ class DashboardScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Dashboard'),
       ),
-      body: const Center(
-        child: Text(
-          'Dashboard Screen - Content goes here!',
-          style: TextStyle(fontSize: 18),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Dashboard Screen - Content goes here!',
+              style: TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                context.goNamed(RouterNotifier.inventoryList);
+              },
+              child: const Text('Go to Inventory (Temp)'),
+            ),
+          ],
         ),
       ),
     );

@@ -17,7 +17,9 @@ import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_auth_s
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/forgot_password_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/reset_password_screen.dart';
 import 'package:pallet_pro_app/src/features/dashboard/presentation/screens/dashboard_screen.dart';
-import 'package:pallet_pro_app/src/features/inventory/presentation/screens/inventory_screen.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/screens/inventory_list_screen.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/screens/pallet_detail_screen.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/screens/item_detail_screen.dart';
 import 'package:pallet_pro_app/src/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/screens/settings_screen.dart';
@@ -87,6 +89,25 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   Timer? _splashTimeoutTimer;
   final _routeObserver = _RouterObserver();
   
+  // Define route names for better management
+  static const splash = '/splash';
+  static const login = '/login';
+  static const signup = '/signup';
+  static const forgotPassword = '/forgot-password';
+  static const resetPassword = '/reset-password'; // Assumes it needs a token
+  static const onboarding = '/onboarding';
+  static const pinSetup = '/pin-setup';
+  static const pinAuth = '/pin-auth';
+  static const biometricSetup = '/biometric-setup';
+  static const biometricAuth = '/biometric-auth';
+  static const home = '/home';
+  static const settings = '/settings';
+  // NEW Inventory Routes
+  static const inventoryList = '/inventory';
+  static const palletDetail = '/inventory/pallet/:pid'; // pid = pallet id
+  static const itemDetail = '/inventory/item/:iid'; // iid = item id
+  // TODO: Add routes for Add/Edit screens later
+
   @override
   void build() {
     // _initialAuthDone should persist until logout, so don't reset it here.
@@ -337,8 +358,8 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     return _postAuthTarget;
   }
 
-  /// The core redirect logic.
-  String? _redirectLogic(BuildContext context, GoRouterState state) {
+  /// Redirect logic based on auth state and user settings.
+  FutureOr<String?> _redirectLogic(BuildContext context, GoRouterState state) async {
     final location = state.matchedLocation;
     final queryParams = state.uri.queryParameters;
     final from = queryParams['from'] ?? '';
@@ -644,516 +665,462 @@ class RouterNotifier extends Notifier<void> implements Listenable {
     }
   }
 
-  /// The routes for the application.
+  /// Defines the routes for the application.
   List<RouteBase> get _routes => [
         GoRoute(
-          path: '/splash',
-          name: 'splash',
-          pageBuilder: (context, state) => CustomTransitionPage<void>(
-            key: state.pageKey,
-            child: const SplashScreen(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 400),
+          path: splash,
+          name: splash,
+          builder: (context, state) => const Scaffold( // Simple splash screen
+            body: Center(child: CircularProgressIndicator()),
           ),
         ),
         GoRoute(
-          path: '/login',
-          name: 'login',
-          pageBuilder: (context, state) => CustomTransitionPage<void>(
-            key: state.pageKey,
-            child: LoginScreen(from: state.uri.queryParameters['from']),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 300),
+          path: login,
+          name: login,
+          pageBuilder: (context, state) => _buildPageWithTransition(
+            context: context,
+            state: state,
+            child: const LoginScreen(),
           ),
         ),
         GoRoute(
-          path: '/signup',
-          name: 'signup',
-          builder: (context, state) => SignupScreen(
-            from: state.uri.queryParameters['from'],
+          path: signup,
+          name: signup,
+          pageBuilder: (context, state) => _buildPageWithTransition(
+            context: context,
+            state: state,
+            child: const SignupScreen(),
+          ),
+        ),
+         GoRoute(
+          path: forgotPassword,
+          name: forgotPassword,
+          pageBuilder: (context, state) => _buildPageWithTransition(
+            context: context,
+            state: state,
+            child: const ForgotPasswordScreen(),
           ),
         ),
         GoRoute(
-          path: '/forgot-password',
-          name: 'forgot_password',
-          builder: (context, state) => const ForgotPasswordScreen(),
-        ),
-        GoRoute(
-          path: '/reset-password',
-          name: 'reset_password',
-          builder: (context, state) => const ResetPasswordScreen(),
-        ),
-        GoRoute(
-          path: '/onboarding',
-          name: 'onboarding',
-          builder: (context, state) => const OnboardingScreen(),
-        ),
-        GoRoute(
-          path: '/biometric-setup',
-          name: 'biometric-setup',
-          builder: (context, state) => const BiometricSetupScreen(),
-        ),
-        GoRoute(
-          path: '/biometric-auth',
-          name: 'biometric-auth',
-          builder: (context, state) => BiometricAuthScreen(
-            // Pass the reason from query parameters
-            reason: state.uri.queryParameters['reason'],
-          ),
-        ),
-        GoRoute(
-          path: '/pin-setup',
-          name: 'pin-setup',
-          builder: (context, state) => const PinSetupScreen(),
-        ),
-        GoRoute(
-          path: '/pin-auth',
-          name: 'pin-auth',
-          builder: (context, state) => PinAuthScreen(
-            // Pass the reason from query parameters
-            reason: state.uri.queryParameters['reason'],
-          ),
-        ),
-        ShellRoute(
-          builder: (context, state, child) => AppShell(child: child),
-          routes: [
-            GoRoute(
-              path: '/home',
-              name: 'home',
-              pageBuilder: (context, state) => CustomTransitionPage<void>(
-                key: state.pageKey,
-                child: const DashboardScreen(),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-                transitionDuration: const Duration(milliseconds: 300),
-              ),
-            ),
-            GoRoute(
-              path: '/inventory',
-              name: 'inventory',
-              pageBuilder: (context, state) => CustomTransitionPage<void>(
-                key: state.pageKey,
-                child: const InventoryScreen(),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-                transitionDuration: const Duration(milliseconds: 300),
-              ),
-            ),
-            GoRoute(
-              path: '/scan',
-              name: 'scan',
-              builder: (context, state) => const PlaceholderScreen(title: 'Scan/Add'),
-            ),
-            GoRoute(
-              path: '/sales',
-              name: 'sales',
-              builder: (context, state) => const PlaceholderScreen(title: 'Sales'),
-            ),
-            GoRoute(
-              path: '/analytics',
-              name: 'analytics',
-              builder: (context, state) => const PlaceholderScreen(title: 'Analytics'),
-            ),
-            GoRoute(
-              path: '/settings',
-              name: 'settings',
-              pageBuilder: (context, state) => CustomTransitionPage<void>(
-                key: state.pageKey,
-                child: const SettingsScreen(),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-                transitionDuration: const Duration(milliseconds: 250),
-              ),
-            ),
-          ],
-        ),
-      ];
-}
-
-/// The app shell, providing consistent navigation (Drawer or BottomNav).
-class AppShell extends ConsumerWidget {
-  /// Creates a new [AppShell] instance.
-  const AppShell({
-    required this.child,
-    super.key,
-  });
-
-  /// The child widget.
-  final Widget child;
-
-  // Helper function to calculate navigation index based on route
-  int _calculateSelectedIndex(String currentLocation) {
-    if (currentLocation.startsWith('/inventory')) { // Check inventory first
-      return 1;
-    }
-    if (currentLocation.startsWith('/sales')) {
-      return 2;
-    }
-    if (currentLocation.startsWith('/analytics')) {
-      return 3;
-    }
-    if (currentLocation.startsWith('/settings')) {
-      return 4;
-    }
-    // Default to Dashboard/Home
-    return 0;
-  }
-
-  // Helper for navigation logic
-  void _navigate(BuildContext scaffoldContext, int index, String currentLocation) {
-     bool drawerIsOpen = false;
-     // Check if the Scaffold has a drawer and if it's open
-     // Use maybeOf to handle cases where Scaffold or drawer might not be present immediately
-     final scaffoldState = Scaffold.maybeOf(scaffoldContext);
-     if (scaffoldState?.hasDrawer ?? false) {
-        drawerIsOpen = scaffoldState!.isDrawerOpen;
-     }
-
-     if (drawerIsOpen) {
-       // Use root navigator to ensure drawer context isn't lost
-       Navigator.of(scaffoldContext, rootNavigator: true).pop();
-     }
-
-    // Use Future.delayed to allow the drawer to close before navigating
-    // Increased delay slightly for smoother drawer closing
-    Future.delayed(drawerIsOpen ? const Duration(milliseconds: 100) : Duration.zero, () {
-      if (!scaffoldContext.mounted) return;
-      final router = GoRouter.of(scaffoldContext);
-
-      switch (index) {
-        case 0:
-          if (!currentLocation.startsWith('/home')) router.go('/home');
-          break;
-        case 1:
-          if (!currentLocation.startsWith('/inventory')) router.go('/inventory');
-          break;
-        case 2:
-          if (!currentLocation.startsWith('/sales')) router.go('/sales');
-          break;
-        case 3:
-          if (!currentLocation.startsWith('/analytics')) router.go('/analytics');
-          break;
-        case 4:
-          if (!currentLocation.startsWith('/settings')) router.go('/settings');
-          break;
-      }
-    });
-  }
-  
-  // Helper for sign out logic
-  Future<void> _signOut(BuildContext scaffoldContext, WidgetRef ref) async {
-     try {
-        // Close drawer if open before attempting to sign out
-        if (Scaffold.of(scaffoldContext).isDrawerOpen) {
-          Navigator.of(scaffoldContext).pop();
-          // Add a slight delay to ensure the drawer has closed
-          await Future.delayed(const Duration(milliseconds: 50));
-        }
-        
-        // Check if context is still valid after drawer close
-        if (!scaffoldContext.mounted) return;
-        
-        // Show loading indicator to prevent multiple taps
-        ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-          const SnackBar(
-            content: Text('Signing out...'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-        
-        // Force trigger notifyListeners on the router after sign-out completes
-        ref.read(authControllerProvider.notifier).signOut().then((_) {
-          // Force a router refresh if the redirect didn't happen automatically
-          ref.read(routerNotifierProvider.notifier)._debouncedNotifyListeners();
-        });
-        
-        // Router redirect will automatically handle navigation to login
-      } catch (e) {
-        if (scaffoldContext.mounted) {
-          ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-            SnackBar(
-              content: Text(
-                e is AppException
-                    ? e.message
-                    : 'Failed to sign out: ${e.toString()}'
-              ),
-              backgroundColor: Theme.of(scaffoldContext).colorScheme.error,
-            ),
-          );
-        }
-      }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currentLocation = GoRouterState.of(context).matchedLocation;
-    final selectedIndex = _calculateSelectedIndex(currentLocation);
-
-    // Determine layout based on platform/screen size
-    final bool useDrawerLayout = ResponsiveUtils.isDesktop(context) || ResponsiveUtils.isTablet(context);
-
-    if (useDrawerLayout) {
-      // Web/Desktop/Tablet Layout using Drawer
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Pallet Pro'),
-          // Drawer icon will be added automatically by Scaffold
-        ),
-        drawer: Drawer(
-          child: Builder(
-            // Use Builder to get context below the Scaffold for Drawer
-            builder: (drawerContext) {
-              return ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  DrawerHeader(
-                    decoration: BoxDecoration(
-                      color: Theme.of(drawerContext).colorScheme.primaryContainer,
-                    ),
-                    child: Text(
-                      'Pallet Pro',
-                      style: Theme.of(drawerContext).textTheme.titleLarge?.copyWith(
-                        color: Theme.of(drawerContext).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.dashboard_outlined), // Dashboard icon
-                    title: const Text('Dashboard'), // Dashboard label
-                    selected: selectedIndex == 0,
-                    selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 0, currentLocation),
-                  ),
-                  ListTile(
-                    leading: const Icon(AppIcons.inventory), // Inventory icon
-                    title: const Text('Inventory'), // Inventory label
-                    selected: selectedIndex == 1,
-                    selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 1, currentLocation),
-                  ),
-                   ListTile(
-                    leading: const Icon(Icons.attach_money), // Sales icon
-                    title: const Text('Sales'), // Sales label
-                    selected: selectedIndex == 2,
-                    selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 2, currentLocation), // Placeholder
-                  ),
-                  ListTile(
-                    leading: const Icon(AppIcons.analytics), // Analytics icon
-                    title: const Text('Analytics'), // Analytics label
-                    selected: selectedIndex == 3,
-                    selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 3, currentLocation), // Placeholder
-                  ),
-                   ListTile(
-                    leading: const Icon(AppIcons.settings), // Settings icon
-                    title: const Text('Settings'), // Settings label
-                    selected: selectedIndex == 4,
-                    selectedTileColor: Theme.of(drawerContext).colorScheme.primaryContainer.withOpacity(0.1),
-                    onTap: () => _navigate(drawerContext, 4, currentLocation),
-                  ),
-                  const Divider(),
-                  ListTile(
-                    leading: Icon(Icons.logout, color: Theme.of(drawerContext).colorScheme.error),
-                    title: Text('Sign Out', style: TextStyle(color: Theme.of(drawerContext).colorScheme.error)),
-                    onTap: () => _signOut(drawerContext, ref),
-                  ),
-                ],
-              );
-            }
-          ),
-        ),
-        body: child, // Main content area
-      );
-    } else {
-      // Mobile Layout using BottomNavigationBar
-      return Scaffold(
-        // Use Builder to get context below the Scaffold for sign-out SnackBar etc.
-        body: Builder(
-          builder: (scaffoldBodyContext) {
-            // The AppBar no longer needs Settings/Logout actions.
-            return Column(
-              children: [
-                AppBar(
-                  title: const Text('Pallet Pro'),
-                  // No back button automatically if it's a top-level route in Shell
-                  // No leading hamburger icon needed for BottomNav
-                  actions: [
-                    // Remove Sign Out button from mobile layout AppBar
-                    // IconButton(
-                    //   icon: const Icon(Icons.logout),
-                    //   tooltip: 'Sign Out',
-                    //   // Use scaffoldBodyContext for ScaffoldMessenger access within _signOut
-                    //   onPressed: () => _signOut(scaffoldBodyContext, ref),
-                    // ),
-                  ], 
-                ),
-                Expanded(child: child), // Main content takes remaining space
-              ],
+          path: resetPassword,
+          name: resetPassword,
+          pageBuilder: (context, state) {
+            final token = state.uri.queryParameters['access_token'];
+             // Simple validation: Ensure token is present
+             if (token == null || token.isEmpty) {
+               // Redirect to login or show an error page if token is missing/invalid
+               // For simplicity, showing an error scaffold
+               return _buildPageWithTransition(
+                 context: context,
+                 state: state,
+                 child: const Scaffold(
+                   appBar: AppBar(title: Text("Error")),
+                   body: Center(child: Text("Invalid or missing reset token."))),
+               );
+             }
+             // Pass the validated token to the screen
+            return _buildPageWithTransition(
+              context: context,
+              state: state,
+              child: ResetPasswordScreen(resetToken: token),
             );
           }
         ),
-        // Updated BottomNavigationBar
-        bottomNavigationBar: BottomNavigationBar(
-          // Set type to fixed when there are more items to prevent shifting
-          type: BottomNavigationBarType.fixed,
-          currentIndex: selectedIndex,
-          // Use context from Builder above if needed, but GoRouter uses root context usually
-          onTap: (index) => _navigate(context, index, currentLocation),
-          items: const [
-            BottomNavigationBarItem(
-              // Using 'Home' icon and label for consistency
-              icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard),
-              label: 'Dashboard',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(AppIcons.inventory),
-              activeIcon: Icon(Icons.inventory_2),
-              label: 'Inventory',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.attach_money),
-              label: 'Sales',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(AppIcons.analytics),
-              activeIcon: Icon(Icons.analytics),
-              label: 'Analytics',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(AppIcons.settings),
-              activeIcon: Icon(Icons.settings),
-              label: 'Settings',
-            ),
-          ],
+        GoRoute(
+          path: onboarding,
+          name: onboarding,
+          pageBuilder: (context, state) => _buildPageWithTransition(
+            context: context,
+            state: state,
+            child: const OnboardingScreen(),
+          ),
         ),
-      );
+        GoRoute(
+          path: pinSetup,
+          name: pinSetup,
+           pageBuilder: (context, state) => _buildPageWithTransition(
+            context: context,
+            state: state,
+            child: const PinSetupScreen(),
+          ),
+          // TODO: Add redirect logic if PIN is already set?
+        ),
+         GoRoute(
+          path: pinAuth,
+          name: pinAuth,
+           pageBuilder: (context, state) => _buildPageWithTransition(
+            context: context,
+            state: state,
+            child: PinAuthScreen(
+              onAuthenticated: (BuildContext authContext) {
+                 debugPrint("RouterNotifier: PIN Auth Success Callback Triggered");
+                // Mark authentication as completed
+                _lastAuthCompletionTime = DateTime.now();
+                _initialAuthDone = true; // Mark initial auth as done
+                _wasResumed = false; // Clear resume flag
+                 _postAuthTarget = _PostAuthNavigationTarget.none; // Clear any specific target
+
+                // Use GoRouter's context to navigate *after* successful auth
+                // Important: Ensure this context is valid for navigation
+                 // Check if context is still mounted before navigating
+                  if (authContext.mounted) {
+                    // Determine the target location - usually 'home' after PIN auth
+                     debugPrint("RouterNotifier: Navigating to Home after PIN Auth");
+                    GoRouter.of(authContext).go(home);
+                  } else {
+                     debugPrint("RouterNotifier: PIN Auth Context not mounted, cannot navigate.");
+                     // Fallback or error handling if context is lost
+                  }
+              },
+            ),
+          ),
+        ),
+         GoRoute(
+          path: biometricSetup,
+          name: biometricSetup,
+           pageBuilder: (context, state) => _buildPageWithTransition(
+            context: context,
+            state: state,
+            child: const BiometricSetupScreen(),
+          ),
+        ),
+         GoRoute(
+          path: biometricAuth,
+          name: biometricAuth,
+           pageBuilder: (context, state) => _buildPageWithTransition(
+            context: context,
+            state: state,
+            child: BiometricAuthScreen(
+               onAuthenticated: (BuildContext authContext) {
+                 debugPrint("RouterNotifier: Biometric Auth Success Callback Triggered");
+                _lastAuthCompletionTime = DateTime.now();
+                _initialAuthDone = true;
+                _wasResumed = false;
+                _postAuthTarget = _PostAuthNavigationTarget.none;
+                  if (authContext.mounted) {
+                     debugPrint("RouterNotifier: Navigating to Home after Biometric Auth");
+                     GoRouter.of(authContext).go(home);
+                  } else {
+                     debugPrint("RouterNotifier: Biometric Auth Context not mounted, cannot navigate.");
+                  }
+              },
+            ),
+          ),
+        ),
+        // Shell Route for main app sections with bottom navigation (placeholder)
+        // Using StatefulShellRoute for persistent navigation state
+        StatefulShellRoute.indexedStack(
+            builder: (context, state, navigationShell) {
+              // Return the widget that contains the Scaffold with BottomNavigationBar
+              // The navigationShell exposes the IndexedStack (or other widget)
+              // that displays the current branch's navigator.
+              // You might need a custom Scaffold wrapper here.
+              // For now, just return the navigationShell directly for basic structure.
+              // return AppShell(navigationShell: navigationShell); // Replace with your actual Shell UI
+              // Placeholder: Directly return shell until AppShell is created
+               return ScaffoldWithNavBar(navigationShell: navigationShell);
+            },
+            branches: [
+                // Branch 1: Dashboard
+                 StatefulShellBranch(
+                     //navigatorKey: _shellNavigatorKey, // Use key if needed for deep linking/state
+                     routes: [
+                         GoRoute(
+                             path: home,
+                             name: home,
+                             pageBuilder: (context, state) => _buildPageWithTransition(
+                                 context: context,
+                                 state: state,
+                                 child: const DashboardScreen(), // Main Dashboard
+                             ),
+                              routes: [
+                                // Settings is modal on mobile, full screen on others
+                                GoRoute(
+                                  path: settings, // Relative path
+                                  name: settings, // Use the constant name
+                                   pageBuilder: (context, state) {
+                                    if (ResponsiveUtils.isMobile(context)) {
+                                      return DialogPage( // Modal on mobile
+                                         builder: (_) => const SettingsScreen(),
+                                       );
+                                     } else {
+                                       return _buildPageWithTransition( // Full page on larger screens
+                                         context: context,
+                                         state: state,
+                                         child: const SettingsScreen(),
+                                       );
+                                     }
+                                   }
+                                ),
+                                // NEW: Inventory Routes Branching from Home/Dashboard
+                                GoRoute(
+                                  path: inventoryList, // Relative path: /home/inventory
+                                  name: inventoryList, // Use the constant name
+                                  pageBuilder: (context, state) => _buildPageWithTransition(
+                                    context: context,
+                                    state: state,
+                                    child: const InventoryListScreen(),
+                                  ),
+                                  routes: [
+                                    GoRoute(
+                                      path: palletDetail, // Relative path: /home/inventory/pallet/:pid
+                                      name: palletDetail, // Use the constant name
+                                      pageBuilder: (context, state) {
+                                        final palletId = state.pathParameters['pid'];
+                                        // TODO: Add error handling if pid is null
+                                        return _buildPageWithTransition(
+                                          context: context,
+                                          state: state,
+                                          child: PalletDetailScreen(palletId: palletId!),
+                                        );
+                                      },
+                                    ),
+                                    GoRoute(
+                                      path: itemDetail, // Relative path: /home/inventory/item/:iid
+                                      name: itemDetail, // Use the constant name
+                                      pageBuilder: (context, state) {
+                                        final itemId = state.pathParameters['iid'];
+                                         // TODO: Add error handling if iid is null
+                                        return _buildPageWithTransition(
+                                          context: context,
+                                          state: state,
+                                          child: ItemDetailScreen(itemId: itemId!),
+                                        );
+                                      },
+                                      // TODO: Add route for adding/editing items, potentially nested under pallet detail?
+                                    ),
+                                     // TODO: Add route for adding/editing pallets
+                                  ],
+                                ),
+                              ]
+                         ),
+                     ],
+                 ),
+                  // Branch 2: Placeholder for maybe Analytics/Reports later
+                 StatefulShellBranch(
+                     routes: [
+                         GoRoute(
+                           path: '/reports', // Example placeholder
+                           name: 'reports',
+                           builder: (context, state) => const Scaffold(
+                             appBar: AppBar(title: const Text('Reports')),
+                             body: Center(child: Text('Reports Screen (Placeholder)')),
+                           ),
+                         ),
+                      ],
+                 ),
+                  // Branch 3: Placeholder for maybe Settings as a main tab (alternative)
+                  // StatefulShellBranch(
+                  //    routes: [
+                  //        GoRoute(
+                  //          path: '/settings-tab', // Example placeholder
+                  //          name: 'settings-tab',
+                  //          builder: (context, state) => const SettingsScreen(), // Reusing settings screen
+                  //        ),
+                  //     ],
+                  // ),
+            ],
+        ),
+
+        // Fallback route for unknown paths (optional)
+        // GoRoute(path: '/', redirect: (_, __) => '/'), // Redirect unknown to root
+      ];
+
+  /// Helper for consistent page transitions (e.g., FadeTransition).
+  static Page _buildPageWithTransition<T>({
+    required BuildContext context,
+    required GoRouterState state,
+    required Widget child,
+  }) {
+    // Example: Use FadeTransition
+     return CustomTransitionPage<T>(
+       key: state.pageKey,
+       child: child,
+       transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(opacity: animation, child: child),
+     );
+    // Or just MaterialPage for default transitions
+    // return MaterialPage<T>(key: state.pageKey, child: child);
+  }
+  
+  // --- App Lifecycle Listener ---
+  // Called when the app lifecycle changes (e.g., resumed)
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+     debugPrint("RouterNotifier: App Lifecycle State Changed: $state");
+     if (state == AppLifecycleState.resumed) {
+       // Only trigger resume logic if not recently authenticated
+       final now = DateTime.now();
+       final timeSinceLastAuth = _lastAuthCompletionTime != null 
+                                   ? now.difference(_lastAuthCompletionTime!) 
+                                   : const Duration(days: 1); // Treat as long ago if never authenticated
+
+       if (timeSinceLastAuth > _authCooldownDuration) {
+         debugPrint("RouterNotifier: App Resumed (and not recently authenticated).");
+         _wasResumed = true;
+          // Read auth state directly here to check if user exists
+          final authState = ref.read(authControllerProvider);
+          final settingsState = ref.read(userSettingsControllerProvider);
+          final user = authState.valueOrNull;
+          final settings = settingsState.valueOrNull;
+          final hasPin = settings?.isPinEnabled ?? false;
+          final hasBiometrics = settings?.isBiometricEnabled ?? false;
+          final isBiometricSupported = ref.read(isBiometricSupportedProvider);
+          
+           // Only trigger refresh if logged in and requires secondary auth
+           if (user != null && (hasPin || (hasBiometrics && isBiometricSupported))) {
+             debugPrint("RouterNotifier: Triggering debounced notification due to resume requiring auth.");
+             // Preserve the post-auth target during resume
+             final currentTarget = _postAuthTarget;
+             debugPrint('RouterNotifier: Preserving postAuthTarget during resume: $currentTarget');
+             _debouncedNotifyListeners();
+              // Restore target after potential notification
+             Future.delayed(const Duration(milliseconds: 150), () {
+               if (_postAuthTarget != currentTarget) {
+                 debugPrint('RouterNotifier: Restoring postAuthTarget after resume notification: $currentTarget');
+                 _postAuthTarget = currentTarget;
+               }
+             });
+           } else {
+              debugPrint("RouterNotifier: App Resumed, but no user or no secondary auth required. No refresh needed.");
+               _wasResumed = false; // Reset flag if no action needed
+           }
+       } else {
+         debugPrint("RouterNotifier: App Resumed, but recently authenticated. Skipping resume logic.");
+          _wasResumed = false; // Reset flag, auth is recent
+       }
+     } else if (state == AppLifecycleState.paused) {
+       debugPrint("RouterNotifier: App Paused. Resetting initial auth flag.");
+       // Reset the initial auth flag when paused, so it needs re-check on resume
+       _initialAuthDone = false;
+        // Preserve post-auth target when pausing
+       final targetBeforePause = _postAuthTarget;
+       debugPrint('RouterNotifier: Preserving post-auth target during pause: $targetBeforePause');
+       // Explicitly ensure the target remains after reset potentially triggered by state change listeners
+        _postAuthTarget = targetBeforePause; 
+        
+     } else if (state == AppLifecycleState.detached || state == AppLifecycleState.hidden) {
+        // Handle detached state (app might be terminated)
+         debugPrint("RouterNotifier: App Detached/Hidden.");
+         // Consider cleanup or state persistence if needed
+          _initialAuthDone = false; // Reset on detach as well
+           // Preserve post-auth target when detaching
+          final targetBeforeDetach = _postAuthTarget;
+          debugPrint('RouterNotifier: Preserving post-auth target during detach/hide: $targetBeforeDetach');
+          _postAuthTarget = targetBeforeDetach; 
+     }
+   }
+}
+
+
+// Helper class to observe route changes without direct GoRouter dependency in Notifier
+class _RouterObserver extends NavigatorObserver {
+  ValueChanged<String>? onRouteChanged;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _notifyPathChange(route);
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (previousRoute != null) {
+      _notifyPathChange(previousRoute);
+    }
+    super.didPop(route, previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (newRoute != null) {
+      _notifyPathChange(newRoute);
+    }
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+  }
+
+  void _notifyPathChange(Route<dynamic> route) {
+    // Extract path from route settings if available
+    final path = route.settings.name;
+    if (path != null) {
+      onRouteChanged?.call(path);
+       debugPrint('_RouterObserver: Route changed to: $path');
+    } else {
+       // Attempt to get path from GoRouter specific properties if Material/Cupertino page route
+       if (route is PageRoute && route.settings is GoRoute) {
+         // This might not be reliable or necessary depending on how GoRouter manages settings.name
+         // Stick to route.settings.name if possible.
+       }
+       debugPrint('_RouterObserver: Route changed, but path is null (Route: ${route.runtimeType})');
     }
   }
 }
 
-/// Placeholder for SplashScreen - Replace with your actual splash screen if you have one.
-class SplashScreen extends StatelessWidget {
-  const SplashScreen({super.key});
+// --- NEW Stateful Shell Route Scaffold ---
+// A basic Scaffold that includes the BottomNavigationBar and the navigation shell
+class ScaffoldWithNavBar extends StatelessWidget {
+  const ScaffoldWithNavBar({
+    required this.navigationShell,
+    super.key,
+  });
+
+  final StatefulNavigationShell navigationShell;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.background,
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // App logo or icon could go here
-              const Icon(
-                Icons.inventory_2_outlined,
-                size: 80,
-                color: Colors.blue,
-              ),
-              const SizedBox(height: 32),
-              Text(
-                'Pallet Pro',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 24),
-              const SizedBox(
-                width: 40,
-                height: 40,
-                child: CircularProgressIndicator(),
-              ),
-            ],
+      body: navigationShell, // The body is the page content managed by the shell
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'Dashboard',
           ),
-        ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart_outlined),
+             activeIcon: Icon(Icons.bar_chart),
+            label: 'Reports',
+          ),
+           // Example: Adding Settings as a tab (adjust branches accordingly if used)
+           // BottomNavigationBarItem(
+           //  icon: Icon(AppIcons.settings_outlined), // Use custom icon
+           //  activeIcon: Icon(AppIcons.settings_filled),
+           //  label: 'Settings',
+           //),
+        ],
+        currentIndex: navigationShell.currentIndex,
+        onTap: (index) {
+           // Use the shell's goBranch method to navigate branches
+           navigationShell.goBranch(
+             index,
+             // Support navigating back to initial location when tapping current tab
+             initialLocation: index == navigationShell.currentIndex,
+           );
+        },
+        // Customize theme/appearance as needed
+         // type: BottomNavigationBarType.fixed, // Or shifting
+         // selectedItemColor: Theme.of(context).colorScheme.primary,
+         // unselectedItemColor: Colors.grey,
       ),
     );
   }
 }
 
-/// Custom route observer to track navigation events without circular dependencies.
-class _RouterObserver extends NavigatorObserver {
-  /// Callback to notify when routes change
-  Function(String path)? onRouteChanged;
-  
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    _updateCurrentRoute(route);
-    super.didPush(route, previousRoute);
-  }
-  
-  @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    if (newRoute != null) {
-      _updateCurrentRoute(newRoute);
-    }
-    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
-  }
-  
-  @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (previousRoute != null) {
-      _updateCurrentRoute(previousRoute);
-    }
-    super.didPop(route, previousRoute);
-  }
-  
-  void _updateCurrentRoute(Route<dynamic> route) {
-    // Extract path from route
-    final String? path = _extractPathFromRoute(route);
-    
-    if (path != null && onRouteChanged != null) {
-      onRouteChanged!(path);
-    }
-  }
-  
-  String? _extractPathFromRoute(Route<dynamic> route) {
-    // Try to extract GoRoute path
-    if (route.settings.name != null) {
-      return route.settings.name;
-    }
-    
-    // For go_router pages, extract from RouteMatchList if possible
-    final settings = route.settings;
-    if (settings is Page) {
-      final key = settings.key;
-      if (key is ValueKey<String> && key.value.startsWith('/')) {
-        return key.value;
-      }
-    }
-    
-    // Fallback to settings.name which might be null
-    return route.settings.name;
-  }
-}
 
-/// Simple placeholder screen for undeveloped features
-class PlaceholderScreen extends StatelessWidget {
-  final String title;
-  const PlaceholderScreen({super.key, required this.title});
+// Helper class for Modal Pages (like Settings on Mobile)
+// Uses GoRouter's features for platform-adaptive dialogs/modals
+class DialogPage<T> extends Page<T> {
+  final WidgetBuilder builder;
+
+  const DialogPage({required this.builder, super.key, super.name, super.arguments});
 
   @override
-  Widget build(BuildContext context) {
-    // Note: This screen doesn't have its own AppBar because it's rendered
-    // inside the AppShell which already provides one.
-    return Center(
-      child: Text(
-        '$title Screen - Coming Soon!',
-        style: Theme.of(context).textTheme.headlineSmall,
-      ),
+  Route<T> createRoute(BuildContext context) {
+    return DialogRoute<T>(
+      context: context,
+      settings: this,
+      builder: builder,
+      // theme: // Optional: customize dialog theme
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_repository.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/providers/item_list_provider.dart';
 
 /// Notifier responsible for managing the state of a single item's details.
 ///
@@ -32,16 +33,23 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
       return null; // Or throw a specific argument error
     }
 
-    final result = await _itemRepository.fetchItemById(itemId);
-    switch (result) {
-      case Success(value: final item):
-        // The repository might return null if not found, or a specific type.
-        // Assuming fetchItemById returns Result<Item?> or handles not found.
-        return item; // This could be null if the item doesn't exist
-      case Failure(exception: final exception):
-        // Re-throw to let AsyncValue handle the error state.
-        // Consider mapping specific exceptions (like NotFoundException) if needed.
-        throw exception;
+    try {
+      // The repository method name might be different - adjust as needed
+      final result = await _itemRepository.getItemById(itemId);
+      
+      return result.when(
+        success: (item) => item,
+        failure: (exception) {
+          // Re-throw to let AsyncValue handle the error state.
+          throw exception;
+        },
+      );
+    } catch (e) {
+      // Convert to AppException if it's not already
+      if (e is! AppException) {
+        throw DataException('Failed to fetch item: $e');
+      }
+      rethrow;
     }
   }
 
@@ -63,4 +71,77 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
 final itemDetailProvider =
     AsyncNotifierProvider.autoDispose.family<ItemDetailNotifier, Item?, String>(
   ItemDetailNotifier.new,
-); 
+);
+
+// Mock data for item details (reusing the SimpleItem model from item_list_provider.dart)
+final _mockItemDetails = [
+  {
+    'id': 'i1',
+    'name': 'Bluetooth Speaker',
+    'description': 'Portable wireless speaker with good bass',
+    'pallet_id': 'p1',
+    'condition': 'new',
+    'quantity': 2,
+    'purchase_price': 25.99,
+    'status': 'forSale',
+    'created_at': '2023-10-16T10:30:00.000Z',
+    'updated_at': '2023-10-16T10:30:00.000Z',
+  },
+  {
+    'id': 'i2',
+    'name': 'Wireless Earbuds',
+    'description': 'True wireless earbuds with charging case',
+    'pallet_id': 'p1',
+    'condition': 'likeNew',
+    'quantity': 3,
+    'purchase_price': 15.50,
+    'status': 'forSale',
+    'created_at': '2023-10-16T11:15:00.000Z',
+    'updated_at': '2023-10-16T11:15:00.000Z',
+  },
+  {
+    'id': 'i3',
+    'name': 'Smart Watch',
+    'description': 'Fitness tracker with heart rate monitor',
+    'pallet_id': 'p2',
+    'condition': 'good',
+    'quantity': 1,
+    'purchase_price': 45.00,
+    'status': 'forSale',
+    'created_at': '2023-11-21T09:45:00.000Z',
+    'updated_at': '2023-11-21T09:45:00.000Z',
+  },
+  {
+    'id': 'i4',
+    'name': 'USB-C Cable',
+    'description': '6ft braided charging cable',
+    'pallet_id': 'p3',
+    'condition': 'new',
+    'quantity': 5,
+    'purchase_price': 3.99,
+    'status': 'forSale',
+    'created_at': '2023-12-06T14:20:00.000Z',
+    'updated_at': '2023-12-06T14:20:00.000Z',
+  }
+];
+
+/// Provider that fetches a specific item by ID (mock implementation)
+final itemDetailProviderMock = FutureProvider.family<SimpleItem?, String>((ref, itemId) async {
+  // Simulate network delay
+  await Future.delayed(const Duration(milliseconds: 800));
+  
+  try {
+    // Find the matching item in our mock data
+    final itemJson = _mockItemDetails.firstWhere(
+      (i) => i['id'] == itemId,
+      orElse: () => throw NotFoundException('Item not found with ID: $itemId'),
+    );
+    
+    return SimpleItem.fromJson(itemJson);
+  } catch (e) {
+    if (e is! AppException) {
+      throw AppException('Failed to fetch item: $e');
+    }
+    rethrow;
+  }
+}); 

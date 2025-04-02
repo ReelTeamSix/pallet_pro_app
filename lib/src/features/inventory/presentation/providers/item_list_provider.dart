@@ -44,4 +44,102 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
 /// Exposes the asynchronous state ([AsyncValue]) of the item list.
 final itemListProvider = AsyncNotifierProvider<ItemListNotifier, List<Item>>(
   ItemListNotifier.new,
-); 
+);
+
+// TEMPORARY: Mock data for UI testing until model issues are fixed
+final _mockItems = [
+  {
+    'id': 'i1',
+    'name': 'Bluetooth Speaker',
+    'description': 'Portable wireless speaker with good bass',
+    'pallet_id': 'p1',
+    'condition': 'new',
+    'quantity': 2,
+    'purchase_price': 25.99,
+    'status': 'forSale',
+    'created_at': '2023-10-16T10:30:00.000Z',
+  },
+  {
+    'id': 'i2',
+    'name': 'Wireless Earbuds',
+    'description': 'True wireless earbuds with charging case',
+    'pallet_id': 'p1',
+    'condition': 'likeNew',
+    'quantity': 3,
+    'purchase_price': 15.50,
+    'status': 'forSale',
+    'created_at': '2023-10-16T11:15:00.000Z',
+  },
+  {
+    'id': 'i3',
+    'name': 'Smart Watch',
+    'description': 'Fitness tracker with heart rate monitor',
+    'pallet_id': 'p2',
+    'condition': 'good',
+    'quantity': 1,
+    'purchase_price': 45.00,
+    'status': 'forSale',
+    'created_at': '2023-11-21T09:45:00.000Z',
+  },
+  {
+    'id': 'i4',
+    'name': 'USB-C Cable',
+    'description': '6ft braided charging cable',
+    'pallet_id': 'p3',
+    'condition': 'new',
+    'quantity': 5,
+    'purchase_price': 3.99,
+    'status': 'forSale',
+    'created_at': '2023-12-06T14:20:00.000Z',
+  }
+];
+
+// Temporary simple model class for UI testing
+class SimpleItem {
+  final String id;
+  final String? name;
+  final String? description;
+  final String palletId;
+  final String condition;
+  final int quantity;
+  final double? purchasePrice;
+  final String status;
+  final DateTime? createdAt;
+  
+  SimpleItem({
+    required this.id,
+    this.name,
+    this.description,
+    required this.palletId,
+    required this.condition,
+    required this.quantity,
+    this.purchasePrice,
+    required this.status,
+    this.createdAt,
+  });
+  
+  factory SimpleItem.fromJson(Map<String, dynamic> json) {
+    return SimpleItem(
+      id: json['id'] as String,
+      name: json['name'] as String?,
+      description: json['description'] as String?,
+      palletId: json['pallet_id'] as String,
+      condition: json['condition'] as String,
+      quantity: json['quantity'] as int,
+      purchasePrice: json['purchase_price'] as double?,
+      status: json['status'] as String,
+      createdAt: json['created_at'] != null 
+        ? DateTime.parse(json['created_at'] as String)
+        : null,
+    );
+  }
+}
+
+// Mock provider that returns fixed data
+final itemListProvider = FutureProvider<List<SimpleItem>>((ref) async {
+  // Simulate network delay
+  await Future.delayed(const Duration(seconds: 1));
+  
+  // Return mock data
+  return _mockItems.map((json) => SimpleItem.fromJson(json)).toList();
+}); 
