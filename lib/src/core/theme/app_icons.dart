@@ -89,6 +89,18 @@ class AppIcons {
   static const IconData quantity = Icons.format_list_numbered;
   /// Date icon.
   static const IconData date = Icons.calendar_today_outlined;
+  
+  // Additional Icons
+  /// Business icon
+  static const IconData business = Icons.business_outlined;
+  /// Storefront icon
+  static const IconData storefront = Icons.storefront_outlined;
+  /// Category icon
+  static const IconData category = Icons.category_outlined;
+  /// Money icon
+  static const IconData money = Icons.attach_money;
+  /// Calendar icon
+  static const IconData calendar = Icons.calendar_today_outlined;
 
   // Authentication Icons
   /// Login icon.

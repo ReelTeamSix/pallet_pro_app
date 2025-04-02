@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../providers/pallet_list_provider.dart'; // For SimplePallet model
+import 'package:pallet_pro_app/src/features/inventory/data/models/pallet.dart';
 import '../providers/pallet_detail_provider.dart';
 import 'inventory_list_screen.dart'; // For ShimmerLoader access
 
@@ -12,12 +11,20 @@ class PalletDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Use the mock provider instead of the real one for testing
-    final palletAsync = ref.watch(palletDetailProvider(palletId));
+    // Use the real provider
+    final palletAsync = ref.watch(palletDetailNotifierProvider(palletId));
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pallet Details'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.read(palletDetailNotifierProvider(palletId).notifier).refreshPallet();
+            },
+          ),
+        ],
       ),
       body: palletAsync.when(
         loading: () => const ShimmerLoader(),
@@ -50,6 +57,11 @@ class PalletDetailScreen extends ConsumerWidget {
                           leading: const Icon(Icons.business),
                           title: const Text('Supplier'),
                           subtitle: Text(pallet.supplier ?? 'Not specified'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.store),
+                          title: const Text('Source'),
+                          subtitle: Text(pallet.source ?? 'Not specified'),
                         ),
                         ListTile(
                           leading: const Icon(Icons.category),

@@ -21,6 +21,8 @@ _Item _$ItemFromJson(Map<String, dynamic> json) => _Item(
   status:
       $enumDecodeNullable(_$ItemStatusEnumMap, json['status']) ??
       ItemStatus.forSale,
+  storageLocation: json['storage_location'] as String?,
+  salesChannel: json['sales_channel'] as String?,
   acquiredDate:
       json['acquired_date'] == null
           ? null
@@ -51,6 +53,8 @@ Map<String, dynamic> _$ItemToJson(_Item instance) => <String, dynamic>{
   'sku': instance.sku,
   'condition': _$ItemConditionEnumMap[instance.condition]!,
   'status': _$ItemStatusEnumMap[instance.status]!,
+  'storage_location': instance.storageLocation,
+  'sales_channel': instance.salesChannel,
   'acquired_date': instance.acquiredDate?.toIso8601String(),
   'sold_date': instance.soldDate?.toIso8601String(),
   'created_at': instance.createdAt?.toIso8601String(),

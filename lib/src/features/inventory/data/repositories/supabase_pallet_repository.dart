@@ -65,14 +65,22 @@ class SupabasePalletRepository implements PalletRepository {
   }
 
   @override
-  Future<Result<List<Pallet>>> getAllPallets() async {
+  Future<Result<List<Pallet>>> getAllPallets({String? sourceFilter}) async {
     try {
       final userId = _getCurrentUserId();
-      final response = await _supabaseClient
+      var query = _supabaseClient
           .from(_tableName)
           .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false); 
+          .eq('user_id', userId);
+
+      // Apply source filter if provided
+      if (sourceFilter != null && sourceFilter.isNotEmpty) {
+        // Assuming 'source' is the column name in your DB
+        // Use 'ilike' for case-insensitive partial matching
+        query = query.ilike('source', '%$sourceFilter%');
+      }
+
+      final response = await query.order('created_at', ascending: false);
 
       final pallets = response.map((json) => Pallet.fromJson(json)).toList();
       return Result.success(pallets);
@@ -123,6 +131,33 @@ class SupabasePalletRepository implements PalletRepository {
       return Result.failure(DatabaseException.deletionFailed('pallet $id', e.message));
     } catch (e) {
        return Result.failure(UnexpectedException('Unexpected error deleting pallet', e));
+    }
+  }
+
+  @override
+  Future<Result<List<String>>> getDistinctFieldValues(String field) async {
+    try {
+      final userId = _getCurrentUserId();
+      
+      // Fetch distinct non-null values for the specified field
+      final response = await _supabaseClient
+          .from(_tableName)
+          .select(field)
+          .eq('user_id', userId)
+          .not(field, 'is', null)
+          .order(field);
+      
+      // Extract unique values from the response
+      final values = response
+          .map((row) => row[field].toString())
+          .toSet() // Use Set to ensure uniqueness
+          .toList();
+      
+      return Result.success(values);
+    } on PostgrestException catch (e) {
+      return Result.failure(DatabaseException.fetchFailed('distinct $field values', e.message));
+    } catch (e) {
+      return Result.failure(UnexpectedException('Unexpected error fetching distinct $field values', e));
     }
   }
 } 

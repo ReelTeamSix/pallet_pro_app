@@ -84,6 +84,8 @@ final _mockItemDetails = [
     'quantity': 2,
     'purchase_price': 25.99,
     'status': 'forSale',
+    'storage_location': 'Garage Shelf B2',
+    'sales_channel': 'Facebook Marketplace',
     'created_at': '2023-10-16T10:30:00.000Z',
     'updated_at': '2023-10-16T10:30:00.000Z',
   },
@@ -96,6 +98,8 @@ final _mockItemDetails = [
     'quantity': 3,
     'purchase_price': 15.50,
     'status': 'forSale',
+    'storage_location': 'Living Room Bin 1',
+    'sales_channel': 'eBay',
     'created_at': '2023-10-16T11:15:00.000Z',
     'updated_at': '2023-10-16T11:15:00.000Z',
   },
@@ -107,7 +111,9 @@ final _mockItemDetails = [
     'condition': 'good',
     'quantity': 1,
     'purchase_price': 45.00,
-    'status': 'forSale',
+    'status': 'sold',
+    'storage_location': 'Office Desk Drawer',
+    'sales_channel': 'Private Group',
     'created_at': '2023-11-21T09:45:00.000Z',
     'updated_at': '2023-11-21T09:45:00.000Z',
   },
@@ -120,6 +126,8 @@ final _mockItemDetails = [
     'quantity': 5,
     'purchase_price': 3.99,
     'status': 'forSale',
+    'storage_location': 'Electronics Box',
+    'sales_channel': null,
     'created_at': '2023-12-06T14:20:00.000Z',
     'updated_at': '2023-12-06T14:20:00.000Z',
   }
@@ -137,7 +145,8 @@ final itemDetailProviderMock = FutureProvider.family<SimpleItem?, String>((ref, 
       orElse: () => throw NotFoundException('Item not found with ID: $itemId'),
     );
     
-    return SimpleItem.fromJson(itemJson);
+    // Use cast<String, dynamic> to ensure the map type is correct for SimpleItem.fromJson
+    return SimpleItem.fromJson(itemJson.cast<String, dynamic>());
   } catch (e) {
     if (e is! AppException) {
       throw UnexpectedException('Failed to fetch item: $e');

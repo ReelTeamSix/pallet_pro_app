@@ -59,6 +59,21 @@ class Result<T> {
     }
   }
 
+  /// Alternative to fold() that uses named parameters for better readability.
+  /// 
+  /// If this is a success, applies [success] to the value.
+  /// If this is a failure, applies [failure] to the error.
+  R when<R>({
+    required R Function(T) success,
+    required R Function(AppException) failure,
+  }) {
+    if (isSuccess) {
+      return success(value);
+    } else {
+      return failure(error);
+    }
+  }
+
   /// Transforms this Result using the provided functions.
   ///
   /// If this is a success, applies [onSuccess] to the value.

@@ -58,6 +58,8 @@ class SimpleItem {
   final int quantity;
   final double? purchasePrice;
   final String status;
+  final String? storageLocation;
+  final String? salesChannel;
   final DateTime? createdAt;
   
   SimpleItem({
@@ -69,6 +71,8 @@ class SimpleItem {
     required this.quantity,
     this.purchasePrice,
     required this.status,
+    this.storageLocation,
+    this.salesChannel,
     this.createdAt,
   });
   
@@ -82,6 +86,8 @@ class SimpleItem {
       quantity: json['quantity'] as int,
       purchasePrice: json['purchase_price'] as double?,
       status: json['status'] as String,
+      storageLocation: json['storage_location'] as String?,
+      salesChannel: json['sales_channel'] as String?,
       createdAt: json['created_at'] != null 
         ? DateTime.parse(json['created_at'] as String)
         : null,

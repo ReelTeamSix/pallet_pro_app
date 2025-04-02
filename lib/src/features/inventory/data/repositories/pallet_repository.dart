@@ -12,14 +12,20 @@ abstract class PalletRepository {
   /// Fetches a pallet by its ID.
   Future<Result<Pallet?>> getPalletById(String id); // Or Future<Either<CustomException, Pallet?>>
 
-  /// Fetches all pallets (potentially with pagination/filtering later).
-  Future<Result<List<Pallet>>> getAllPallets(); // Or Future<Either<CustomException, List<Pallet>>>
+  /// Fetches all pallets, potentially filtered.
+  Future<Result<List<Pallet>>> getAllPallets({String? sourceFilter}); // Or Future<Either<CustomException, List<Pallet>>>
 
   /// Updates an existing pallet.
   Future<Result<Pallet>> updatePallet(Pallet pallet); // Or Future<Either<CustomException, Pallet>>
 
   /// Deletes a pallet by its ID.
   Future<Result<void>> deletePallet(String id); // Or Future<Either<CustomException, void>>
+
+  /// Gets distinct values for a specific field from all pallets belonging to the current user.
+  /// 
+  /// The field parameter should be a valid column name in the pallets table.
+  /// Returns a list of unique non-null values for the specified field.
+  Future<Result<List<String>>> getDistinctFieldValues(String field);
 
   // Add other specific methods as needed, e.g., searchPallets(String query)
 } 

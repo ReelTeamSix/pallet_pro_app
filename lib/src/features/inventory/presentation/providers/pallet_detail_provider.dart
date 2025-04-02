@@ -5,71 +5,45 @@ import 'package:pallet_pro_app/src/features/inventory/data/repositories/pallet_r
 import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/providers/pallet_list_provider.dart';
 
-// Mock data for pallet details (reusing the SimplePallet model from pallet_list_provider.dart)
-final _mockPalletDetails = [
-  {
-    'id': 'p1',
-    'name': 'Electronics Pallet #1',
-    'description': 'Mixed lot of consumer electronics',
-    'purchase_price': 450.00,
-    'source': 'ABC Liquidators',
-    'supplier': 'Amazon',
-    'type': 'Returns',
-    'status': 'active',
-    'cost': 500.0,
-    'purchase_date': '2023-10-15T10:00:00.000Z',
-    'created_at': '2023-10-15T10:00:00.000Z',
-    'updated_at': '2023-10-15T10:00:00.000Z',
-  },
-  {
-    'id': 'p2',
-    'name': 'Clothing Pallet #1',
-    'description': 'Assorted brand name clothing items',
-    'purchase_price': 350.00,
-    'source': 'Fashion Wholesale',
-    'supplier': 'Walmart',
-    'type': 'Overstock',
-    'status': 'active',
-    'cost': 750.0,
-    'purchase_date': '2023-11-20T14:30:00.000Z',
-    'created_at': '2023-11-20T14:30:00.000Z',
-    'updated_at': '2023-11-20T14:30:00.000Z',
-  },
-  {
-    'id': 'p3',
-    'name': 'Home Goods Pallet',
-    'description': 'Kitchen and bathroom items',
-    'purchase_price': 275.50,
-    'source': 'Home Liquidation Co',
-    'supplier': 'Target',
-    'type': 'Liquidation',
-    'status': 'active',
-    'cost': 300.0,
-    'purchase_date': '2023-12-05T09:15:00.000Z',
-    'created_at': '2023-12-05T09:15:00.000Z',
-    'updated_at': '2023-12-05T09:15:00.000Z',
-  }
-];
+/// Notifier responsible for managing a single pallet's state
+class PalletDetailNotifier extends FamilyAsyncNotifier<Pallet?, String> {
+  late final PalletRepository _palletRepository;
 
-/// Provider that fetches a specific pallet by ID (mock implementation)
-final palletDetailProvider = FutureProvider.family<SimplePallet?, String>((ref, palletId) async {
-  // Simulate network delay
-  await Future.delayed(const Duration(milliseconds: 800));
+  @override
+  Future<Pallet?> build(String palletId) async {
+    _palletRepository = ref.watch(palletRepositoryProvider);
+    return _fetchPallet(palletId);
+  }
   
-  try {
-    // Find the matching pallet in our mock data
-    final matchedPallet = _mockPalletDetails.where((p) => p['id'] == palletId).toList();
+  Future<Pallet?> _fetchPallet(String palletId) async {
+    final result = await _palletRepository.getPalletById(palletId);
     
-    if (matchedPallet.isEmpty) {
-      throw NotFoundException('Pallet not found with ID: $palletId');
+    if (result.isSuccess) {
+      return result.value;
+    } else {
+      throw result.error ?? UnexpectedException('Unknown error fetching pallet');
     }
-    
-    final palletJson = matchedPallet.first;
-    return SimplePallet.fromJson(palletJson);
-  } catch (e) {
-    if (e is AppException) {
-      rethrow;
-    }
-    throw UnexpectedException('Failed to fetch pallet: $e');
+  }
+  
+  Future<void> refreshPallet() async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() => _fetchPallet(arg));
+  }
+}
+
+/// Provider for accessing a specific pallet by ID
+final palletDetailNotifierProvider = AsyncNotifierProviderFamily<PalletDetailNotifier, Pallet?, String>(
+  () => PalletDetailNotifier()
+);
+
+/// Simple provider for accessing pallet details by ID
+final palletDetailProvider = FutureProvider.family<Pallet?, String>((ref, palletId) async {
+  final repository = ref.watch(palletRepositoryProvider);
+  final result = await repository.getPalletById(palletId);
+  
+  if (result.isSuccess) {
+    return result.value;
+  } else {
+    throw result.error ?? UnexpectedException('Failed to fetch pallet');
   }
 }); 

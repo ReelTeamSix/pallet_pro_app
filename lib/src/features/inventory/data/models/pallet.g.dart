@@ -9,9 +9,10 @@ part of 'pallet.dart';
 _Pallet _$PalletFromJson(Map<String, dynamic> json) => _Pallet(
   id: json['id'] as String,
   name: json['name'] as String,
-  cost: (json['cost'] as num).toDouble(),
+  cost: (json['purchase_cost'] as num).toDouble(),
   type: json['type'] as String?,
   supplier: json['supplier'] as String?,
+  source: json['source'] as String?,
   purchaseDate:
       json['purchase_date'] == null
           ? null
@@ -29,9 +30,10 @@ _Pallet _$PalletFromJson(Map<String, dynamic> json) => _Pallet(
 Map<String, dynamic> _$PalletToJson(_Pallet instance) => <String, dynamic>{
   'id': instance.id,
   'name': instance.name,
-  'cost': instance.cost,
+  'purchase_cost': instance.cost,
   'type': instance.type,
   'supplier': instance.supplier,
+  'source': instance.source,
   'purchase_date': instance.purchaseDate?.toIso8601String(),
   'created_at': instance.createdAt?.toIso8601String(),
   'updated_at': instance.updatedAt?.toIso8601String(),

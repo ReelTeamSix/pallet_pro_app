@@ -10,13 +10,20 @@ abstract class ItemRepository {
   /// Fetches an item by its ID.
   Future<Result<Item?>> getItemById(String id);
 
-  /// Fetches all items (potentially with pagination/filtering).
-  Future<Result<List<Item>>> getAllItems();
+  /// Fetches all items, potentially filtered.
+  Future<Result<List<Item>>> getAllItems({
+    ItemStatus? statusFilter,
+    String? storageLocationFilter,
+    String? salesChannelFilter,
+    String? palletSourceFilter, // Filter by source field in the related pallet
+  });
 
   /// Fetches all items belonging to a specific pallet.
   Future<Result<List<Item>>> getItemsByPallet(String palletId);
 
   /// Fetches items based on their status.
+  /// Deprecated: Use getAllItems with statusFilter instead.
+  @Deprecated('Use getAllItems with statusFilter instead')
   Future<Result<List<Item>>> getItemsByStatus(ItemStatus status);
 
   /// Fetches items that are considered 'stale' based on criteria (e.g., acquired date).

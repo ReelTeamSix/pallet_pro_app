@@ -1,13 +1,15 @@
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/models/pallet.dart'; // Import Pallet for join
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 // TODO: Import custom exceptions
 
 class SupabaseItemRepository implements ItemRepository {
   final SupabaseClient _supabaseClient;
-  final String _tableName = 'items'; // Assuming table name is 'items'
+  final String _tableName = 'items';
+  final String _palletTableName = 'pallets'; // Need pallet table name for join
 
   SupabaseItemRepository(this._supabaseClient);
 
@@ -64,12 +66,14 @@ class SupabaseItemRepository implements ItemRepository {
   @override
   Future<Result<Item?>> getItemById(String id) async {
     try {
+      final userId = _getCurrentUserId(); // Ensure user access
       final response = await _supabaseClient
           .from(_tableName)
           .select()
           .eq('id', id)
+          .eq('user_id', userId) // RLS should handle this, but explicit check is safer
           .maybeSingle();
-      
+
       final item = response == null ? null : Item.fromJson(response);
       return Result.success(item);
     } on PostgrestException catch (e) {
@@ -81,30 +85,57 @@ class SupabaseItemRepository implements ItemRepository {
   }
 
   @override
-  Future<Result<List<Item>>> getAllItems() async {
+  Future<Result<List<Item>>> getAllItems({
+    ItemStatus? statusFilter,
+    String? storageLocationFilter,
+    String? salesChannelFilter,
+    String? palletSourceFilter,
+  }) async {
     try {
-      final response = await _supabaseClient
+      final userId = _getCurrentUserId();
+      // Select items and joined pallet source
+      var query = _supabaseClient
           .from(_tableName)
-          .select()
-          .order('created_at', ascending: false);
+          .select('*, $_palletTableName(source)') // Select all item fields and pallet source
+          .eq('user_id', userId); // Filter by user ID
 
+      // Apply filters
+      if (statusFilter != null) {
+        query = query.eq('status', _statusToDbString(statusFilter));
+      }
+      if (storageLocationFilter != null && storageLocationFilter.isNotEmpty) {
+        query = query.ilike('storage_location', '%$storageLocationFilter%');
+      }
+      if (salesChannelFilter != null && salesChannelFilter.isNotEmpty) {
+        query = query.ilike('sales_channel', '%$salesChannelFilter%');
+      }
+      if (palletSourceFilter != null && palletSourceFilter.isNotEmpty) {
+        // Filter on the joined pallet table's source column
+        query = query.ilike('$_palletTableName.source', '%$palletSourceFilter%');
+      }
+
+      final response = await query.order('created_at', ascending: false);
+
+      // The response includes nested pallet data. We need to parse Item correctly.
       final items = response.map((json) => Item.fromJson(json)).toList();
       return Result.success(items);
     } on PostgrestException catch (e) {
-      return Result.failure(DatabaseException.fetchFailed('all items', e.message));
+      return Result.failure(DatabaseException.fetchFailed('all items with filters', e.message));
     } catch (e) {
-      return Result.failure(UnexpectedException('Unexpected error fetching items', e));
+      return Result.failure(UnexpectedException('Unexpected error fetching filtered items', e));
     }
   }
 
   @override
   Future<Result<List<Item>>> getItemsByPallet(String palletId) async {
     try {
+      final userId = _getCurrentUserId();
       final response = await _supabaseClient
           .from(_tableName)
           .select()
           .eq('pallet_id', palletId)
-          .order('created_at', ascending: true); 
+          .eq('user_id', userId)
+          .order('created_at', ascending: true);
 
       final items = response.map((json) => Item.fromJson(json)).toList();
       return Result.success(items);
@@ -116,33 +147,24 @@ class SupabaseItemRepository implements ItemRepository {
   }
 
    @override
+   @Deprecated('Use getAllItems with statusFilter instead')
   Future<Result<List<Item>>> getItemsByStatus(ItemStatus status) async {
-    try {
-      final statusString = _statusToDbString(status); 
-      final response = await _supabaseClient
-          .from(_tableName)
-          .select()
-          .eq('status', statusString)
-          .order('created_at', ascending: false);
-
-      final items = response.map((json) => Item.fromJson(json)).toList();
-      return Result.success(items);
-    } on PostgrestException catch (e) {
-      return Result.failure(DatabaseException.fetchFailed('items with status $status', e.message));
-    } catch (e) {
-       return Result.failure(UnexpectedException('Unexpected error fetching items by status', e));
-    }
+    // Delegate to the new method for backward compatibility if needed,
+    // or simply call it directly in the calling code.
+    return getAllItems(statusFilter: status);
   }
 
   @override
   Future<Result<List<Item>>> getStaleItems({required Duration staleThreshold}) async {
     try {
+      final userId = _getCurrentUserId();
       final thresholdDate = DateTime.now().subtract(staleThreshold);
 
       final response = await _supabaseClient
           .from(_tableName)
           .select()
-          .eq('status', _statusToDbString(ItemStatus.forSale)) 
+          .eq('user_id', userId)
+          .eq('status', _statusToDbString(ItemStatus.forSale))
           .lt('acquired_date', thresholdDate.toIso8601String())
           .order('acquired_date', ascending: true);
 
@@ -159,7 +181,7 @@ class SupabaseItemRepository implements ItemRepository {
   @override
   Future<Result<Item>> updateItem(Item item) async {
     try {
-       final userId = _getCurrentUserId(); // Perform auth check early
+       final userId = _getCurrentUserId();
        final itemData = item.toJson();
        itemData.remove('user_id');
        itemData.remove('id');
@@ -173,7 +195,7 @@ class SupabaseItemRepository implements ItemRepository {
           .from(_tableName)
           .update(itemData)
           .eq('id', item.id)
-          .eq('user_id', userId) // Ensure user ownership for update
+          .eq('user_id', userId)
           .select()
           .single();
 
@@ -188,15 +210,15 @@ class SupabaseItemRepository implements ItemRepository {
   @override
   Future<Result<void>> deleteItem(String id) async {
     try {
-      final userId = _getCurrentUserId(); // Perform auth check early
+      final userId = _getCurrentUserId();
       await _supabaseClient
           .from(_tableName)
           .delete()
           .eq('id', id)
-          .eq('user_id', userId); // Ensure user ownership for delete
+          .eq('user_id', userId);
 
-      // Note: May need to delete associated photos, tags (join table records), expenses first.
-      return const Result.success(null); // Return Success(null) for void results
+      // TODO: Cascade delete related data (photos, tags, expenses) if not handled by DB constraints/triggers
+      return const Result.success(null);
     } on PostgrestException catch (e) {
       return Result.failure(DatabaseException.deletionFailed('item $id', e.message));
     } catch (e) {

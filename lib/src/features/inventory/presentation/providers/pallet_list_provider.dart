@@ -55,6 +55,28 @@ class PalletListNotifier extends AsyncNotifier<List<Pallet>> {
   //     },
   //   );
   // }
+
+  /// Adds a new pallet to the database.
+  /// 
+  /// Updates the state accordingly, either with an optimistic update
+  /// showing the new pallet immediately, or refreshing the entire list
+  /// after successful creation.
+  Future<Result<Pallet>> addPallet(Pallet newPallet) async {
+    state = const AsyncValue.loading();
+    final result = await _palletRepository.createPallet(newPallet);
+    
+    return result.when(
+      success: (createdPallet) async {
+        // Refresh the list to include the new pallet
+        await refreshPallets();
+        return Result.success(createdPallet);
+      },
+      failure: (exception) {
+        state = AsyncError(exception, StackTrace.current);
+        return Result.failure(exception);
+      },
+    );
+  }
 }
 
 /// Provider for the [PalletListNotifier].

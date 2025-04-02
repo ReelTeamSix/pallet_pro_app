@@ -39,6 +39,8 @@ abstract class Item with _$Item {
     String? sku,
     @Default(ItemCondition.newItem) ItemCondition condition, // Removed 'required' keyword
     @Default(ItemStatus.forSale) ItemStatus status, // Removed 'required' keyword
+    @JsonKey(name: 'storage_location') String? storageLocation, // Added field
+    @JsonKey(name: 'sales_channel') String? salesChannel, // Added field
     @JsonKey(name: 'acquired_date') DateTime? acquiredDate, // Often same as pallet purchase date
     @JsonKey(name: 'sold_date') DateTime? soldDate,
     @JsonKey(name: 'created_at') DateTime? createdAt,

@@ -20,6 +20,8 @@ mixin _$Item implements DiagnosticableTreeMixin {
 @JsonKey(name: 'purchase_price') double? get purchasePrice;// May be calculated/allocated later
 @JsonKey(name: 'sale_price') double? get salePrice; String? get sku; ItemCondition get condition;// Removed 'required' keyword
  ItemStatus get status;// Removed 'required' keyword
+@JsonKey(name: 'storage_location') String? get storageLocation;// Added field
+@JsonKey(name: 'sales_channel') String? get salesChannel;// Added field
 @JsonKey(name: 'acquired_date') DateTime? get acquiredDate;// Often same as pallet purchase date
 @JsonKey(name: 'sold_date') DateTime? get soldDate;@JsonKey(name: 'created_at') DateTime? get createdAt;@JsonKey(name: 'updated_at') DateTime? get updatedAt;// Placeholder for relationships - we might adjust how these are stored/fetched later
 // List<ItemPhoto>? photos,
@@ -39,21 +41,21 @@ $ItemCopyWith<Item> get copyWith => _$ItemCopyWithImpl<Item>(this as Item, _$ide
 void debugFillProperties(DiagnosticPropertiesBuilder properties) {
   properties
     ..add(DiagnosticsProperty('type', 'Item'))
-    ..add(DiagnosticsProperty('id', id))..add(DiagnosticsProperty('palletId', palletId))..add(DiagnosticsProperty('name', name))..add(DiagnosticsProperty('description', description))..add(DiagnosticsProperty('quantity', quantity))..add(DiagnosticsProperty('purchasePrice', purchasePrice))..add(DiagnosticsProperty('salePrice', salePrice))..add(DiagnosticsProperty('sku', sku))..add(DiagnosticsProperty('condition', condition))..add(DiagnosticsProperty('status', status))..add(DiagnosticsProperty('acquiredDate', acquiredDate))..add(DiagnosticsProperty('soldDate', soldDate))..add(DiagnosticsProperty('createdAt', createdAt))..add(DiagnosticsProperty('updatedAt', updatedAt))..add(DiagnosticsProperty('allocatedCost', allocatedCost));
+    ..add(DiagnosticsProperty('id', id))..add(DiagnosticsProperty('palletId', palletId))..add(DiagnosticsProperty('name', name))..add(DiagnosticsProperty('description', description))..add(DiagnosticsProperty('quantity', quantity))..add(DiagnosticsProperty('purchasePrice', purchasePrice))..add(DiagnosticsProperty('salePrice', salePrice))..add(DiagnosticsProperty('sku', sku))..add(DiagnosticsProperty('condition', condition))..add(DiagnosticsProperty('status', status))..add(DiagnosticsProperty('storageLocation', storageLocation))..add(DiagnosticsProperty('salesChannel', salesChannel))..add(DiagnosticsProperty('acquiredDate', acquiredDate))..add(DiagnosticsProperty('soldDate', soldDate))..add(DiagnosticsProperty('createdAt', createdAt))..add(DiagnosticsProperty('updatedAt', updatedAt))..add(DiagnosticsProperty('allocatedCost', allocatedCost));
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Item&&(identical(other.id, id) || other.id == id)&&(identical(other.palletId, palletId) || other.palletId == palletId)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.purchasePrice, purchasePrice) || other.purchasePrice == purchasePrice)&&(identical(other.salePrice, salePrice) || other.salePrice == salePrice)&&(identical(other.sku, sku) || other.sku == sku)&&(identical(other.condition, condition) || other.condition == condition)&&(identical(other.status, status) || other.status == status)&&(identical(other.acquiredDate, acquiredDate) || other.acquiredDate == acquiredDate)&&(identical(other.soldDate, soldDate) || other.soldDate == soldDate)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.allocatedCost, allocatedCost) || other.allocatedCost == allocatedCost));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Item&&(identical(other.id, id) || other.id == id)&&(identical(other.palletId, palletId) || other.palletId == palletId)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.purchasePrice, purchasePrice) || other.purchasePrice == purchasePrice)&&(identical(other.salePrice, salePrice) || other.salePrice == salePrice)&&(identical(other.sku, sku) || other.sku == sku)&&(identical(other.condition, condition) || other.condition == condition)&&(identical(other.status, status) || other.status == status)&&(identical(other.storageLocation, storageLocation) || other.storageLocation == storageLocation)&&(identical(other.salesChannel, salesChannel) || other.salesChannel == salesChannel)&&(identical(other.acquiredDate, acquiredDate) || other.acquiredDate == acquiredDate)&&(identical(other.soldDate, soldDate) || other.soldDate == soldDate)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.allocatedCost, allocatedCost) || other.allocatedCost == allocatedCost));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,palletId,name,description,quantity,purchasePrice,salePrice,sku,condition,status,acquiredDate,soldDate,createdAt,updatedAt,allocatedCost);
+int get hashCode => Object.hash(runtimeType,id,palletId,name,description,quantity,purchasePrice,salePrice,sku,condition,status,storageLocation,salesChannel,acquiredDate,soldDate,createdAt,updatedAt,allocatedCost);
 
 @override
 String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
-  return 'Item(id: $id, palletId: $palletId, name: $name, description: $description, quantity: $quantity, purchasePrice: $purchasePrice, salePrice: $salePrice, sku: $sku, condition: $condition, status: $status, acquiredDate: $acquiredDate, soldDate: $soldDate, createdAt: $createdAt, updatedAt: $updatedAt, allocatedCost: $allocatedCost)';
+  return 'Item(id: $id, palletId: $palletId, name: $name, description: $description, quantity: $quantity, purchasePrice: $purchasePrice, salePrice: $salePrice, sku: $sku, condition: $condition, status: $status, storageLocation: $storageLocation, salesChannel: $salesChannel, acquiredDate: $acquiredDate, soldDate: $soldDate, createdAt: $createdAt, updatedAt: $updatedAt, allocatedCost: $allocatedCost)';
 }
 
 
@@ -64,7 +66,7 @@ abstract mixin class $ItemCopyWith<$Res>  {
   factory $ItemCopyWith(Item value, $Res Function(Item) _then) = _$ItemCopyWithImpl;
 @useResult
 $Res call({
- String id,@JsonKey(name: 'pallet_id') String palletId, String name, String? description, int quantity,@JsonKey(name: 'purchase_price') double? purchasePrice,@JsonKey(name: 'sale_price') double? salePrice, String? sku, ItemCondition condition, ItemStatus status,@JsonKey(name: 'acquired_date') DateTime? acquiredDate,@JsonKey(name: 'sold_date') DateTime? soldDate,@JsonKey(name: 'created_at') DateTime? createdAt,@JsonKey(name: 'updated_at') DateTime? updatedAt,@JsonKey(name: 'allocated_cost') double? allocatedCost
+ String id,@JsonKey(name: 'pallet_id') String palletId, String name, String? description, int quantity,@JsonKey(name: 'purchase_price') double? purchasePrice,@JsonKey(name: 'sale_price') double? salePrice, String? sku, ItemCondition condition, ItemStatus status,@JsonKey(name: 'storage_location') String? storageLocation,@JsonKey(name: 'sales_channel') String? salesChannel,@JsonKey(name: 'acquired_date') DateTime? acquiredDate,@JsonKey(name: 'sold_date') DateTime? soldDate,@JsonKey(name: 'created_at') DateTime? createdAt,@JsonKey(name: 'updated_at') DateTime? updatedAt,@JsonKey(name: 'allocated_cost') double? allocatedCost
 });
 
 
@@ -81,7 +83,7 @@ class _$ItemCopyWithImpl<$Res>
 
 /// Create a copy of Item
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? palletId = null,Object? name = null,Object? description = freezed,Object? quantity = null,Object? purchasePrice = freezed,Object? salePrice = freezed,Object? sku = freezed,Object? condition = null,Object? status = null,Object? acquiredDate = freezed,Object? soldDate = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? allocatedCost = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? palletId = null,Object? name = null,Object? description = freezed,Object? quantity = null,Object? purchasePrice = freezed,Object? salePrice = freezed,Object? sku = freezed,Object? condition = null,Object? status = null,Object? storageLocation = freezed,Object? salesChannel = freezed,Object? acquiredDate = freezed,Object? soldDate = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? allocatedCost = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,palletId: null == palletId ? _self.palletId : palletId // ignore: cast_nullable_to_non_nullable
@@ -93,7 +95,9 @@ as double?,salePrice: freezed == salePrice ? _self.salePrice : salePrice // igno
 as double?,sku: freezed == sku ? _self.sku : sku // ignore: cast_nullable_to_non_nullable
 as String?,condition: null == condition ? _self.condition : condition // ignore: cast_nullable_to_non_nullable
 as ItemCondition,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
-as ItemStatus,acquiredDate: freezed == acquiredDate ? _self.acquiredDate : acquiredDate // ignore: cast_nullable_to_non_nullable
+as ItemStatus,storageLocation: freezed == storageLocation ? _self.storageLocation : storageLocation // ignore: cast_nullable_to_non_nullable
+as String?,salesChannel: freezed == salesChannel ? _self.salesChannel : salesChannel // ignore: cast_nullable_to_non_nullable
+as String?,acquiredDate: freezed == acquiredDate ? _self.acquiredDate : acquiredDate // ignore: cast_nullable_to_non_nullable
 as DateTime?,soldDate: freezed == soldDate ? _self.soldDate : soldDate // ignore: cast_nullable_to_non_nullable
 as DateTime?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
@@ -109,7 +113,7 @@ as double?,
 @JsonSerializable()
 
 class _Item with DiagnosticableTreeMixin implements Item {
-  const _Item({required this.id, @JsonKey(name: 'pallet_id') required this.palletId, required this.name, this.description, this.quantity = 1, @JsonKey(name: 'purchase_price') this.purchasePrice, @JsonKey(name: 'sale_price') this.salePrice, this.sku, this.condition = ItemCondition.newItem, this.status = ItemStatus.forSale, @JsonKey(name: 'acquired_date') this.acquiredDate, @JsonKey(name: 'sold_date') this.soldDate, @JsonKey(name: 'created_at') this.createdAt, @JsonKey(name: 'updated_at') this.updatedAt, @JsonKey(name: 'allocated_cost') this.allocatedCost});
+  const _Item({required this.id, @JsonKey(name: 'pallet_id') required this.palletId, required this.name, this.description, this.quantity = 1, @JsonKey(name: 'purchase_price') this.purchasePrice, @JsonKey(name: 'sale_price') this.salePrice, this.sku, this.condition = ItemCondition.newItem, this.status = ItemStatus.forSale, @JsonKey(name: 'storage_location') this.storageLocation, @JsonKey(name: 'sales_channel') this.salesChannel, @JsonKey(name: 'acquired_date') this.acquiredDate, @JsonKey(name: 'sold_date') this.soldDate, @JsonKey(name: 'created_at') this.createdAt, @JsonKey(name: 'updated_at') this.updatedAt, @JsonKey(name: 'allocated_cost') this.allocatedCost});
   factory _Item.fromJson(Map<String, dynamic> json) => _$ItemFromJson(json);
 
 @override final  String id;
@@ -126,6 +130,10 @@ class _Item with DiagnosticableTreeMixin implements Item {
 // Removed 'required' keyword
 @override@JsonKey() final  ItemStatus status;
 // Removed 'required' keyword
+@override@JsonKey(name: 'storage_location') final  String? storageLocation;
+// Added field
+@override@JsonKey(name: 'sales_channel') final  String? salesChannel;
+// Added field
 @override@JsonKey(name: 'acquired_date') final  DateTime? acquiredDate;
 // Often same as pallet purchase date
 @override@JsonKey(name: 'sold_date') final  DateTime? soldDate;
@@ -151,21 +159,21 @@ Map<String, dynamic> toJson() {
 void debugFillProperties(DiagnosticPropertiesBuilder properties) {
   properties
     ..add(DiagnosticsProperty('type', 'Item'))
-    ..add(DiagnosticsProperty('id', id))..add(DiagnosticsProperty('palletId', palletId))..add(DiagnosticsProperty('name', name))..add(DiagnosticsProperty('description', description))..add(DiagnosticsProperty('quantity', quantity))..add(DiagnosticsProperty('purchasePrice', purchasePrice))..add(DiagnosticsProperty('salePrice', salePrice))..add(DiagnosticsProperty('sku', sku))..add(DiagnosticsProperty('condition', condition))..add(DiagnosticsProperty('status', status))..add(DiagnosticsProperty('acquiredDate', acquiredDate))..add(DiagnosticsProperty('soldDate', soldDate))..add(DiagnosticsProperty('createdAt', createdAt))..add(DiagnosticsProperty('updatedAt', updatedAt))..add(DiagnosticsProperty('allocatedCost', allocatedCost));
+    ..add(DiagnosticsProperty('id', id))..add(DiagnosticsProperty('palletId', palletId))..add(DiagnosticsProperty('name', name))..add(DiagnosticsProperty('description', description))..add(DiagnosticsProperty('quantity', quantity))..add(DiagnosticsProperty('purchasePrice', purchasePrice))..add(DiagnosticsProperty('salePrice', salePrice))..add(DiagnosticsProperty('sku', sku))..add(DiagnosticsProperty('condition', condition))..add(DiagnosticsProperty('status', status))..add(DiagnosticsProperty('storageLocation', storageLocation))..add(DiagnosticsProperty('salesChannel', salesChannel))..add(DiagnosticsProperty('acquiredDate', acquiredDate))..add(DiagnosticsProperty('soldDate', soldDate))..add(DiagnosticsProperty('createdAt', createdAt))..add(DiagnosticsProperty('updatedAt', updatedAt))..add(DiagnosticsProperty('allocatedCost', allocatedCost));
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Item&&(identical(other.id, id) || other.id == id)&&(identical(other.palletId, palletId) || other.palletId == palletId)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.purchasePrice, purchasePrice) || other.purchasePrice == purchasePrice)&&(identical(other.salePrice, salePrice) || other.salePrice == salePrice)&&(identical(other.sku, sku) || other.sku == sku)&&(identical(other.condition, condition) || other.condition == condition)&&(identical(other.status, status) || other.status == status)&&(identical(other.acquiredDate, acquiredDate) || other.acquiredDate == acquiredDate)&&(identical(other.soldDate, soldDate) || other.soldDate == soldDate)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.allocatedCost, allocatedCost) || other.allocatedCost == allocatedCost));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Item&&(identical(other.id, id) || other.id == id)&&(identical(other.palletId, palletId) || other.palletId == palletId)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.quantity, quantity) || other.quantity == quantity)&&(identical(other.purchasePrice, purchasePrice) || other.purchasePrice == purchasePrice)&&(identical(other.salePrice, salePrice) || other.salePrice == salePrice)&&(identical(other.sku, sku) || other.sku == sku)&&(identical(other.condition, condition) || other.condition == condition)&&(identical(other.status, status) || other.status == status)&&(identical(other.storageLocation, storageLocation) || other.storageLocation == storageLocation)&&(identical(other.salesChannel, salesChannel) || other.salesChannel == salesChannel)&&(identical(other.acquiredDate, acquiredDate) || other.acquiredDate == acquiredDate)&&(identical(other.soldDate, soldDate) || other.soldDate == soldDate)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.allocatedCost, allocatedCost) || other.allocatedCost == allocatedCost));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,palletId,name,description,quantity,purchasePrice,salePrice,sku,condition,status,acquiredDate,soldDate,createdAt,updatedAt,allocatedCost);
+int get hashCode => Object.hash(runtimeType,id,palletId,name,description,quantity,purchasePrice,salePrice,sku,condition,status,storageLocation,salesChannel,acquiredDate,soldDate,createdAt,updatedAt,allocatedCost);
 
 @override
 String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
-  return 'Item(id: $id, palletId: $palletId, name: $name, description: $description, quantity: $quantity, purchasePrice: $purchasePrice, salePrice: $salePrice, sku: $sku, condition: $condition, status: $status, acquiredDate: $acquiredDate, soldDate: $soldDate, createdAt: $createdAt, updatedAt: $updatedAt, allocatedCost: $allocatedCost)';
+  return 'Item(id: $id, palletId: $palletId, name: $name, description: $description, quantity: $quantity, purchasePrice: $purchasePrice, salePrice: $salePrice, sku: $sku, condition: $condition, status: $status, storageLocation: $storageLocation, salesChannel: $salesChannel, acquiredDate: $acquiredDate, soldDate: $soldDate, createdAt: $createdAt, updatedAt: $updatedAt, allocatedCost: $allocatedCost)';
 }
 
 
@@ -176,7 +184,7 @@ abstract mixin class _$ItemCopyWith<$Res> implements $ItemCopyWith<$Res> {
   factory _$ItemCopyWith(_Item value, $Res Function(_Item) _then) = __$ItemCopyWithImpl;
 @override @useResult
 $Res call({
- String id,@JsonKey(name: 'pallet_id') String palletId, String name, String? description, int quantity,@JsonKey(name: 'purchase_price') double? purchasePrice,@JsonKey(name: 'sale_price') double? salePrice, String? sku, ItemCondition condition, ItemStatus status,@JsonKey(name: 'acquired_date') DateTime? acquiredDate,@JsonKey(name: 'sold_date') DateTime? soldDate,@JsonKey(name: 'created_at') DateTime? createdAt,@JsonKey(name: 'updated_at') DateTime? updatedAt,@JsonKey(name: 'allocated_cost') double? allocatedCost
+ String id,@JsonKey(name: 'pallet_id') String palletId, String name, String? description, int quantity,@JsonKey(name: 'purchase_price') double? purchasePrice,@JsonKey(name: 'sale_price') double? salePrice, String? sku, ItemCondition condition, ItemStatus status,@JsonKey(name: 'storage_location') String? storageLocation,@JsonKey(name: 'sales_channel') String? salesChannel,@JsonKey(name: 'acquired_date') DateTime? acquiredDate,@JsonKey(name: 'sold_date') DateTime? soldDate,@JsonKey(name: 'created_at') DateTime? createdAt,@JsonKey(name: 'updated_at') DateTime? updatedAt,@JsonKey(name: 'allocated_cost') double? allocatedCost
 });
 
 
@@ -193,7 +201,7 @@ class __$ItemCopyWithImpl<$Res>
 
 /// Create a copy of Item
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? palletId = null,Object? name = null,Object? description = freezed,Object? quantity = null,Object? purchasePrice = freezed,Object? salePrice = freezed,Object? sku = freezed,Object? condition = null,Object? status = null,Object? acquiredDate = freezed,Object? soldDate = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? allocatedCost = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? palletId = null,Object? name = null,Object? description = freezed,Object? quantity = null,Object? purchasePrice = freezed,Object? salePrice = freezed,Object? sku = freezed,Object? condition = null,Object? status = null,Object? storageLocation = freezed,Object? salesChannel = freezed,Object? acquiredDate = freezed,Object? soldDate = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,Object? allocatedCost = freezed,}) {
   return _then(_Item(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,palletId: null == palletId ? _self.palletId : palletId // ignore: cast_nullable_to_non_nullable
@@ -205,7 +213,9 @@ as double?,salePrice: freezed == salePrice ? _self.salePrice : salePrice // igno
 as double?,sku: freezed == sku ? _self.sku : sku // ignore: cast_nullable_to_non_nullable
 as String?,condition: null == condition ? _self.condition : condition // ignore: cast_nullable_to_non_nullable
 as ItemCondition,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
-as ItemStatus,acquiredDate: freezed == acquiredDate ? _self.acquiredDate : acquiredDate // ignore: cast_nullable_to_non_nullable
+as ItemStatus,storageLocation: freezed == storageLocation ? _self.storageLocation : storageLocation // ignore: cast_nullable_to_non_nullable
+as String?,salesChannel: freezed == salesChannel ? _self.salesChannel : salesChannel // ignore: cast_nullable_to_non_nullable
+as String?,acquiredDate: freezed == acquiredDate ? _self.acquiredDate : acquiredDate // ignore: cast_nullable_to_non_nullable
 as DateTime?,soldDate: freezed == soldDate ? _self.soldDate : soldDate // ignore: cast_nullable_to_non_nullable
 as DateTime?,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable

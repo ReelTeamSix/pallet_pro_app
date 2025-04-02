@@ -9,9 +9,10 @@ abstract class Pallet with _$Pallet {
   const factory Pallet({
     required String id,
     required String name,
-    required double cost,
+    @JsonKey(name: 'purchase_cost') required double cost,
     String? type,
     String? supplier,
+    String? source,
     @JsonKey(name: 'purchase_date') DateTime? purchaseDate,
     @JsonKey(name: 'created_at') DateTime? createdAt,
     @JsonKey(name: 'updated_at') DateTime? updatedAt,

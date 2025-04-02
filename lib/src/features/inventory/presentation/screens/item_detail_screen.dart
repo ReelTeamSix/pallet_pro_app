@@ -16,6 +16,7 @@ class ItemDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Use the mock provider instead of the real one for testing
     final itemAsync = ref.watch(itemDetailProviderMock(itemId));
+    // final itemAsync = ref.watch(itemDetailProvider(itemId)); // Use the real provider
 
     return Scaffold(
       appBar: AppBar(
@@ -80,7 +81,7 @@ class ItemDetailScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Item Information', 
+                        Text('Item Information',
                             style: Theme.of(context).textTheme.titleLarge),
                         const Divider(),
                         const SizedBox(height: 8),
@@ -95,6 +96,16 @@ class ItemDetailScreen extends ConsumerWidget {
                           subtitle: Text(item.description ?? 'Not specified'),
                         ),
                         ListTile(
+                          leading: const Icon(Icons.location_on),
+                          title: const Text('Storage Location'),
+                          subtitle: Text(item.storageLocation ?? 'Not specified'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.storefront),
+                          title: const Text('Sales Channel'),
+                          subtitle: Text(item.salesChannel ?? 'Not specified'),
+                        ),
+                        ListTile(
                           leading: const Icon(Icons.numbers),
                           title: const Text('Quantity'),
                           subtitle: Text('${item.quantity}'),
@@ -107,8 +118,8 @@ class ItemDetailScreen extends ConsumerWidget {
                         ListTile(
                           leading: const Icon(Icons.attach_money),
                           title: const Text('Purchase Price'),
-                          subtitle: Text(item.purchasePrice != null 
-                              ? '\$${item.purchasePrice!.toStringAsFixed(2)}' 
+                          subtitle: Text(item.purchasePrice != null
+                              ? '\$${item.purchasePrice!.toStringAsFixed(2)}'
                               : 'Not specified'),
                         ),
                       ],
