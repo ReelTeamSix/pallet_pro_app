@@ -18,12 +18,14 @@ enum ItemCondition {
 }
 
 enum ItemStatus {
+  @JsonValue('in_stock')
+  inStock,
   @JsonValue('for_sale')
   forSale,
+  @JsonValue('listed')
+  listed,
   @JsonValue('sold')
   sold,
-  @JsonValue('archived') // e.g., items that won't be sold
-  archived,
 }
 
 @freezed
@@ -36,9 +38,14 @@ abstract class Item with _$Item {
     @Default(1) int quantity, // Removed 'required' keyword
     @JsonKey(name: 'purchase_price') double? purchasePrice, // May be calculated/allocated later
     @JsonKey(name: 'sale_price') double? salePrice,
+    @JsonKey(name: 'listing_price') double? listingPrice,
+    @JsonKey(name: 'listing_platform') String? listingPlatform,
+    @JsonKey(name: 'listing_date') DateTime? listingDate,
+    @JsonKey(name: 'selling_platform') String? sellingPlatform,
+    @JsonKey(name: 'sold_price') double? soldPrice, // Added field for sold price
     String? sku,
     @Default(ItemCondition.newItem) ItemCondition condition, // Removed 'required' keyword
-    @Default(ItemStatus.forSale) ItemStatus status, // Removed 'required' keyword
+    @Default(ItemStatus.inStock) ItemStatus status, // Updated default status to inStock
     @JsonKey(name: 'storage_location') String? storageLocation, // Added field
     @JsonKey(name: 'sales_channel') String? salesChannel, // Added field
     @JsonKey(name: 'acquired_date') DateTime? acquiredDate, // Often same as pallet purchase date

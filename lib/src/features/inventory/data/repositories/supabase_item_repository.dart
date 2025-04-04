@@ -26,11 +26,48 @@ class SupabaseItemRepository implements ItemRepository {
   String _statusToDbString(ItemStatus status) {
     // Use a switch statement based on the enum values and their expected @JsonValue
     switch (status) {
+      case ItemStatus.inStock: return 'in_stock';
       case ItemStatus.forSale: return 'for_sale';
+      case ItemStatus.listed: return 'listed';
       case ItemStatus.sold: return 'sold';
-      case ItemStatus.archived: return 'archived';
-      // Add a default case or handle potential future statuses if necessary
     }
+  }
+
+  // Helper method to fix JSON field names for Item deserialization
+  Map<String, dynamic> _fixItemFieldNames(Map<String, dynamic> json) {
+    // Handle the spelling discrepancy between database schema and model
+    if (json.containsKey('aquired_date') && !json.containsKey('acquired_date')) {
+      final aquiredDate = json.remove('aquired_date');
+      if (aquiredDate != null) {
+        json['acquired_date'] = aquiredDate;
+      }
+    }
+    
+    // Map selling_price (DB) to sale_price (model)
+    if (json.containsKey('selling_price') && !json.containsKey('sale_price')) {
+      final sellingPrice = json.remove('selling_price');
+      if (sellingPrice != null) {
+        json['sale_price'] = sellingPrice;
+      }
+    }
+    
+    // Add missing fields that are in the model but not in the database
+    final fieldsToCheck = [
+      'allocated_cost',
+      'sku',
+      'sold_date',
+      'description',
+      'storage_location',
+      'sales_channel'
+    ];
+    
+    for (final field in fieldsToCheck) {
+      if (!json.containsKey(field)) {
+        json[field] = null;
+      }
+    }
+    
+    return json;
   }
 
   @override
@@ -42,10 +79,35 @@ class SupabaseItemRepository implements ItemRepository {
       itemData.remove('id');
       itemData['created_at'] ??= DateTime.now().toIso8601String();
       itemData['updated_at'] ??= DateTime.now().toIso8601String();
+      
+      // Ensure purchase_price is not null to satisfy DB constraint
+      if (itemData['purchase_price'] == null) {
+        itemData['purchase_price'] = 0.0; // Default value to satisfy DB constraint
+      }
+      
+      // Ensure selling_price is not null to satisfy DB constraint
+      // Map from salePrice (model) to selling_price (DB)
+      itemData['selling_price'] = itemData['sale_price'] ?? 0.0;
+      itemData.remove('sale_price');
 
-      // Ensure enum fields are correctly serialized if needed (toJson should handle this)
-      // itemData['status'] = _statusToDbString(item.status); // Handled by toJson
-      // itemData['condition'] = item.condition.name; // Assuming DB stores condition name string
+      // Fix for database schema spelling issue - rename acquired_date to aquired_date
+      if (itemData.containsKey('acquired_date')) {
+        final acquiredDate = itemData.remove('acquired_date');
+        if (acquiredDate != null) {
+          itemData['aquired_date'] = acquiredDate;
+        }
+      }
+      
+      // Remove fields that don't exist in the database schema
+      final fieldsToRemove = [
+        'allocated_cost',
+        'sku',
+        'sold_date'
+      ];
+      
+      for (final field in fieldsToRemove) {
+        itemData.remove(field);
+      }
 
       final response = await _supabaseClient
           .from(_tableName)
@@ -53,12 +115,10 @@ class SupabaseItemRepository implements ItemRepository {
           .select()
           .single();
 
-      return Result.success(Item.fromJson(response));
+      return Result.success(Item.fromJson(_fixItemFieldNames(response)));
     } on PostgrestException catch (e) {
-       // TODO: Map to specific DatabaseException
       return Result.failure(DatabaseException.creationFailed('item', e.message));
     } catch (e) {
-      // TODO: Map to specific AppException or UnexpectedException
       return Result.failure(UnexpectedException('Unexpected error creating item', e));
     }
   }
@@ -74,7 +134,7 @@ class SupabaseItemRepository implements ItemRepository {
           .eq('user_id', userId) // RLS should handle this, but explicit check is safer
           .maybeSingle();
 
-      final item = response == null ? null : Item.fromJson(response);
+      final item = response == null ? null : Item.fromJson(_fixItemFieldNames(response));
       return Result.success(item);
     } on PostgrestException catch (e) {
        // TODO: Map to specific DatabaseException
@@ -117,7 +177,7 @@ class SupabaseItemRepository implements ItemRepository {
       final response = await query.order('created_at', ascending: false);
 
       // The response includes nested pallet data. We need to parse Item correctly.
-      final items = response.map((json) => Item.fromJson(json)).toList();
+      final items = response.map((json) => Item.fromJson(_fixItemFieldNames(json))).toList();
       return Result.success(items);
     } on PostgrestException catch (e) {
       return Result.failure(DatabaseException.fetchFailed('all items with filters', e.message));
@@ -137,7 +197,7 @@ class SupabaseItemRepository implements ItemRepository {
           .eq('user_id', userId)
           .order('created_at', ascending: true);
 
-      final items = response.map((json) => Item.fromJson(json)).toList();
+      final items = response.map((json) => Item.fromJson(_fixItemFieldNames(json))).toList();
       return Result.success(items);
     } on PostgrestException catch (e) {
       return Result.failure(DatabaseException.fetchFailed('items for pallet $palletId', e.message));
@@ -165,10 +225,10 @@ class SupabaseItemRepository implements ItemRepository {
           .select()
           .eq('user_id', userId)
           .eq('status', _statusToDbString(ItemStatus.forSale))
-          .lt('acquired_date', thresholdDate.toIso8601String())
-          .order('acquired_date', ascending: true);
+          .lt('aquired_date', thresholdDate.toIso8601String())
+          .order('aquired_date', ascending: true);
 
-      final items = response.map((json) => Item.fromJson(json)).toList();
+      final items = response.map((json) => Item.fromJson(_fixItemFieldNames(json))).toList();
       return Result.success(items);
     } on PostgrestException catch (e) {
       return Result.failure(DatabaseException.fetchFailed('stale items', e.message));
@@ -186,10 +246,35 @@ class SupabaseItemRepository implements ItemRepository {
        itemData.remove('user_id');
        itemData.remove('id');
        itemData['updated_at'] = DateTime.now().toIso8601String();
+       
+       // Ensure purchase_price is not null to satisfy DB constraint
+       if (itemData['purchase_price'] == null) {
+         itemData['purchase_price'] = 0.0; // Default value to satisfy DB constraint
+       }
+       
+       // Ensure selling_price is not null to satisfy DB constraint
+       // Map from salePrice (model) to selling_price (DB)
+       itemData['selling_price'] = itemData['sale_price'] ?? 0.0;
+       itemData.remove('sale_price');
 
-       // Ensure enum fields are correctly serialized if needed (toJson should handle this)
-       // itemData['status'] = _statusToDbString(item.status); // Handled by toJson
-       // itemData['condition'] = item.condition.name; // Assuming DB stores condition name string
+       // Fix for database schema spelling issue - rename acquired_date to aquired_date
+       if (itemData.containsKey('acquired_date')) {
+         final acquiredDate = itemData.remove('acquired_date');
+         if (acquiredDate != null) {
+           itemData['aquired_date'] = acquiredDate;
+         }
+       }
+       
+       // Remove fields that don't exist in the database schema
+       final fieldsToRemove = [
+         'allocated_cost',
+         'sku',
+         'sold_date'
+       ];
+       
+       for (final field in fieldsToRemove) {
+         itemData.remove(field);
+       }
 
        final response = await _supabaseClient
           .from(_tableName)
@@ -199,7 +284,7 @@ class SupabaseItemRepository implements ItemRepository {
           .select()
           .single();
 
-      return Result.success(Item.fromJson(response));
+      return Result.success(Item.fromJson(_fixItemFieldNames(response)));
     } on PostgrestException catch (e) {
        return Result.failure(DatabaseException.updateFailed('item ${item.id}', e.message));
     } catch (e) {
@@ -223,6 +308,120 @@ class SupabaseItemRepository implements ItemRepository {
       return Result.failure(DatabaseException.deletionFailed('item $id', e.message));
     } catch (e) {
        return Result.failure(UnexpectedException('Unexpected error deleting item', e));
+    }
+  }
+
+  @override
+  Future<Result<List<Item>>> getItemsWithoutPallet() async {
+    try {
+      final userId = _getCurrentUserId();
+      final response = await _supabaseClient
+          .from(_tableName)
+          .select()
+          .eq('pallet_id', 'no_pallet')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+
+      final items = response.map((json) => Item.fromJson(_fixItemFieldNames(json))).toList();
+      return Result.success(items);
+    } on PostgrestException catch (e) {
+      return Result.failure(DatabaseException.fetchFailed('items without pallet', e.message));
+    } catch (e) {
+      return Result.failure(UnexpectedException('Unexpected error fetching items without pallet', e));
+    }
+  }
+
+  /// Updates purchase prices for all items in a pallet based on the allocation method
+  @override
+  Future<Result<void>> batchUpdateItemPurchasePrices({
+    required String palletId, 
+    required double palletCost, 
+    required String allocationMethod // 'even', 'proportional', or 'manual'
+  }) async {
+    try {
+      final userId = _getCurrentUserId();
+      
+      // First, get all items for this pallet
+      final itemsResult = await getItemsByPallet(palletId);
+      if (itemsResult.isFailure) {
+        return Result.failure(itemsResult.error!);
+      }
+      
+      final items = itemsResult.value!;
+      if (items.isEmpty) {
+        return const Result.success(null); // No items to update
+      }
+      
+      // Calculate purchase prices based on allocation method
+      final updates = <Map<String, dynamic>>[];
+      
+      switch (allocationMethod) {
+        case 'even':
+          // Distribute cost evenly across all items
+          final costPerItem = palletCost / items.length;
+          for (final item in items) {
+            updates.add({
+              'id': item.id,
+              'purchase_price': costPerItem,
+              'updated_at': DateTime.now().toIso8601String(),
+            });
+          }
+          break;
+          
+        case 'proportional':
+          // Allocate cost based on selling price (or listing price)
+          // First calculate the total value of all items
+          double totalValue = 0;
+          for (final item in items) {
+            // Use listing_price if available, otherwise sale_price, or default to 1.0
+            final itemValue = item.listingPrice ?? item.salePrice ?? 1.0;
+            totalValue += itemValue;
+          }
+          
+          // Now allocate cost proportionally
+          for (final item in items) {
+            final itemValue = item.listingPrice ?? item.salePrice ?? 1.0;
+            final proportion = itemValue / totalValue;
+            final allocatedCost = palletCost * proportion;
+            
+            updates.add({
+              'id': item.id,
+              'purchase_price': allocatedCost,
+              'updated_at': DateTime.now().toIso8601String(),
+            });
+          }
+          break;
+          
+        case 'manual':
+          // For manual allocation, we don't automatically update prices
+          // This would be handled through the UI
+          return const Result.success(null);
+          
+        default:
+          // Default to even distribution if allocation method is not recognized
+          final costPerItem = palletCost / items.length;
+          for (final item in items) {
+            updates.add({
+              'id': item.id,
+              'purchase_price': costPerItem,
+              'updated_at': DateTime.now().toIso8601String(),
+            });
+          }
+      }
+      
+      // Perform batch update if there are items to update
+      if (updates.isNotEmpty) {
+        await _supabaseClient
+            .from(_tableName)
+            .upsert(updates)
+            .eq('user_id', userId);
+      }
+      
+      return const Result.success(null);
+    } on PostgrestException catch (e) {
+      return Result.failure(DatabaseException.updateFailed('batch item purchase prices', e.message));
+    } catch (e) {
+      return Result.failure(UnexpectedException('Unexpected error updating batch item purchase prices', e));
     }
   }
 

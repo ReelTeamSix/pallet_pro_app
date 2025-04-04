@@ -13,6 +13,9 @@ _Pallet _$PalletFromJson(Map<String, dynamic> json) => _Pallet(
   type: json['type'] as String?,
   supplier: json['supplier'] as String?,
   source: json['source'] as String?,
+  status:
+      $enumDecodeNullable(_$PalletStatusEnumMap, json['status']) ??
+      PalletStatus.inProgress,
   purchaseDate:
       json['purchase_date'] == null
           ? null
@@ -34,7 +37,14 @@ Map<String, dynamic> _$PalletToJson(_Pallet instance) => <String, dynamic>{
   'type': instance.type,
   'supplier': instance.supplier,
   'source': instance.source,
+  'status': _$PalletStatusEnumMap[instance.status]!,
   'purchase_date': instance.purchaseDate?.toIso8601String(),
   'created_at': instance.createdAt?.toIso8601String(),
   'updated_at': instance.updatedAt?.toIso8601String(),
+};
+
+const _$PalletStatusEnumMap = {
+  PalletStatus.inProgress: 'in_progress',
+  PalletStatus.processed: 'processed',
+  PalletStatus.archived: 'archived',
 };

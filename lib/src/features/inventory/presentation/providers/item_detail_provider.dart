@@ -1,10 +1,15 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
+import 'package:pallet_pro_app/src/core/exceptions/database_exception.dart';
 import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/models/item_photo.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_repository.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/repositories/storage_repository.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/services/item_status_manager.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/providers/item_list_provider.dart';
 
 /// Notifier responsible for managing the state of a single item's details.
@@ -13,10 +18,15 @@ import 'package:pallet_pro_app/src/features/inventory/presentation/providers/ite
 /// loading, data, and error states.
 class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
   late ItemRepository _itemRepository;
+  late StorageRepository _storageRepository;
+  late ItemStatusManager _statusManager;
 
   @override
   Future<Item?> build(String arg) async {
     _itemRepository = ref.watch(itemRepositoryProvider);
+    _storageRepository = ref.watch(storageRepositoryProvider);
+    _statusManager = ref.watch(itemStatusManagerProvider);
+    
     final itemId = arg;
     // Cancel any pending operations if the notifier is disposed
     // or the family argument changes.
@@ -36,31 +46,178 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
     try {
       // The repository method name might be different - adjust as needed
       final result = await _itemRepository.getItemById(itemId);
-
-      if (result.isSuccess) {
-        return result.value; // Access the item data
-      } else {
-        // Throw the error contained in the Result or a fallback UnexpectedException
-        throw result.error ?? UnexpectedException('Unknown error fetching item'); 
-      }
+      
+      return result.fold(
+        (item) => item,
+        (error) => throw error, // Re-throw for AsyncValue to catch
+      );
     } catch (e) {
-      // If it's already an AppException (or specific subtype from repo), rethrow
-      if (e is AppException) {
-        rethrow;
-      }
-      // Otherwise, wrap it before rethrowing
-      throw UnexpectedException('Failed to fetch item: $e'); // Use UnexpectedException
+      throw e; // Let AsyncValue handle this exception
     }
   }
 
-  /// Refreshes the item details for the current item ID.
+  /// Refreshes the item data.
   Future<void> refreshItem() async {
-    final itemId = arg; // Access the family argument
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _fetchItem(itemId));
+    state = await AsyncValue.guard(() => _fetchItem(arg));
   }
 
-  // --- Methods for updating or deleting the specific item can be added later ---
+  /// Uploads photos for the item and returns the storage paths.
+  /// 
+  /// This method handles uploading photos to the storage repository
+  /// and returns the list of storage paths for the uploaded photos.
+  Future<Result<List<String>>> uploadItemPhotos(List<XFile> photos) async {
+    final item = state.value;
+    if (item == null) {
+      return Result.failure(
+        UnexpectedException('Cannot upload photos: Item not found'),
+      );
+    }
+
+    try {
+      final List<String> uploadedPaths = [];
+      
+      // Loop through each photo and upload it
+      for (final photo in photos) {
+        // Generate a unique filename using timestamp and original filename
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final originalFilename = photo.name;
+        final fileExtension = originalFilename.split('.').last;
+        final fileName = 'photo_${timestamp}.$fileExtension';
+        
+        // Upload the photo to storage
+        final path = await _storageRepository.uploadItemPhoto(
+          itemId: item.id,
+          fileName: fileName,
+          file: photo,
+        );
+        
+        uploadedPaths.add(path);
+      }
+      
+      // Return the list of paths
+      return Result.success(uploadedPaths);
+    } catch (e) {
+      return Result.failure(
+        e is AppException ? e : UnexpectedException('Failed to upload photos: $e'),
+      );
+    }
+  }
+
+  /// Updates the item with new details.
+  Future<Result<Item>> updateItem(Item updatedItem) async {
+    try {
+      state = const AsyncValue.loading();
+      
+      final result = await _itemRepository.updateItem(updatedItem);
+      
+      if (result.isSuccess) {
+        // Update the state with the updated item
+        state = AsyncValue.data(result.value);
+        return Result.success(result.value);
+      } else {
+        // Revert to previous state on error
+        await refreshItem();
+        return Result.failure(result.error ?? UnexpectedException('Unknown error updating item'));
+      }
+    } catch (e) {
+      // Handle unexpected errors
+      await refreshItem();
+      return Result.failure(
+        e is AppException ? e : UnexpectedException('Failed to update item: $e'),
+      );
+    }
+  }
+
+  /// Deletes photos for the current item
+  Future<Result<void>> deleteItemPhotos(List<String> photoPaths) async {
+    try {
+      await _storageRepository.deleteItemPhotos(photoPaths);
+      return Result.success(null);
+    } catch (e) {
+      return Result.failure(
+        e is AppException ? e : UnexpectedException('Failed to delete photos: $e'),
+      );
+    }
+  }
+
+  /// Marks the item as listed for sale.
+  /// Uses the centralized ItemStatusManager for the actual logic.
+  Future<Result<Item>> markAsListed({
+    required double listingPrice,
+    required String listingPlatform,
+    DateTime? listingDate,
+  }) async {
+    state = const AsyncValue.loading();
+    
+    final result = await _statusManager.markAsListed(
+      itemId: arg,
+      listingPrice: listingPrice,
+      listingPlatform: listingPlatform,
+      listingDate: listingDate,
+    );
+    
+    // Update local state if successful
+    if (result.isSuccess) {
+      state = AsyncValue.data(result.value);
+    } else {
+      state = AsyncValue.error(
+        result.error ?? UnexpectedException('Unknown error'), 
+        StackTrace.current
+      );
+    }
+    
+    return result;
+  }
+
+  /// Marks the item as sold.
+  /// Uses the centralized ItemStatusManager for the actual logic.
+  Future<Result<Item>> markAsSold({
+    required double soldPrice,
+    required String sellingPlatform,
+    DateTime? soldDate,
+  }) async {
+    state = const AsyncValue.loading();
+    
+    final result = await _statusManager.markAsSold(
+      itemId: arg,
+      soldPrice: soldPrice,
+      sellingPlatform: sellingPlatform,
+      soldDate: soldDate,
+    );
+    
+    // Update local state if successful
+    if (result.isSuccess) {
+      state = AsyncValue.data(result.value);
+    } else {
+      state = AsyncValue.error(
+        result.error ?? UnexpectedException('Unknown error'), 
+        StackTrace.current
+      );
+    }
+    
+    return result;
+  }
+
+  /// Marks the item as back in stock (either from listed or sold status).
+  /// Uses the centralized ItemStatusManager for the actual logic.
+  Future<Result<Item>> markAsInStock() async {
+    state = const AsyncValue.loading();
+    
+    final result = await _statusManager.markAsInStock(arg);
+    
+    // Update local state if successful
+    if (result.isSuccess) {
+      state = AsyncValue.data(result.value);
+    } else {
+      state = AsyncValue.error(
+        result.error ?? UnexpectedException('Unknown error'), 
+        StackTrace.current
+      );
+    }
+    
+    return result;
+  }
 }
 
 /// Provider for the [ItemDetailNotifier].
@@ -68,10 +225,21 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
 /// Exposes the asynchronous state ([AsyncValue]) of a single item, accessed
 /// by its ID.
 /// Use `ref.watch(itemDetailProvider(itemId))` to get the state.
-final itemDetailProvider =
+final itemDetailNotifierProvider =
     AsyncNotifierProvider.autoDispose.family<ItemDetailNotifier, Item?, String>(
   ItemDetailNotifier.new,
 );
+
+/// Provider that directly creates an ItemDetailNotifier via FutureProvider
+/// for easier usage with direct provider reference patterns
+final itemDetailProvider = FutureProvider.family<Item?, String>((ref, itemId) async {
+  return ref.watch(itemDetailNotifierProvider(itemId).future);
+});
+
+/// Provides access to the storage repository
+/*final storageRepositoryProvider = Provider<StorageRepository>((ref) {
+  return ref.watch(storageRepositoryProvider);
+});*/
 
 // Mock data for item details (reusing the SimpleItem model from item_list_provider.dart)
 final _mockItemDetails = [
@@ -153,4 +321,61 @@ final itemDetailProviderMock = FutureProvider.family<SimpleItem?, String>((ref, 
     }
     rethrow;
   }
-}); 
+});
+
+// Create a mock notifier class that can be returned by itemDetailProviderMock
+class MockItemDetailNotifier {
+  final String itemId;
+  
+  MockItemDetailNotifier(this.itemId);
+  
+  // Status update methods for testing
+  Future<void> markAsListed({
+    required double listingPrice,
+    required String listingPlatform,
+    required DateTime listingDate,
+  }) async {
+    print('Item marked as listed: $itemId');
+    print('  Price: \$${listingPrice.toStringAsFixed(2)}');
+    print('  Platform: $listingPlatform');
+    print('  Date: ${listingDate.toIso8601String()}');
+  }
+  
+  Future<void> markAsSold({
+    required double soldPrice,
+    required String sellingPlatform,
+    required DateTime soldDate,
+  }) async {
+    print('Item marked as sold: $itemId');
+    print('  Price: \$${soldPrice.toStringAsFixed(2)}');
+    print('  Platform: $sellingPlatform');
+    print('  Date: ${soldDate.toIso8601String()}');
+  }
+  
+  Future<void> markAsInStock() async {
+    print('Item marked as in stock: $itemId');
+  }
+}
+
+// Extension to provide .notifier on the FutureProvider
+extension ItemDetailProviderExtension on FutureProvider<SimpleItem?> {
+  // Get the mock notifier for testing
+  MockItemDetailNotifier get notifier {
+    // Extract itemId from family argument - works with pattern "provider-itemId"
+    final itemId = this.name?.split('-')[1] ?? 
+                  (this.name?.split('(').last.split(')').first ?? 'unknown');
+    return MockItemDetailNotifier(itemId);
+  }
+}
+
+/// Provider for accessing the mock provider with an extension
+final itemDetailProviderMockWithNotifier = Provider.family<MockItemDetailNotifier, String>((ref, itemId) {
+  return MockItemDetailNotifier(itemId);
+});
+
+// ItemDetailProvider with extension for real code access
+extension ItemDetailProviderRealExtension on AutoDisposeFamilyAsyncNotifierProvider<ItemDetailNotifier, Item?, String> {
+  ItemDetailNotifier provideNotifier(Ref ref, String arg) {
+    return ref.read(itemDetailNotifierProvider(arg).notifier);
+  }
+} 

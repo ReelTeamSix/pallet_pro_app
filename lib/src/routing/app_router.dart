@@ -17,6 +17,7 @@ import 'package:pallet_pro_app/src/features/auth/presentation/screens/pin_auth_s
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/forgot_password_screen.dart';
 import 'package:pallet_pro_app/src/features/auth/presentation/screens/reset_password_screen.dart';
 import 'package:pallet_pro_app/src/features/dashboard/presentation/screens/dashboard_screen.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/screens/add_edit_item_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/inventory_list_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/pallet_detail_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/item_detail_screen.dart';
@@ -102,11 +103,13 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   static const biometricAuth = '/biometric-auth';
   static const home = '/home';
   static const settings = '/settings';
-  // NEW Inventory Routes
+  // Inventory Routes
   static const inventoryList = '/inventory';
   static const palletDetail = '/inventory/pallet/:pid'; // pid = pallet id
   static const itemDetail = '/inventory/item/:iid'; // iid = item id
-  // TODO: Add routes for Add/Edit screens later
+  // Add Item Route - placed in the proper hierarchy
+  static const addEditItem = 'add-edit-item'; // Will be used with parent route
+  static const addItemToPallet = '/inventory/pallet/:pid/add-item'; // Used for direct navigation
 
   @override
   void build() {
@@ -838,6 +841,25 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                                           child: PalletDetailScreen(palletId: palletId!),
                                         );
                                       },
+                                      routes: [
+                                        GoRoute(
+                                          path: addEditItem, // Relative path: /home/inventory/pallet/:pid/add-edit-item
+                                          name: addItemToPallet, // Named route for direct navigation
+                                          pageBuilder: (context, state) {
+                                            final palletId = state.pathParameters['pid'];
+                                            final itemId = state.uri.queryParameters['itemId']; // Optional for editing
+                                            
+                                            return _buildPageWithTransition(
+                                              context: context,
+                                              state: state,
+                                              child: AddEditItemScreen(
+                                                palletId: palletId!, 
+                                                item: null, // Item would be fetched separately if needed for editing
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
                                     ),
                                     GoRoute(
                                       path: itemDetail, // Relative path: /home/inventory/item/:iid

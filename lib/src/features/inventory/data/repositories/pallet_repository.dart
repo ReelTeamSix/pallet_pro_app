@@ -13,10 +13,21 @@ abstract class PalletRepository {
   Future<Result<Pallet?>> getPalletById(String id); // Or Future<Either<CustomException, Pallet?>>
 
   /// Fetches all pallets, potentially filtered.
-  Future<Result<List<Pallet>>> getAllPallets({String? sourceFilter}); // Or Future<Either<CustomException, List<Pallet>>>
+  Future<Result<List<Pallet>>> getAllPallets({
+    String? sourceFilter,
+    PalletStatus? statusFilter,
+  }); // Or Future<Either<CustomException, List<Pallet>>>
 
   /// Updates an existing pallet.
   Future<Result<Pallet>> updatePallet(Pallet pallet); // Or Future<Either<CustomException, Pallet>>
+
+  /// Updates a pallet's status, optionally triggering cost allocation if status is set to 'processed'
+  Future<Result<Pallet>> updatePalletStatus({
+    required String palletId,
+    required PalletStatus newStatus,
+    required bool shouldAllocateCosts,
+    String? allocationMethod,
+  });
 
   /// Deletes a pallet by its ID.
   Future<Result<void>> deletePallet(String id); // Or Future<Either<CustomException, void>>

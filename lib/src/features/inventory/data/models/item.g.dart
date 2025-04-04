@@ -14,13 +14,21 @@ _Item _$ItemFromJson(Map<String, dynamic> json) => _Item(
   quantity: (json['quantity'] as num?)?.toInt() ?? 1,
   purchasePrice: (json['purchase_price'] as num?)?.toDouble(),
   salePrice: (json['sale_price'] as num?)?.toDouble(),
+  listingPrice: (json['listing_price'] as num?)?.toDouble(),
+  listingPlatform: json['listing_platform'] as String?,
+  listingDate:
+      json['listing_date'] == null
+          ? null
+          : DateTime.parse(json['listing_date'] as String),
+  sellingPlatform: json['selling_platform'] as String?,
+  soldPrice: (json['sold_price'] as num?)?.toDouble(),
   sku: json['sku'] as String?,
   condition:
       $enumDecodeNullable(_$ItemConditionEnumMap, json['condition']) ??
       ItemCondition.newItem,
   status:
       $enumDecodeNullable(_$ItemStatusEnumMap, json['status']) ??
-      ItemStatus.forSale,
+      ItemStatus.inStock,
   storageLocation: json['storage_location'] as String?,
   salesChannel: json['sales_channel'] as String?,
   acquiredDate:
@@ -50,6 +58,11 @@ Map<String, dynamic> _$ItemToJson(_Item instance) => <String, dynamic>{
   'quantity': instance.quantity,
   'purchase_price': instance.purchasePrice,
   'sale_price': instance.salePrice,
+  'listing_price': instance.listingPrice,
+  'listing_platform': instance.listingPlatform,
+  'listing_date': instance.listingDate?.toIso8601String(),
+  'selling_platform': instance.sellingPlatform,
+  'sold_price': instance.soldPrice,
   'sku': instance.sku,
   'condition': _$ItemConditionEnumMap[instance.condition]!,
   'status': _$ItemStatusEnumMap[instance.status]!,
@@ -72,7 +85,8 @@ const _$ItemConditionEnumMap = {
 };
 
 const _$ItemStatusEnumMap = {
+  ItemStatus.inStock: 'in_stock',
   ItemStatus.forSale: 'for_sale',
+  ItemStatus.listed: 'listed',
   ItemStatus.sold: 'sold',
-  ItemStatus.archived: 'archived',
 };

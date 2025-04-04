@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
-import 'package:pallet_pro_app/src/core/utils/result.dart';
+import 'package:pallet_pro_app/src/core/result/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/pallet.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/pallet_repository.dart';
+import 'package:pallet_pro_app/src/features/settings/data/repositories/user_settings_repository.dart';
+import 'package:pallet_pro_app/src/features/settings/data/providers/user_settings_repository_provider.dart';
 
 /// Notifier responsible for managing the state of the pallet list.
 ///
@@ -11,17 +13,29 @@ import 'package:pallet_pro_app/src/features/inventory/data/repositories/pallet_r
 /// and error states.
 class PalletListNotifier extends AsyncNotifier<List<Pallet>> {
   late final PalletRepository _palletRepository;
+  late final UserSettingsRepository _userSettingsRepository;
+  
+  // Current filter states
+  PalletStatus? _statusFilter;
+  String? _sourceFilter;
+
+  PalletStatus? get statusFilter => _statusFilter;
+  String? get sourceFilter => _sourceFilter;
 
   @override
   Future<List<Pallet>> build() async {
     _palletRepository = ref.watch(palletRepositoryProvider);
+    _userSettingsRepository = ref.watch(userSettingsRepositoryProvider);
     // Initial fetch of pallets
     return _fetchPallets();
   }
 
   Future<List<Pallet>> _fetchPallets() async {
-    // Corrected repository method name
-    final result = await _palletRepository.getAllPallets();
+    // Fetch pallets with applied filters
+    final result = await _palletRepository.getAllPallets(
+      sourceFilter: _sourceFilter,
+      statusFilter: _statusFilter,
+    );
     
     if (result.isSuccess) {
         return result.value;
@@ -37,24 +51,47 @@ class PalletListNotifier extends AsyncNotifier<List<Pallet>> {
     state = await AsyncValue.guard(() => _fetchPallets());
   }
 
-  // --- Methods for adding, updating, deleting pallets will be added later ---
+  /// Sets filters and refreshes the pallet list.
+  Future<void> setFilters({String? statusFilter, String? sourceFilter}) async {
+    // Only refresh if filters actually changed
+    bool filtersChanged = false;
+    
+    if (statusFilter != _statusFilter?.name) {
+      _statusFilter = statusFilter != null ? _stringToPalletStatus(statusFilter) : null;
+      filtersChanged = true;
+    }
+    
+    if (sourceFilter != _sourceFilter) {
+      _sourceFilter = sourceFilter;
+      filtersChanged = true;
+    }
+    
+    if (filtersChanged) {
+      await refreshPallets();
+    }
+  }
+  
+  // Helper method to convert string to PalletStatus
+  PalletStatus? _stringToPalletStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'processed':
+        return PalletStatus.processed;
+      case 'archived':
+        return PalletStatus.archived;
+      case 'in_progress':
+      default:
+        return PalletStatus.inProgress;
+    }
+  }
 
-  // Example: Add Pallet (To be implemented in Part 5.3)
-  // Future<void> addPallet(Pallet newPallet) async {
-  //   state = const AsyncValue.loading(); // Optional: Show loading state during add
-  //   final result = await _palletRepository.addPallet(newPallet);
-  //   await result.when(
-  //     success: (createdPalletId) async {
-  //       // Refresh the list to include the new pallet
-  //       await refreshPallets();
-  //       // Or optimistically update the state:
-  //       // state = AsyncData([...state.value!, createdPallet]); // Need full pallet data
-  //     },
-  //     failure: (exception) {
-  //       state = AsyncError(exception, StackTrace.current);
-  //     },
-  //   );
-  // }
+  /// Clears all filters and refreshes the pallet list.
+  Future<void> clearFilters() async {
+    if (_statusFilter != null || _sourceFilter != null) {
+      _statusFilter = null;
+      _sourceFilter = null;
+      await refreshPallets();
+    }
+  }
 
   /// Adds a new pallet to the database.
   /// 
@@ -70,6 +107,45 @@ class PalletListNotifier extends AsyncNotifier<List<Pallet>> {
         // Refresh the list to include the new pallet
         await refreshPallets();
         return Result.success(createdPallet);
+      },
+      failure: (exception) {
+        state = AsyncError(exception, StackTrace.current);
+        return Result.failure(exception);
+      },
+    );
+  }
+
+  /// Updates the status of a pallet.
+  /// If the new status is 'processed', optionally triggers cost allocation.
+  Future<Result<Pallet>> updatePalletStatus({
+    required String palletId, 
+    required PalletStatus newStatus,
+    bool shouldAllocateCosts = true,
+  }) async {
+    state = const AsyncValue.loading();
+    
+    // If we need to allocate costs, get the user's preferred allocation method
+    String? allocationMethod;
+    if (newStatus == PalletStatus.processed && shouldAllocateCosts) {
+      final settingsResult = await _userSettingsRepository.getUserSettings();
+      allocationMethod = settingsResult.fold(
+        (settings) => settings?.costAllocationMethod?.toString() ?? 'even',
+        (error) => 'even' // Default to 'even' if we can't get user settings
+      );
+    }
+    
+    final result = await _palletRepository.updatePalletStatus(
+      palletId: palletId,
+      newStatus: newStatus,
+      shouldAllocateCosts: shouldAllocateCosts,
+      allocationMethod: allocationMethod,
+    );
+    
+    return result.when(
+      success: (updatedPallet) async {
+        // Refresh the list to reflect the updated pallet
+        await refreshPallets();
+        return Result.success(updatedPallet);
       },
       failure: (exception) {
         state = AsyncError(exception, StackTrace.current);
@@ -177,4 +253,11 @@ final simplePalletListProvider = FutureProvider<List<SimplePallet>>((ref) async 
   
   // Return mock data
   return _mockPallets.map((json) => SimplePallet.fromJson(json)).toList();
-}); 
+});
+
+/// Extension to allow easier access to the notifier
+extension SimplePalletListProviderExtension on FutureProvider<List<SimplePallet>> {
+  AsyncNotifierProvider<PalletListNotifier, List<Pallet>> get notifierProvider {
+    return palletListProvider;
+  }
+} 

@@ -4,6 +4,7 @@ import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_repository.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/services/item_status_manager.dart';
 
 /// Notifier responsible for managing the state of the item list.
 ///
@@ -11,17 +12,35 @@ import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_rep
 /// and error states. Currently fetches all items, may be refined later.
 class ItemListNotifier extends AsyncNotifier<List<Item>> {
   late final ItemRepository _itemRepository;
+  late final ItemStatusManager _statusManager;
+
+  // Current filter states
+  ItemStatus? _statusFilter;
+  String? _storageLocationFilter;
+  String? _salesChannelFilter;
+  String? _palletSourceFilter;
+
+  ItemStatus? get statusFilter => _statusFilter;
+  String? get storageLocationFilter => _storageLocationFilter;
+  String? get salesChannelFilter => _salesChannelFilter;
+  String? get palletSourceFilter => _palletSourceFilter;
 
   @override
   Future<List<Item>> build() async {
     _itemRepository = ref.watch(itemRepositoryProvider);
+    _statusManager = ref.watch(itemStatusManagerProvider);
     // Initial fetch of items
     return _fetchItems();
   }
 
   Future<List<Item>> _fetchItems() async {
-    // Note: This fetches ALL items. Consider adding filtering by pallet later.
-    final result = await _itemRepository.getAllItems();
+    // Apply current filters
+    final result = await _itemRepository.getAllItems(
+      statusFilter: _statusFilter,
+      storageLocationFilter: _storageLocationFilter,
+      salesChannelFilter: _salesChannelFilter,
+      palletSourceFilter: _palletSourceFilter,
+    );
 
     if (result.isSuccess) {
         return result.value;
@@ -36,13 +55,166 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
     state = await AsyncValue.guard(() => _fetchItems());
   }
 
-  // --- Methods for adding, updating, deleting items will be added later ---
+  /// Sets filters and refreshes the item list.
+  Future<void> setFilters({
+    ItemStatus? statusFilter,
+    String? storageLocationFilter,
+    String? salesChannelFilter,
+    String? palletSourceFilter,
+  }) async {
+    // Only refresh if filters actually changed
+    bool filtersChanged = false;
+    
+    if (statusFilter != _statusFilter) {
+      _statusFilter = statusFilter;
+      filtersChanged = true;
+    }
+    
+    if (storageLocationFilter != _storageLocationFilter) {
+      _storageLocationFilter = storageLocationFilter;
+      filtersChanged = true;
+    }
+    
+    if (salesChannelFilter != _salesChannelFilter) {
+      _salesChannelFilter = salesChannelFilter;
+      filtersChanged = true;
+    }
+    
+    if (palletSourceFilter != _palletSourceFilter) {
+      _palletSourceFilter = palletSourceFilter;
+      filtersChanged = true;
+    }
+    
+    if (filtersChanged) {
+      await refreshItems();
+    }
+  }
+
+  /// Clears all filters and refreshes the item list.
+  Future<void> clearFilters() async {
+    if (_statusFilter != null || 
+        _storageLocationFilter != null || 
+        _salesChannelFilter != null || 
+        _palletSourceFilter != null) {
+      _statusFilter = null;
+      _storageLocationFilter = null;
+      _salesChannelFilter = null;
+      _palletSourceFilter = null;
+      await refreshItems();
+    }
+  }
+
+  /// Updates an item.
+  Future<Result<Item>> updateItem(Item item) async {
+    state = const AsyncValue.loading();
+    final result = await _itemRepository.updateItem(item);
+    
+    return result.when(
+      success: (updatedItem) async {
+        await refreshItems();
+        return Result.success(updatedItem);
+      },
+      failure: (exception) {
+        state = AsyncError(exception, StackTrace.current);
+        return Result.failure(exception);
+      },
+    );
+  }
+
+  /// Adds a new item.
+  Future<Result<Item>> addItem(Item item) async {
+    state = const AsyncValue.loading();
+    final result = await _itemRepository.createItem(item);
+    
+    return result.when(
+      success: (createdItem) async {
+        await refreshItems();
+        return Result.success(createdItem);
+      },
+      failure: (exception) {
+        state = AsyncError(exception, StackTrace.current);
+        return Result.failure(exception);
+      },
+    );
+  }
+
+  /// Marks an item as listed for sale.
+  /// Uses the centralized ItemStatusManager for the actual logic.
+  Future<Result<Item>> markItemAsListed({
+    required String itemId,
+    required double listingPrice,
+    required String listingPlatform,
+    DateTime? listingDate,
+  }) async {
+    state = const AsyncValue.loading();
+    
+    final result = await _statusManager.markAsListed(
+      itemId: itemId,
+      listingPrice: listingPrice,
+      listingPlatform: listingPlatform,
+      listingDate: listingDate,
+    );
+    
+    // Refresh item list if successful
+    if (result.isSuccess) {
+      await refreshItems();
+    } else {
+      state = AsyncError(result.error ?? UnexpectedException('Unknown error'), StackTrace.current);
+    }
+    
+    return result;
+  }
+
+  /// Marks an item as sold.
+  /// Uses the centralized ItemStatusManager for the actual logic.
+  Future<Result<Item>> markItemAsSold({
+    required String itemId,
+    required double soldPrice,
+    required String sellingPlatform,
+    DateTime? soldDate,
+  }) async {
+    state = const AsyncValue.loading();
+    
+    final result = await _statusManager.markAsSold(
+      itemId: itemId,
+      soldPrice: soldPrice,
+      sellingPlatform: sellingPlatform,
+      soldDate: soldDate,
+    );
+    
+    // Refresh item list if successful
+    if (result.isSuccess) {
+      await refreshItems();
+    } else {
+      state = AsyncError(result.error ?? UnexpectedException('Unknown error'), StackTrace.current);
+    }
+    
+    return result;
+  }
+
+  /// Marks an item as back in stock.
+  /// Uses the centralized ItemStatusManager for the actual logic.
+  Future<Result<Item>> markItemAsInStock(String itemId) async {
+    state = const AsyncValue.loading();
+    
+    final result = await _statusManager.markAsInStock(itemId);
+    
+    // Refresh item list if successful
+    if (result.isSuccess) {
+      await refreshItems();
+    } else {
+      state = AsyncError(result.error ?? UnexpectedException('Unknown error'), StackTrace.current);
+    }
+    
+    return result;
+  }
 }
 
 /// Provider for the [ItemListNotifier].
 ///
 /// Exposes the asynchronous state ([AsyncValue]) of the item list.
-final itemListProvider = AsyncNotifierProvider<ItemListNotifier, List<Item>>(
+final itemListProvider =
+    AsyncNotifierProvider<ItemListNotifier, List<Item>>(
   ItemListNotifier.new,
 );
 
@@ -153,4 +325,46 @@ final _mockItems = [
     'status': 'forSale',
     'created_at': '2023-12-06T14:20:00.000Z',
   }
-]; 
+];
+
+// Add a SimpleItemListNotifier class with filter methods
+class SimpleItemListNotifier extends StateNotifier<List<SimpleItem>> {
+  SimpleItemListNotifier() : super([]);
+  
+  // Initialize with mock data
+  void initialize(List<SimpleItem> items) {
+    state = items;
+  }
+  
+  // Mock setFilters method
+  void setFilters({String? statusFilter}) {
+    // In a real implementation, this would filter the items
+    // For now, we'll just log to console
+    print('Setting status filter to: $statusFilter');
+  }
+  
+  // Mock clearFilters method
+  void clearFilters() {
+    // In a real implementation, this would reset filters
+    print('Clearing all filters');
+  }
+  
+  // Add a method to add items to the state
+  void addItem(SimpleItem item) {
+    state = [...state, item];
+  }
+}
+
+// Add a provider for the notifier
+final simpleItemListNotifierProvider = StateNotifierProvider<SimpleItemListNotifier, List<SimpleItem>>((ref) {
+  final notifier = SimpleItemListNotifier();
+  // Initialize with mock data - in reality, would fetch from a repository
+  final items = _mockItems.map((item) => SimpleItem.fromJson(item.cast<String, dynamic>())).toList();
+  notifier.initialize(items);
+  return notifier;
+});
+
+/// Extension to allow easier access to the notifier
+extension SimpleItemListNotifierExtension on FutureProvider<List<SimpleItem>> {
+  StateNotifierProvider<SimpleItemListNotifier, List<SimpleItem>> get notifierProvider => simpleItemListNotifierProvider;
+} 

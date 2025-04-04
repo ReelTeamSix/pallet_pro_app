@@ -1,3 +1,7 @@
+// Export all exception types from a single file
+export 'app_exception.dart';
+export 'database_exception.dart';
+
 /// Base class for all application exceptions.
 abstract class AppException implements Exception {
   final String message;

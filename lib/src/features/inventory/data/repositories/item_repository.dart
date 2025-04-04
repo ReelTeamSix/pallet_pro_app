@@ -21,6 +21,9 @@ abstract class ItemRepository {
   /// Fetches all items belonging to a specific pallet.
   Future<Result<List<Item>>> getItemsByPallet(String palletId);
 
+  /// Fetches items that are not associated with any pallet.
+  Future<Result<List<Item>>> getItemsWithoutPallet();
+
   /// Fetches items based on their status.
   /// Deprecated: Use getAllItems with statusFilter instead.
   @Deprecated('Use getAllItems with statusFilter instead')
@@ -34,6 +37,13 @@ abstract class ItemRepository {
 
   /// Deletes an item by its ID.
   Future<Result<void>> deleteItem(String id);
+
+  /// Updates purchase prices for all items in a pallet based on the allocation method
+  Future<Result<void>> batchUpdateItemPurchasePrices({
+    required String palletId, 
+    required double palletCost, 
+    required String allocationMethod // 'even', 'proportional', or 'manual'
+  });
 
   // Add other specific methods like search, batch updates, etc.
   // Future<double> calculateItemProfit(String itemId); // Example for business logic
