@@ -120,6 +120,20 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
         _searchQuery = _searchController.text;
       });
     });
+    
+    // Refresh providers when screen initializes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(itemListProvider);
+      ref.invalidate(simpleItemListProvider);
+    });
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // This will ensure the providers are refreshed whenever the screen becomes active again
+    ref.invalidate(itemListProvider);
+    ref.invalidate(simpleItemListProvider);
   }
   
   @override
@@ -518,39 +532,6 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
                     child: ListView(
                       shrinkWrap: true,
                       children: [
-                        // Option to add an item without a pallet
-                        ListTile(
-                          leading: const Icon(Icons.add_circle_outline),
-                          title: const Text('No Pallet / Direct Source'),
-                          subtitle: const Text('Add an item not from a pallet'),
-                          onTap: () {
-                            Navigator.of(context).pop(); // Close the dialog
-                            
-                            // Navigate to AddEditItemScreen without a pallet ID
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => const AddEditItemScreen(),
-                              ),
-                            ).then((result) {
-                              if (result == true) {
-                                // Show success message
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Item added successfully!'))
-                                );
-                                
-                                // Refresh items
-                                ref.invalidate(simpleItemListProvider);
-                              }
-                            });
-                          },
-                        ),
-                        
-                        const Divider(),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                          child: Text('Or select a pallet:', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        
                         // List of pallets
                         ...List.generate(
                           palletsAsync.value?.length ?? 0,
@@ -608,9 +589,13 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('Add Item'),
-                  content: const Text('You don\'t have any pallets yet. Would you like to add a pallet first, or add an item directly?'),
+                  content: const Text('You need to create a pallet before adding items. Would you like to add a pallet now?'),
                   actions: [
                     TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
                       onPressed: () {
                         Navigator.of(context).pop();
                         _tabController.animateTo(0); // Switch to Pallets tab
@@ -618,30 +603,7 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
                           const SnackBar(content: Text('Switched to Pallets tab to add a pallet'))
                         );
                       },
-                      child: const Text('Add Pallet First'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        
-                        // Navigate to AddEditItemScreen without a pallet ID
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => const AddEditItemScreen(),
-                          ),
-                        ).then((result) {
-                          if (result == true) {
-                            // Show success message
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Item added successfully!'))
-                            );
-                            
-                            // Refresh items
-                            ref.invalidate(simpleItemListProvider);
-                          }
-                        });
-                      },
-                      child: const Text('Add Item Directly'),
+                      child: const Text('Add Pallet'),
                     ),
                   ],
                 ),
@@ -739,7 +701,7 @@ class _PalletsTab extends ConsumerWidget {
                             // This is a limitation of using a ConsumerWidget instead of ConsumerStatefulWidget
                             // In a real app, we might use a different approach
                             // For now, let's just refresh the page
-                            ref.refresh(palletListProvider);
+                            ref.invalidate(palletListProvider);
                           },
                         ),
                     ],
@@ -1039,7 +1001,7 @@ class _ItemsTab extends ConsumerWidget {
                             // This is a limitation of using a ConsumerWidget instead of ConsumerStatefulWidget
                             // In a real app, we might use a different approach
                             // For now, let's just refresh the page
-                            ref.refresh(simpleItemListProvider);
+                            ref.invalidate(simpleItemListProvider);
                           },
                         ),
                     ],
@@ -1138,39 +1100,6 @@ class _ItemsTab extends ConsumerWidget {
                       child: ListView(
                         shrinkWrap: true,
                         children: [
-                          // Option to add an item without a pallet
-                          ListTile(
-                            leading: const Icon(Icons.add_circle_outline),
-                            title: const Text('No Pallet / Direct Source'),
-                            subtitle: const Text('Add an item not from a pallet'),
-                            onTap: () {
-                              Navigator.of(context).pop(); // Close the dialog
-                              
-                              // Navigate to AddEditItemScreen without a pallet ID
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) => const AddEditItemScreen(),
-                                ),
-                              ).then((result) {
-                                if (result == true) {
-                                  // Show success message
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Item added successfully!'))
-                                  );
-                                  
-                                  // Refresh items
-                                  container.refresh(simpleItemListProvider);
-                                }
-                              });
-                            },
-                          ),
-                          
-                          const Divider(),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                            child: Text('Or select a pallet:', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                          
                           // List of pallets
                           ...List.generate(
                             palletsAsync.value?.length ?? 0,
@@ -1223,9 +1152,13 @@ class _ItemsTab extends ConsumerWidget {
                   context: context,
                   builder: (context) => AlertDialog(
                     title: const Text('Add Item'),
-                    content: const Text('You don\'t have any pallets yet. Would you like to add a pallet first, or add an item directly?'),
+                    content: const Text('You need to create a pallet before adding items. Would you like to add a pallet now?'),
                     actions: [
                       TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
                         onPressed: () {
                           Navigator.of(context).pop();
                           // Switch to pallets tab
@@ -1234,30 +1167,7 @@ class _ItemsTab extends ConsumerWidget {
                             const SnackBar(content: Text('Switched to Pallets tab to add a pallet'))
                           );
                         },
-                        child: const Text('Add Pallet First'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          
-                          // Navigate to AddEditItemScreen without a pallet ID
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const AddEditItemScreen(),
-                            ),
-                          ).then((result) {
-                            if (result == true) {
-                              // Show success message
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Item added successfully!'))
-                              );
-                              
-                              // Refresh items
-                              container.refresh(simpleItemListProvider);
-                            }
-                          });
-                        },
-                        child: const Text('Add Item Directly'),
+                        child: const Text('Add Pallet'),
                       ),
                     ],
                   ),

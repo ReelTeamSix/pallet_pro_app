@@ -6,6 +6,9 @@ import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_rep
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 // TODO: Import custom exceptions
 
+// Special UUID for items without a pallet
+const String NO_PALLET_UUID = '00000000-0000-0000-0000-000000000000';
+
 class SupabaseItemRepository implements ItemRepository {
   final SupabaseClient _supabaseClient;
   final String _tableName = 'items';
@@ -318,7 +321,7 @@ class SupabaseItemRepository implements ItemRepository {
       final response = await _supabaseClient
           .from(_tableName)
           .select()
-          .eq('pallet_id', 'no_pallet')
+          .eq('pallet_id', NO_PALLET_UUID)
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 

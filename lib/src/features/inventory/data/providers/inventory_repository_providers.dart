@@ -23,29 +23,28 @@ import 'package:pallet_pro_app/src/features/settings/data/providers/user_setting
 
 // Item repository is defined first since Pallet repository depends on it
 final itemRepositoryProvider = Provider<ItemRepository>((ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return SupabaseItemRepository(client);
+  final supabase = ref.watch(supabaseClientProvider);
+  return SupabaseItemRepository(supabase);
 });
 
 final palletRepositoryProvider = Provider<PalletRepository>((ref) {
-  final client = ref.watch(supabaseClientProvider);
-  final itemRepository = ref.watch(itemRepositoryProvider);
-  return SupabasePalletRepository(client, itemRepository);
+  final supabase = ref.watch(supabaseClientProvider);
+  return SupabasePalletRepository(supabase);
 });
 
 final storageRepositoryProvider = Provider<StorageRepository>((ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return SupabaseStorageRepository(client);
+  final supabase = ref.watch(supabaseClientProvider);
+  return SupabaseStorageRepository(supabase);
 });
 
 final tagRepositoryProvider = Provider<TagRepository>((ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return SupabaseTagRepository(client);
+  final supabase = ref.watch(supabaseClientProvider);
+  return SupabaseTagRepository(supabase);
 });
 
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return SupabaseExpenseRepository(client);
+  final supabase = ref.watch(supabaseClientProvider);
+  return SupabaseExpenseRepository(supabase);
 });
 
 /// Provider for the ItemStatusManager service.

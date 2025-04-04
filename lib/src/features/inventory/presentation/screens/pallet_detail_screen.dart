@@ -36,15 +36,15 @@ class PalletDetailScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
-              // Use the real notifier provider
+              // Refresh all relevant providers
               ref.invalidate(palletDetailProvider(palletId));
-              // Also refresh the items
+              ref.invalidate(itemListProvider);
               ref.invalidate(simpleItemListProvider);
-
-              // Use the real notifier provider
-              ref.invalidate(palletDetailProvider(palletId));
-              // Also refresh the items list
-              ref.invalidate(simpleItemListNotifierProvider);
+              
+              // Show a snackbar to confirm refresh
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Refreshing data...'), duration: Duration(seconds: 1))
+              );
             },
           ),
           palletAsync.when(
@@ -168,9 +168,11 @@ class PalletDetailScreen extends ConsumerWidget {
                                       ),
                                     ).then((added) {
                                       if (added == true) {
-                                        // Refresh the screen
+                                        // Refresh the screen and all item providers
                                         ref.invalidate(palletDetailProvider(palletId));
-                                        // No need to refresh the notifier provider as it updates automatically
+                                        ref.invalidate(itemListProvider);
+                                        ref.invalidate(simpleItemListProvider);
+                                        
                                         // Show success message
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           const SnackBar(content: Text('Item added successfully'))
@@ -355,7 +357,7 @@ class PalletDetailScreen extends ConsumerWidget {
                         );
                         
                         if (confirmed) {
-                          await notifier.markAsProcessed(shouldAllocateCosts: true);
+                          await notifier.markAsProcessed();
                           
                           // Give UI feedback
                           if (context.mounted) {
@@ -387,15 +389,15 @@ class PalletDetailScreen extends ConsumerWidget {
                           ),
                         ).then((added) {
                           if (added == true) {
-                            // Refresh the screen
+                            // Refresh the screen and all item providers
                             ref.invalidate(palletDetailProvider(pallet.id));
-                            // No need to refresh the notifier provider as it updates automatically
+                            ref.invalidate(itemListProvider);
+                            ref.invalidate(simpleItemListProvider);
+                            
                             // Show success message
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Item added successfully'))
-                              );
-                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Item added successfully'))
+                            );
                           }
                         });
                       },

@@ -1,263 +1,355 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
-import 'package:pallet_pro_app/src/core/result/result.dart';
+import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/pallet.dart';
-import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/pallet_repository.dart';
-import 'package:pallet_pro_app/src/features/settings/data/repositories/user_settings_repository.dart';
-import 'package:pallet_pro_app/src/features/settings/data/providers/user_settings_repository_provider.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
+import 'package:flutter/foundation.dart';
 
-/// Notifier responsible for managing the state of the pallet list.
-///
-/// It fetches pallets using the [PalletRepository] and handles loading, data,
-/// and error states.
-class PalletListNotifier extends AsyncNotifier<List<Pallet>> {
-  late final PalletRepository _palletRepository;
-  late final UserSettingsRepository _userSettingsRepository;
-  
-  // Current filter states
-  PalletStatus? _statusFilter;
-  String? _sourceFilter;
+/// Enum for filter types
+enum Filter {
+  name,
+  location,
+  status,
+}
 
-  PalletStatus? get statusFilter => _statusFilter;
-  String? get sourceFilter => _sourceFilter;
+/// Provider for accessing a list of pallets
+final palletListProvider = StateNotifierProvider<PalletListNotifier, AsyncValue<List<Pallet>>>((ref) {
+  final repository = ref.watch(palletRepositoryProvider);
+  return PalletListNotifier(repository);
+});
 
-  @override
-  Future<List<Pallet>> build() async {
-    _palletRepository = ref.watch(palletRepositoryProvider);
-    _userSettingsRepository = ref.watch(userSettingsRepositoryProvider);
-    // Initial fetch of pallets
-    return _fetchPallets();
+/// State notifier for managing the list of pallets
+class PalletListNotifier extends StateNotifier<AsyncValue<List<Pallet>>> {
+  final PalletRepository _palletRepository;
+  List<SimplePallet> _allPallets = [];
+  Map<Filter, String> _activeFilters = {};
+
+  PalletListNotifier(this._palletRepository) : super(const AsyncValue.loading()) {
+    refreshPallets();
   }
 
-  Future<List<Pallet>> _fetchPallets() async {
-    // Fetch pallets with applied filters
-    final result = await _palletRepository.getAllPallets(
-      sourceFilter: _sourceFilter,
-      statusFilter: _statusFilter,
-    );
-    
-    if (result.isSuccess) {
-        return result.value;
-    } else {
-        // Re-throw the specific exception or a fallback UnexpectedException
-        throw result.error ?? UnexpectedException('Unknown error fetching pallets');
-    }
-  }
-
-  /// Refreshes the pallet list.
+  /// Refreshes the list of pallets from the repository
   Future<void> refreshPallets() async {
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _fetchPallets());
-  }
 
-  /// Sets filters and refreshes the pallet list.
-  Future<void> setFilters({String? statusFilter, String? sourceFilter}) async {
-    // Only refresh if filters actually changed
-    bool filtersChanged = false;
-    
-    if (statusFilter != _statusFilter?.name) {
-      _statusFilter = statusFilter != null ? _stringToPalletStatus(statusFilter) : null;
-      filtersChanged = true;
-    }
-    
-    if (sourceFilter != _sourceFilter) {
-      _sourceFilter = sourceFilter;
-      filtersChanged = true;
-    }
-    
-    if (filtersChanged) {
-      await refreshPallets();
-    }
-  }
-  
-  // Helper method to convert string to PalletStatus
-  PalletStatus? _stringToPalletStatus(String status) {
-    switch (status.toLowerCase()) {
-      case 'processed':
-        return PalletStatus.processed;
-      case 'archived':
-        return PalletStatus.archived;
-      case 'in_progress':
-      default:
-        return PalletStatus.inProgress;
+    try {
+      final result = await _palletRepository.getAllPallets();
+      
+      if (result.isSuccess) {
+        final pallets = result.value;
+        _allPallets = pallets.map((p) => SimplePallet.fromPallet(p)).toList();
+        _applyFilters();
+      } else {
+        state = AsyncValue.error(
+          result.error ?? UnexpectedException('Unknown error fetching pallets'),
+          StackTrace.current,
+        );
+      }
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
     }
   }
 
-  /// Clears all filters and refreshes the pallet list.
-  Future<void> clearFilters() async {
-    if (_statusFilter != null || _sourceFilter != null) {
-      _statusFilter = null;
-      _sourceFilter = null;
-      await refreshPallets();
-    }
-  }
-
-  /// Adds a new pallet to the database.
-  /// 
-  /// Updates the state accordingly, either with an optimistic update
-  /// showing the new pallet immediately, or refreshing the entire list
-  /// after successful creation.
-  Future<Result<Pallet>> addPallet(Pallet newPallet) async {
-    state = const AsyncValue.loading();
-    final result = await _palletRepository.createPallet(newPallet);
-    
-    return result.when(
-      success: (createdPallet) async {
-        // Refresh the list to include the new pallet
+  /// Adds a new pallet to the repository
+  Future<Result<Pallet>> addPallet(Pallet pallet) async {
+    try {
+      final result = await _palletRepository.addPallet(pallet);
+      
+      if (result.isSuccess) {
         await refreshPallets();
-        return Result.success(createdPallet);
-      },
-      failure: (exception) {
-        state = AsyncError(exception, StackTrace.current);
-        return Result.failure(exception);
-      },
-    );
+        return Result.success(result.value);
+      } else {
+        return Result.failure(result.error!);
+      }
+    } catch (e) {
+      return Result.failure(e is AppException ? e : UnexpectedException(e.toString()));
+    }
   }
 
-  /// Updates the status of a pallet.
-  /// If the new status is 'processed', optionally triggers cost allocation.
-  Future<Result<Pallet>> updatePalletStatus({
-    required String palletId, 
-    required PalletStatus newStatus,
-    bool shouldAllocateCosts = true,
-  }) async {
-    state = const AsyncValue.loading();
-    
-    // If we need to allocate costs, get the user's preferred allocation method
-    String? allocationMethod;
-    if (newStatus == PalletStatus.processed && shouldAllocateCosts) {
-      final settingsResult = await _userSettingsRepository.getUserSettings();
-      allocationMethod = settingsResult.fold(
-        (settings) => settings?.costAllocationMethod?.toString() ?? 'even',
-        (error) => 'even' // Default to 'even' if we can't get user settings
-      );
+  /// Sets a specific filter value
+  void setFilter(Filter filter, String value) {
+    if (value.isEmpty) {
+      _activeFilters.remove(filter);
+    } else {
+      _activeFilters[filter] = value;
+    }
+    _applyFilters();
+  }
+
+  /// Sets multiple filters at once
+  void setFilters({
+    String? nameFilter,
+    String? sourceFilter,
+    String? statusFilter,
+  }) {
+    if (nameFilter != null) {
+      if (nameFilter.isEmpty) {
+        _activeFilters.remove(Filter.name);
+      } else {
+        _activeFilters[Filter.name] = nameFilter;
+      }
     }
     
-    final result = await _palletRepository.updatePalletStatus(
-      palletId: palletId,
-      newStatus: newStatus,
-      shouldAllocateCosts: shouldAllocateCosts,
-      allocationMethod: allocationMethod,
-    );
+    if (sourceFilter != null) {
+      if (sourceFilter.isEmpty) {
+        _activeFilters.remove(Filter.location);
+      } else {
+        _activeFilters[Filter.location] = sourceFilter;
+      }
+    }
     
-    return result.when(
-      success: (updatedPallet) async {
-        // Refresh the list to reflect the updated pallet
-        await refreshPallets();
-        return Result.success(updatedPallet);
-      },
-      failure: (exception) {
-        state = AsyncError(exception, StackTrace.current);
-        return Result.failure(exception);
-      },
-    );
+    if (statusFilter != null) {
+      if (statusFilter.isEmpty) {
+        _activeFilters.remove(Filter.status);
+      } else {
+        _activeFilters[Filter.status] = statusFilter;
+      }
+    }
+    
+    _applyFilters();
+  }
+
+  /// Clears all active filters
+  void clearFilters() {
+    _activeFilters.clear();
+    _applyFilters();
+  }
+
+  void _applyFilters() {
+    List<SimplePallet> filteredPallets = List.from(_allPallets);
+    
+    _activeFilters.forEach((filter, value) {
+      switch (filter) {
+        case Filter.name:
+          filteredPallets = filteredPallets.where(
+            (p) => p.name.toLowerCase().contains(value.toLowerCase())
+          ).toList();
+          break;
+        case Filter.location:
+          // Use source as location for filtering
+          filteredPallets = filteredPallets.where(
+            (p) => p.source.toLowerCase().contains(value.toLowerCase())
+          ).toList();
+          break;
+        case Filter.status:
+          filteredPallets = filteredPallets.where(
+            (p) => p.status.toLowerCase() == value.toLowerCase()
+          ).toList();
+          break;
+      }
+    });
+    
+    state = AsyncValue.data(filteredPallets.map((p) => p.toPallet()).toList());
   }
 }
 
-/// Provider for the [PalletListNotifier].
-///
-/// Exposes the asynchronous state ([AsyncValue]) of the pallet list.
-final palletListProvider =
-    AsyncNotifierProvider<PalletListNotifier, List<Pallet>>(
-  PalletListNotifier.new,
-);
-
-// TEMPORARY: Mock data for UI testing until model issues are fixed
-final _mockPallets = [
-  {
-    'id': 'p1',
-    'name': 'Electronics Pallet #1',
-    'description': 'Mixed lot of consumer electronics',
-    'purchase_price': 450.00,
-    'purchase_date': '2023-10-15T00:00:00.000Z',
-    'source': 'ABC Liquidators',
-    'status': 'active',
-    'created_at': '2023-10-16T10:00:00.000Z',
-  },
-  {
-    'id': 'p2',
-    'name': 'Clothing Pallet #1',
-    'description': 'Assorted brand name clothing items',
-    'purchase_price': 350.00,
-    'purchase_date': '2023-11-20T00:00:00.000Z',
-    'source': 'Fashion Wholesale',
-    'status': 'active',
-    'created_at': '2023-11-21T09:30:00.000Z',
-  },
-  {
-    'id': 'p3',
-    'name': 'Home Goods Pallet',
-    'description': 'Kitchen and bathroom items',
-    'purchase_price': 275.50,
-    'purchase_date': '2023-12-05T00:00:00.000Z',
-    'source': 'Home Liquidation Co',
-    'status': 'active',
-    'created_at': '2023-12-06T14:00:00.000Z',
-  }
-];
-
-// Temporary simple model class for UI testing
+/// A simplified pallet model for the UI
 class SimplePallet {
   final String id;
   final String name;
-  final String? description;
-  final double? purchasePrice;
-  final DateTime? purchaseDate;
-  final String? source;
-  final String status;
-  final DateTime? createdAt;
+  final String supplier;
+  final String source;
+  final String type;
   final double cost;
-  final String? supplier;
-  final String? type;
-  
+  final DateTime purchaseDate;
+  final DateTime createdAt;
+  final String status;
+
   SimplePallet({
     required this.id,
     required this.name,
-    this.description,
-    this.purchasePrice,
-    this.purchaseDate,
-    this.source,
-    required this.status,
-    this.createdAt,
+    required this.supplier,
+    required this.source,
+    required this.type,
     required this.cost,
-    this.supplier,
-    this.type,
+    required this.purchaseDate,
+    required this.createdAt,
+    required this.status,
   });
-  
+
   factory SimplePallet.fromJson(Map<String, dynamic> json) {
     return SimplePallet(
       id: json['id'] as String,
       name: json['name'] as String,
-      description: json['description'] as String?,
-      purchasePrice: json['purchase_price'] as double?,
-      purchaseDate: json['purchase_date'] != null 
-        ? DateTime.parse(json['purchase_date'] as String)
-        : null,
-      source: json['source'] as String?,
-      status: json['status'] as String,
-      createdAt: json['created_at'] != null 
-        ? DateTime.parse(json['created_at'] as String)
-        : null,
+      supplier: json['supplier'] as String? ?? '',
+      source: json['source'] as String? ?? '',
+      type: json['type'] as String? ?? '',
       cost: (json['cost'] as num?)?.toDouble() ?? 0.0,
-      supplier: json['supplier'] as String?,
-      type: json['type'] as String?,
+      purchaseDate: DateTime.parse(json['purchaseDate'] as String),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      status: json['status'] as String? ?? 'in_progress',
+    );
+  }
+
+  factory SimplePallet.fromPallet(Pallet pallet) {
+    return SimplePallet(
+      id: pallet.id,
+      name: pallet.name,
+      supplier: pallet.supplier ?? '',
+      source: pallet.source ?? '',
+      type: pallet.type ?? '',
+      cost: pallet.cost,
+      purchaseDate: pallet.purchaseDate ?? DateTime.now(),
+      createdAt: pallet.createdAt ?? DateTime.now(),
+      status: pallet.status.name,
+    );
+  }
+
+  Pallet toPallet() {
+    PalletStatus palletStatus;
+    
+    switch (status) {
+      case 'inProgress':
+      case 'in_progress':
+        palletStatus = PalletStatus.inProgress;
+        break;
+      case 'processed':
+        palletStatus = PalletStatus.processed;
+        break;
+      case 'archived':
+        palletStatus = PalletStatus.archived;
+        break;
+      default:
+        palletStatus = PalletStatus.inProgress;
+    }
+    
+    return Pallet(
+      id: id,
+      name: name,
+      supplier: supplier,
+      source: source,
+      type: type,
+      cost: cost,
+      purchaseDate: purchaseDate,
+      createdAt: createdAt,
+      status: palletStatus,
     );
   }
 }
 
-// Mock provider for SimplePallet as an alternative to the main provider
-final simplePalletListProvider = FutureProvider<List<SimplePallet>>((ref) async {
-  // Simulate network delay
-  await Future.delayed(const Duration(seconds: 1));
-  
-  // Return mock data
-  return _mockPallets.map((json) => SimplePallet.fromJson(json)).toList();
+/// Mock provider for testing
+final palletListProviderMock = Provider<List<SimplePallet>>((ref) {
+  return _mockPallets.map((palletData) => SimplePallet.fromJson(palletData)).toList();
 });
 
-/// Extension to allow easier access to the notifier
-extension SimplePalletListProviderExtension on FutureProvider<List<SimplePallet>> {
-  AsyncNotifierProvider<PalletListNotifier, List<Pallet>> get notifierProvider {
-    return palletListProvider;
+// Mock data source for testing
+final List<Map<String, dynamic>> _mockPallets = [
+  {
+    'id': 'PAL001',
+    'name': 'Clothing Pallet',
+    'supplier': 'GoodWill Industries',
+    'source': 'Donation Center',
+    'type': 'Clothing',
+    'cost': 200.00,
+    'purchaseDate': '2023-09-15',
+    'createdAt': '2023-09-15',
+    'status': 'in_progress',
+  },
+  {
+    'id': 'PAL002',
+    'name': 'Electronics Pallet',
+    'supplier': 'Liquidation Co',
+    'source': 'Warehouse',
+    'type': 'Electronics',
+    'cost': 500.00,
+    'purchaseDate': '2023-10-01',
+    'createdAt': '2023-10-01',
+    'status': 'processed',
+  },
+  {
+    'id': 'PAL003',
+    'name': 'Home Goods Pallet',
+    'supplier': 'Amazon Returns',
+    'source': 'Online Returns',
+    'type': 'Home Goods',
+    'cost': 350.00,
+    'purchaseDate': '2023-10-15',
+    'createdAt': '2023-10-15',
+    'status': 'archived',
+  },
+];
+
+class MockPalletListNotifier extends StateNotifier<AsyncValue<List<Pallet>>> 
+    implements PalletListNotifier {
+  
+  // Implement required fields from PalletListNotifier
+  @override
+  final PalletRepository _palletRepository;
+  @override
+  List<SimplePallet> _allPallets = [];
+  @override
+  Map<Filter, String> _activeFilters = {};
+  
+  // Initialize with mock data
+  MockPalletListNotifier(this._palletRepository) : super(AsyncValue.data(_mockPalletData));
+  
+  @override
+  Future<void> refreshPallets() async {
+    // No-op for mock
+    return;
   }
+  
+  @override
+  Future<Result<Pallet>> addPallet(Pallet pallet) async {
+    // Add to mock list and return success
+    final newPallet = pallet.copyWith(
+      id: 'mock-${DateTime.now().millisecondsSinceEpoch}',
+    );
+    
+    _mockPalletData.add(newPallet);
+    state = AsyncValue.data(_mockPalletData);
+    
+    return Result.success(newPallet);
+  }
+  
+  @override
+  void setFilter(Filter filter, String value) {
+    // No-op for mock
+  }
+  
+  @override
+  void setFilters({
+    String? nameFilter,
+    String? sourceFilter,
+    String? statusFilter,
+  }) {
+    // No-op for mock
+  }
+  
+  @override
+  void clearFilters() {
+    // No-op for mock
+  }
+  
+  @override
+  void _applyFilters() {
+    // No-op for mock
+  }
+  
+  // Mock data
+  static List<Pallet> _mockPalletData = [
+    Pallet(
+      id: 'mock-1',
+      name: 'Wholesale Liquidation (Mock)',
+      supplier: 'Big Box Liquidators',
+      source: 'Online Auction',
+      type: 'Mixed Electronics',
+      cost: 1250.00,
+      purchaseDate: DateTime.now().subtract(const Duration(days: 30)),
+      createdAt: DateTime.now().subtract(const Duration(days: 30)),
+      status: PalletStatus.inProgress,
+    ),
+    Pallet(
+      id: 'mock-2',
+      name: 'Amazon Returns (Mock)',
+      supplier: 'Returns R Us',
+      source: 'Warehouse Sale',
+      type: 'Amazon Customer Returns',
+      cost: 850.00,
+      purchaseDate: DateTime.now().subtract(const Duration(days: 15)),
+      createdAt: DateTime.now().subtract(const Duration(days: 15)),
+      status: PalletStatus.processed,
+    ),
+  ];
 } 

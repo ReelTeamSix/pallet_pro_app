@@ -46,8 +46,14 @@ class SupabasePalletRepository implements PalletRepository {
     }
   }
 
+  // Alias for createPallet to match the interface
   @override
-  Future<Result<Pallet?>> getPalletById(String id) async {
+  Future<Result<Pallet>> addPallet(Pallet pallet) {
+    return createPallet(pallet);
+  }
+
+  @override
+  Future<Result<Pallet>> getPalletById(String id) async {
     try {
       final userId = _getCurrentUserId();
       final response = await _supabaseClient
@@ -57,8 +63,11 @@ class SupabasePalletRepository implements PalletRepository {
           .eq('user_id', userId) 
           .maybeSingle();
 
-      final pallet = response == null ? null : Pallet.fromJson(response);
-      return Result.success(pallet);
+      if (response == null) {
+        return Result.failure(NotFoundException('Pallet with ID $id not found'));
+      }
+
+      return Result.success(Pallet.fromJson(response));
     } on PostgrestException catch (e) {
       return Result.failure(DatabaseException.fetchFailed('pallet $id', e.message));
     } catch (e) {
@@ -67,8 +76,59 @@ class SupabasePalletRepository implements PalletRepository {
   }
 
   @override
-  Future<Result<List<Pallet>>> getAllPallets({
-    String? sourceFilter, 
+  Future<Result<List<Pallet>>> getAllPallets({Map<String, dynamic>? filters}) async {
+    try {
+      final userId = _getCurrentUserId();
+      var query = _supabaseClient
+          .from(_tableName)
+          .select()
+          .eq('user_id', userId);
+
+      // Apply filters if provided
+      if (filters != null) {
+        // Apply source filter
+        if (filters['source'] != null && filters['source'].isNotEmpty) {
+          query = query.ilike('source', '%${filters['source']}%');
+        }
+
+        // Apply status filter
+        if (filters['status'] != null) {
+          query = query.eq('status', filters['status']);
+        }
+
+        // Apply name filter
+        if (filters['name'] != null && filters['name'].isNotEmpty) {
+          query = query.ilike('name', '%${filters['name']}%');
+        }
+
+        // Apply supplier filter
+        if (filters['supplier'] != null && filters['supplier'].isNotEmpty) {
+          query = query.ilike('supplier', '%${filters['supplier']}%');
+        }
+
+        // Apply type filter
+        if (filters['type'] != null && filters['type'].isNotEmpty) {
+          query = query.ilike('type', '%${filters['type']}%');
+        }
+      }
+
+      final response = await query.order('created_at', ascending: false);
+
+      final pallets = response.map((json) => Pallet.fromJson(json)).toList();
+      return Result.success(pallets);
+    } on PostgrestException catch (e) {
+      return Result.failure(DatabaseException.fetchFailed('all pallets', e.message));
+    } catch (e) {
+      return Result.failure(UnexpectedException('Unexpected error fetching all pallets', e));
+    }
+  }
+
+  @override
+  Future<Result<List<Pallet>>> getPallets({
+    String? nameFilter,
+    String? sourceFilter,
+    String? supplierFilter,
+    String? typeFilter,
     PalletStatus? statusFilter,
   }) async {
     try {
@@ -78,11 +138,24 @@ class SupabasePalletRepository implements PalletRepository {
           .select()
           .eq('user_id', userId);
 
+      // Apply name filter if provided
+      if (nameFilter != null && nameFilter.isNotEmpty) {
+        query = query.ilike('name', '%$nameFilter%');
+      }
+
       // Apply source filter if provided
       if (sourceFilter != null && sourceFilter.isNotEmpty) {
-        // Assuming 'source' is the column name in your DB
-        // Use 'ilike' for case-insensitive partial matching
         query = query.ilike('source', '%$sourceFilter%');
+      }
+
+      // Apply supplier filter if provided
+      if (supplierFilter != null && supplierFilter.isNotEmpty) {
+        query = query.ilike('supplier', '%$supplierFilter%');
+      }
+
+      // Apply type filter if provided
+      if (typeFilter != null && typeFilter.isNotEmpty) {
+        query = query.ilike('type', '%$typeFilter%');
       }
 
       // Apply status filter if provided
@@ -101,9 +174,9 @@ class SupabasePalletRepository implements PalletRepository {
       final pallets = response.map((json) => Pallet.fromJson(json)).toList();
       return Result.success(pallets);
     } on PostgrestException catch (e) {
-      return Result.failure(DatabaseException.fetchFailed('all pallets', e.message));
+      return Result.failure(DatabaseException.fetchFailed('filtered pallets', e.message));
     } catch (e) {
-      return Result.failure(UnexpectedException('Unexpected error fetching all pallets', e));
+      return Result.failure(UnexpectedException('Unexpected error fetching filtered pallets', e));
     }
   }
 
@@ -180,8 +253,7 @@ class SupabasePalletRepository implements PalletRepository {
   @override
   Future<Result<Pallet>> updatePalletStatus({
     required String palletId,
-    required PalletStatus newStatus,
-    required bool shouldAllocateCosts,
+    required PalletStatus status,
     String? allocationMethod,
   }) async {
     try {
@@ -194,13 +266,10 @@ class SupabasePalletRepository implements PalletRepository {
       }
       
       final pallet = palletResult.value;
-      if (pallet == null) {
-        return Result.failure(NotFoundException('Pallet with ID $palletId not found'));
-      }
       
       // Convert status enum to string for database
       String statusValue;
-      switch (newStatus) {
+      switch (status) {
         case PalletStatus.inProgress: statusValue = 'in_progress'; break;
         case PalletStatus.processed: statusValue = 'processed'; break;
         case PalletStatus.archived: statusValue = 'archived'; break;
@@ -222,30 +291,28 @@ class SupabasePalletRepository implements PalletRepository {
           .single();
       
       // If we're marking it as processed and should allocate costs
-      if (newStatus == PalletStatus.processed && shouldAllocateCosts) {
+      // Determine if we should allocate costs based on the status change
+      final bool shouldAllocateCosts = status == PalletStatus.processed && 
+                                    pallet.status != PalletStatus.processed;
+      
+      if (shouldAllocateCosts && _itemRepository != null) {
         // Get the pallet cost
         final double palletCost = pallet.cost;
         
         // Use default allocation method if not provided
         final costAllocationMethod = allocationMethod ?? 'even';
         
-        // Get the item repository to allocate costs
-        // NOTE: This creates a dependency on ItemRepository. In a real app,
-        // you might want to use dependency injection or pass the repository as a parameter.
-        // For now, we'll assume we have access to the ItemRepository via constructor injection.
-        if (_itemRepository != null) {
-          final allocateResult = await _itemRepository.batchUpdateItemPurchasePrices(
-            palletId: palletId,
-            palletCost: palletCost,
-            allocationMethod: costAllocationMethod,
-          );
-          
-          if (allocateResult.isFailure) {
-            // Cost allocation failed, but pallet status was updated
-            // We could either revert the status change or just log the error
-            // For now, we'll return the error to the caller
-            return Result.failure(allocateResult.error!);
-          }
+        final allocateResult = await _itemRepository.batchUpdateItemPurchasePrices(
+          palletId: palletId,
+          palletCost: palletCost,
+          allocationMethod: costAllocationMethod,
+        );
+        
+        if (allocateResult.isFailure) {
+          // Cost allocation failed, but pallet status was updated
+          // We could either revert the status change or just log the error
+          // For now, we'll return the error to the caller
+          return Result.failure(allocateResult.error!);
         }
       }
       

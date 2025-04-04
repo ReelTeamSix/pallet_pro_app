@@ -43,7 +43,6 @@ class PalletDetailNotifier extends FamilyAsyncNotifier<Pallet?, String> {
   /// Uses the centralized PalletStatusManager for the actual logic.
   Future<Result<Pallet>> updateStatus({
     required PalletStatus newStatus,
-    bool shouldAllocateCosts = true,
   }) async {
     // Update state to loading
     state = const AsyncValue.loading();
@@ -52,7 +51,6 @@ class PalletDetailNotifier extends FamilyAsyncNotifier<Pallet?, String> {
     final result = await _statusManager.updateStatus(
       palletId: arg,
       newStatus: newStatus,
-      shouldAllocateCosts: shouldAllocateCosts,
     );
     
     // Update state based on result
@@ -73,10 +71,9 @@ class PalletDetailNotifier extends FamilyAsyncNotifier<Pallet?, String> {
   }
 
   /// Convenience method to mark a pallet as processed, triggering cost allocation
-  Future<Result<Pallet>> markAsProcessed({bool shouldAllocateCosts = true}) {
+  Future<Result<Pallet>> markAsProcessed() {
     return _statusManager.markAsProcessed(
       palletId: arg,
-      shouldAllocateCosts: shouldAllocateCosts,
     ).then((result) {
       if (result.isSuccess) {
         state = AsyncValue.data(result.value);

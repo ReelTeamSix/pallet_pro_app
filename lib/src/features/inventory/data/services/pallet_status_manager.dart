@@ -17,17 +17,16 @@ class PalletStatusManager {
   
   /// Updates the status of a pallet.
   ///
-  /// Takes the pallet ID, new status, and whether to allocate costs to items.
-  /// If allocating costs, it will get the user's preferred allocation method
-  /// from settings.
+  /// Takes the pallet ID and new status.
+  /// If status is changed to processed, it will get the user's preferred allocation method
+  /// from settings and pass it to the repository.
   Future<Result<Pallet>> updateStatus({
     required String palletId,
     required PalletStatus newStatus,
-    required bool shouldAllocateCosts,
   }) async {
-    // If we need to allocate costs, get the user's preferred allocation method
+    // If we're setting to processed, get the user's preferred allocation method
     String? allocationMethod;
-    if (newStatus == PalletStatus.processed && shouldAllocateCosts) {
+    if (newStatus == PalletStatus.processed) {
       final settingsResult = await _userSettingsRepository.getUserSettings();
       allocationMethod = settingsResult.fold(
         (settings) => settings?.costAllocationMethod?.toString() ?? 'even',
@@ -38,8 +37,7 @@ class PalletStatusManager {
     // Call the repository to update the pallet status
     final result = await _palletRepository.updatePalletStatus(
       palletId: palletId,
-      newStatus: newStatus,
-      shouldAllocateCosts: shouldAllocateCosts,
+      status: newStatus,
       allocationMethod: allocationMethod,
     );
     
@@ -47,16 +45,12 @@ class PalletStatusManager {
   }
   
   /// Convenience method to mark a pallet as processed.
-  ///
-  /// Defaults to allocating costs to items when processing.
   Future<Result<Pallet>> markAsProcessed({
     required String palletId,
-    bool shouldAllocateCosts = true,
   }) {
     return updateStatus(
       palletId: palletId,
       newStatus: PalletStatus.processed,
-      shouldAllocateCosts: shouldAllocateCosts,
     );
   }
   
@@ -65,7 +59,6 @@ class PalletStatusManager {
     return updateStatus(
       palletId: palletId,
       newStatus: PalletStatus.archived,
-      shouldAllocateCosts: false, // No need to allocate costs when archiving
     );
   }
   
@@ -74,7 +67,6 @@ class PalletStatusManager {
     return updateStatus(
       palletId: palletId,
       newStatus: PalletStatus.inProgress,
-      shouldAllocateCosts: false, // No need to allocate costs when setting as in-progress
     );
   }
 } 

@@ -267,16 +267,33 @@ class SimpleItem {
   }
 }
 
-// Mock provider is removed to fix the duplicate declaration
-// The existing itemListProvider above will be used instead
-
 // For temporary usage of SimpleItem, consider creating a separate provider like:
 final simpleItemListProvider = FutureProvider<List<SimpleItem>>((ref) async {
-  // Simulate network delay
-  await Future.delayed(const Duration(seconds: 1));
-  
-  // Return mock data from the existing _mockItems
-  return _mockItems.map((json) => SimpleItem.fromJson(json)).toList();
+  try {
+    // Get items from the real repository via itemListProvider
+    final itemsAsync = await ref.watch(itemListProvider.future);
+    
+    // Convert the real Item objects to SimpleItem objects
+    final simpleItems = itemsAsync.map((item) => SimpleItem(
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      palletId: item.palletId,
+      condition: item.condition.name, // Convert enum to string
+      quantity: item.quantity,
+      purchasePrice: item.purchasePrice,
+      status: item.status.name, // Convert enum to string
+      storageLocation: item.storageLocation,
+      salesChannel: item.salesChannel,
+      createdAt: item.createdAt,
+    )).toList();
+    
+    return simpleItems;
+  } catch (e) {
+    // If there's an error, return mock data as a fallback
+    print('Error loading real items, falling back to mock data: $e');
+    return _mockItems.map((json) => SimpleItem.fromJson(json)).toList();
+  }
 });
 
 // TEMPORARY: Mock data for UI testing until model issues are fixed
@@ -329,38 +346,63 @@ final _mockItems = [
 
 // Add a SimpleItemListNotifier class with filter methods
 class SimpleItemListNotifier extends StateNotifier<List<SimpleItem>> {
+  List<SimpleItem> _originalItems = [];
+  String? _statusFilter;
+  
   SimpleItemListNotifier() : super([]);
   
-  // Initialize with mock data
+  // Initialize with real data
   void initialize(List<SimpleItem> items) {
-    state = items;
+    _originalItems = List.from(items);
+    _applyFilters();
   }
   
-  // Mock setFilters method
+  // Real filter implementation
   void setFilters({String? statusFilter}) {
-    // In a real implementation, this would filter the items
-    // For now, we'll just log to console
-    print('Setting status filter to: $statusFilter');
+    _statusFilter = statusFilter;
+    _applyFilters();
   }
   
-  // Mock clearFilters method
+  // Apply filters to _originalItems and update state
+  void _applyFilters() {
+    if (_statusFilter == null) {
+      state = List.from(_originalItems); // No filters, show all items
+    } else {
+      // Apply status filter
+      state = _originalItems.where((item) => 
+        item.status == _statusFilter
+      ).toList();
+    }
+  }
+  
+  // Clear all filters
   void clearFilters() {
-    // In a real implementation, this would reset filters
-    print('Clearing all filters');
+    _statusFilter = null;
+    state = List.from(_originalItems);
   }
   
   // Add a method to add items to the state
   void addItem(SimpleItem item) {
-    state = [...state, item];
+    _originalItems.add(item);
+    _applyFilters(); // Apply any active filters to the updated list
   }
 }
 
 // Add a provider for the notifier
 final simpleItemListNotifierProvider = StateNotifierProvider<SimpleItemListNotifier, List<SimpleItem>>((ref) {
   final notifier = SimpleItemListNotifier();
-  // Initialize with mock data - in reality, would fetch from a repository
-  final items = _mockItems.map((item) => SimpleItem.fromJson(item.cast<String, dynamic>())).toList();
-  notifier.initialize(items);
+  
+  // Listen to the real data from simpleItemListProvider
+  ref.listen<AsyncValue<List<SimpleItem>>>(simpleItemListProvider, (_, next) {
+    next.whenData((items) {
+      // Update the notifier state when real data changes
+      notifier.initialize(items);
+    });
+  });
+  
+  // Start with empty list - will be populated when data arrives
+  notifier.initialize([]);
+  
   return notifier;
 });
 

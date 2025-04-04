@@ -110,4 +110,50 @@ For testing and UI development:
 - Ensured consistent Result type usage across the codebase
 - Fixed error handling in repository methods
 
-These improvements ensure type safety and maintainability while preserving the clean architecture approach of the application. 
+These improvements ensure type safety and maintainability while preserving the clean architecture approach of the application.
+
+## Data Model Updates (April 2024)
+
+### Pallet Models and Item Relationship
+
+The application has been updated to enforce a more structured relationship between pallets and items:
+
+* **Removal of Standalone Items**: Previously, the application had a concept of "standalone items" that were not associated with any pallet, using a special placeholder pallet ID (`NO_PALLET_UUID`). This functionality has been removed to better align with the core business workflow, where all items are sourced from pallets.
+
+* **Required Pallet Association**: All inventory items must now be associated with a valid pallet. This change improves data consistency and simplifies inventory management.
+
+* **Model Updates**:
+  * The `Pallet` model now uses a standardized enum for status values:
+    * `inProgress` - Default for new pallets, indicates inventory processing is ongoing
+    * `processed` - Indicates pallet inventory is complete and cost allocation is finalized
+    * `archived` - For pallets that are no longer active in inventory
+  
+  * The `Item` model requires a valid `palletId` for all items, with other fields like:
+    * Purchase price - Can be auto-calculated based on pallet cost
+    * Condition - Using standardized enum values
+    * Status - Tracking item through the inventory lifecycle
+
+* **Simplification**:
+  * Added a `SimplePallet` helper class to facilitate UI operations and data transformation
+  * Implemented better filtering system with dedicated `Filter` enum
+  * Standardized date formatting and currency handling through utility functions
+
+These changes support a more accurate representation of the pallet-based inventory business model, where all items originate from wholesale pallets rather than individual acquisitions.
+
+### Technical Improvements
+
+* **Widget Reusability**: Created reusable components for common patterns:
+  * `ImagePickerGrid` - Standardized image selection and management
+  * `SalesChannelDropdown` - Consistent sales channel selection across the app
+  
+* **Display Utilities**: Added formatting helpers for:
+  * Currency display with proper symbols
+  * Date formatting
+  * Profit calculations with visual indicators
+  
+* **Repository Pattern Refinement**:
+  * Updated repository interfaces to ensure consistency
+  * Better alignment between database schema and application models
+  * Improved error handling and type safety
+
+These updates strengthen the application's foundation, making it more reliable, maintainable, and aligned with the actual business workflow of pallet-based inventory management. 

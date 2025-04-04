@@ -8,25 +8,30 @@ import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/providers/item_detail_provider.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/providers/item_list_provider.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/providers/pallet_list_provider.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:image/image.dart' as img;
+import 'package:pallet_pro_app/src/features/inventory/presentation/widgets/image_picker_grid.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/widgets/sales_channel_dropdown.dart';
+import 'package:pallet_pro_app/src/global/utils/display_utils.dart';
 
 /// A screen for adding a new item or editing an existing one.
 ///
 /// The screen includes fields for all item properties including storage location
 /// and sales channel, plus image upload capabilities.
 class AddEditItemScreen extends ConsumerStatefulWidget {
-  /// The ID of the pallet this item belongs to
-  final String? palletId;
-  
-  /// Optional item to edit. If null, a new item will be created.
+  /// For editing, null for new item
   final Item? item;
   
+  /// For adding items directly to a pallet
+  final String? palletId;
+  
   const AddEditItemScreen({
-    Key? key,
-    this.palletId,
     this.item,
+    this.palletId,
+    Key? key,
   }) : super(key: key);
   
   @override
@@ -164,7 +169,7 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
     });
   }
   
-  Future<void> _submitForm() async {
+  void _submitForm() async {
     if (_formKey.currentState!.validate()) {
       HapticFeedback.lightImpact();
       
@@ -173,15 +178,11 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
       });
       
       try {
+        // Parse form values
         final quantity = int.tryParse(_quantityController.text) ?? 1;
         
-        // Handle purchase price based on context:
-        // 1. For items without a pallet: use user-entered price
-        // 2. For items in a pallet: use 0.0 initially (will be calculated later)
-        final isPalletItem = widget.palletId != null && widget.palletId != 'no_pallet';
-        final purchasePrice = isPalletItem 
-            ? 0.0 // For pallet items, will be allocated later based on pallet cost
-            : double.tryParse(_purchasePriceController.text) ?? 0.0;
+        // For items in a pallet, purchase price is 0.0 initially (will be calculated later)
+        final purchasePrice = double.tryParse(_purchasePriceController.text) ?? 0.0;
             
         // Handle selling price (optional)
         final sellingPrice = _sellingPriceController.text.isNotEmpty 
@@ -190,10 +191,19 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
         
         // Create or update the item
         if (widget.item == null) {
+          // Check if we have a valid pallet ID
+          if (widget.palletId == null || widget.palletId!.isEmpty) {
+            _showErrorSnackBar('A valid pallet is required to add an item');
+            setState(() {
+              _isSubmitting = false;
+            });
+            return;
+          }
+          
           // Create a new item with a temporary ID (will be replaced by DB)
           final newItem = Item(
             id: const Uuid().v4(), // Temporary ID, will be replaced by DB
-            palletId: widget.palletId ?? 'no_pallet', // Use 'no_pallet' for items without a pallet
+            palletId: widget.palletId!, // Use the provided pallet ID
             name: _nameController.text,
             description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
             quantity: quantity,
@@ -211,20 +221,8 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
           final result = await ref.read(itemListProvider.notifier).addItem(newItem);
           
           if (result.isSuccess) {
-            // Also add to the SimpleItemListNotifier for UI updates
-            // Create a SimpleItem from the real Item
-            final simpleItem = SimpleItem(
-              id: result.value.id,
-              name: result.value.name,
-              description: result.value.description,
-              palletId: result.value.palletId,
-              condition: result.value.condition.name,
-              quantity: result.value.quantity,
-              purchasePrice: result.value.purchasePrice,
-              status: result.value.status.name,
-              createdAt: result.value.createdAt,
-            );
-            ref.read(simpleItemListNotifierProvider.notifier).addItem(simpleItem);
+            // Properly refresh the item list provider to update the UI
+            ref.invalidate(simpleItemListProvider);
             
             // Upload images if selected
             if (_selectedImages.isNotEmpty) {
@@ -315,313 +313,311 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
   
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.item == null ? 'Add Item' : 'Edit Item'),
-      ),
-      body: _isSubmitting
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Item Name*',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter an item name';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Description',
-                        border: OutlineInputBorder(),
-                      ),
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _quantityController,
-                            decoration: const InputDecoration(
-                              labelText: 'Quantity*',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.number,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Required';
-                              }
-                              if (int.tryParse(value) == null || int.parse(value) <= 0) {
-                                return 'Enter a valid number';
-                              }
-                              return null;
-                            },
-                          ),
+    return WillPopScope(
+      onWillPop: () async {
+        // Always refresh the providers when navigating back
+        ref.invalidate(itemListProvider);
+        ref.invalidate(simpleItemListProvider);
+        return true; // Allow the screen to pop
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.item == null ? 'Add Item' : 'Edit Item'),
+        ),
+        body: _isSubmitting
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Item Name*',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _purchasePriceController,
-                            decoration: InputDecoration(
-                              labelText: 'Purchase Price',
-                              prefixText: '\$',
-                              border: const OutlineInputBorder(),
-                              hintText: widget.palletId != null && widget.palletId != 'no_pallet' 
-                                ? 'Auto-calculated' 
-                                : '0.00',
-                              helperText: widget.palletId != null && widget.palletId != 'no_pallet'
-                                ? 'Will be allocated from pallet'
-                                : 'Enter if known',
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            validator: (value) {
-                              if (value != null && value.isNotEmpty) {
-                                if (double.tryParse(value) == null || double.parse(value) < 0) {
-                                  return 'Enter a valid price';
-                                }
-                              }
-                              return null;
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _sellingPriceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Selling Price (Optional)',
-                        prefixText: '\$',
-                        border: OutlineInputBorder(),
-                        hintText: 'Set when ready to sell',
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: (value) {
-                        if (value != null && value.isNotEmpty) {
-                          if (double.tryParse(value) == null || double.parse(value) < 0) {
-                            return 'Enter a valid price';
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter an item name';
                           }
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<ItemCondition>(
-                      decoration: const InputDecoration(
-                        labelText: 'Condition',
-                        border: OutlineInputBorder(),
+                          return null;
+                        },
                       ),
-                      value: _selectedCondition,
-                      onChanged: (value) {
-                        if (value != null) {
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _quantityController,
+                              decoration: const InputDecoration(
+                                labelText: 'Quantity*',
+                                border: OutlineInputBorder(),
+                              ),
+                              keyboardType: TextInputType.number,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Required';
+                                }
+                                if (int.tryParse(value) == null || int.parse(value) <= 0) {
+                                  return 'Enter a valid number';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _purchasePriceController,
+                              decoration: InputDecoration(
+                                labelText: 'Purchase Price (${getCurrencySymbol()})',
+                                border: const OutlineInputBorder(),
+                                hintText: 'Enter purchase price',
+                                helperText: 'Price paid for this item',
+                              ),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _sellingPriceController,
+                        decoration: const InputDecoration(
+                          labelText: 'Selling Price (Optional)',
+                          prefixText: '\$',
+                          border: OutlineInputBorder(),
+                          hintText: 'Set when ready to sell',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        validator: (value) {
+                          if (value != null && value.isNotEmpty) {
+                            if (double.tryParse(value) == null || double.parse(value) < 0) {
+                              return 'Enter a valid price';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<ItemCondition>(
+                        decoration: const InputDecoration(
+                          labelText: 'Condition',
+                          border: OutlineInputBorder(),
+                        ),
+                        value: _selectedCondition,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _selectedCondition = value;
+                            });
+                          }
+                        },
+                        items: ItemCondition.values.map((condition) {
+                          String displayName;
+                          switch (condition) {
+                            case ItemCondition.newItem:
+                              displayName = 'New';
+                              break;
+                            case ItemCondition.openBox:
+                              displayName = 'Open Box';
+                              break;
+                            case ItemCondition.usedGood:
+                              displayName = 'Used - Good';
+                              break;
+                            case ItemCondition.usedFair:
+                              displayName = 'Used - Fair';
+                              break;
+                            case ItemCondition.damaged:
+                              displayName = 'Damaged';
+                              break;
+                            case ItemCondition.forParts:
+                              displayName = 'For Parts';
+                              break;
+                          }
+                          return DropdownMenuItem(
+                            value: condition,
+                            child: Text(displayName),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _storageLocationController,
+                        decoration: const InputDecoration(
+                          labelText: 'Storage Location',
+                          hintText: 'e.g., Living Room Bin 3, Garage Shelf B',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(
+                          labelText: 'Sales Channel',
+                          border: OutlineInputBorder(),
+                        ),
+                        value: _selectedSalesChannel,
+                        onChanged: (value) {
                           setState(() {
-                            _selectedCondition = value;
+                            _selectedSalesChannel = value;
                           });
-                        }
-                      },
-                      items: ItemCondition.values.map((condition) {
-                        String displayName;
-                        switch (condition) {
-                          case ItemCondition.newItem:
-                            displayName = 'New';
-                            break;
-                          case ItemCondition.openBox:
-                            displayName = 'Open Box';
-                            break;
-                          case ItemCondition.usedGood:
-                            displayName = 'Used - Good';
-                            break;
-                          case ItemCondition.usedFair:
-                            displayName = 'Used - Fair';
-                            break;
-                          case ItemCondition.damaged:
-                            displayName = 'Damaged';
-                            break;
-                          case ItemCondition.forParts:
-                            displayName = 'For Parts';
-                            break;
-                        }
-                        return DropdownMenuItem(
-                          value: condition,
-                          child: Text(displayName),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _storageLocationController,
-                      decoration: const InputDecoration(
-                        labelText: 'Storage Location',
-                        hintText: 'e.g., Living Room Bin 3, Garage Shelf B',
-                        border: OutlineInputBorder(),
+                        },
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'Facebook Marketplace',
+                            child: Text('Facebook Marketplace'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Facebook Group',
+                            child: Text('Facebook Group'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'eBay',
+                            child: Text('eBay'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Amazon',
+                            child: Text('Amazon'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Local Pickup',
+                            child: Text('Local Pickup'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Other',
+                            child: Text('Other'),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        labelText: 'Sales Channel',
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Photos',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      value: _selectedSalesChannel,
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedSalesChannel = value;
-                        });
-                      },
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'Facebook Marketplace',
-                          child: Text('Facebook Marketplace'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Facebook Group',
-                          child: Text('Facebook Group'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'eBay',
-                          child: Text('eBay'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Amazon',
-                          child: Text('Amazon'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Local Pickup',
-                          child: Text('Local Pickup'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Other',
-                          child: Text('Other'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Photos',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _pickImages,
+                            icon: const Icon(Icons.photo_library),
+                            label: const Text('Gallery'),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: _takePicture,
+                            icon: const Icon(Icons.camera_alt),
+                            label: const Text('Camera'),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: _pickImages,
-                          icon: const Icon(Icons.photo_library),
-                          label: const Text('Gallery'),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: _takePicture,
-                          icon: const Icon(Icons.camera_alt),
-                          label: const Text('Camera'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (_existingImagePaths.isNotEmpty || _selectedImages.isNotEmpty)
-                      Container(
-                        height: 120,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: [
-                            // Existing images (if editing)
-                            ..._existingImagePaths.asMap().entries.map((entry) {
-                              return Stack(
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Image.network(
-                                      entry.value, // This should be a signed URL
-                                      height: 100,
-                                      width: 100,
-                                      fit: BoxFit.cover,
+                      const SizedBox(height: 16),
+                      if (_existingImagePaths.isNotEmpty || _selectedImages.isNotEmpty)
+                        Container(
+                          height: 120,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            children: [
+                              // Existing images (if editing)
+                              ..._existingImagePaths.asMap().entries.map((entry) {
+                                return Stack(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Image.network(
+                                        entry.value, // This should be a signed URL
+                                        height: 100,
+                                        width: 100,
+                                        fit: BoxFit.cover,
+                                      ),
                                     ),
-                                  ),
-                                  Positioned(
-                                    top: 0,
-                                    right: 0,
-                                    child: IconButton(
-                                      icon: const Icon(Icons.close, color: Colors.red),
-                                      onPressed: () => _markExistingImageForDeletion(entry.key),
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: IconButton(
+                                        icon: const Icon(Icons.close, color: Colors.red),
+                                        onPressed: () => _markExistingImageForDeletion(entry.key),
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              );
-                            }),
-                            // New selected images
-                            ..._selectedImages.asMap().entries.map((entry) {
-                              return Stack(
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Image.file(
-                                      File(entry.value.path),
-                                      height: 100,
-                                      width: 100,
-                                      fit: BoxFit.cover,
+                                  ],
+                                );
+                              }),
+                              // New selected images
+                              ..._selectedImages.asMap().entries.map((entry) {
+                                return Stack(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Image.file(
+                                        File(entry.value.path),
+                                        height: 100,
+                                        width: 100,
+                                        fit: BoxFit.cover,
+                                      ),
                                     ),
-                                  ),
-                                  Positioned(
-                                    top: 0,
-                                    right: 0,
-                                    child: IconButton(
-                                      icon: const Icon(Icons.close, color: Colors.red),
-                                      onPressed: () => _removeImage(entry.key),
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: IconButton(
+                                        icon: const Icon(Icons.close, color: Colors.red),
+                                        onPressed: () => _removeImage(entry.key),
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              );
-                            }),
-                          ],
+                                  ],
+                                );
+                              }),
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          height: 120,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Center(
+                            child: Text('No photos selected'),
+                          ),
                         ),
-                      )
-                    else
-                      Container(
-                        height: 120,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Center(
-                          child: Text('No photos selected'),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _submitForm,
+                          child: Text(
+                            widget.item == null ? 'Add Item' : 'Save Changes',
+                            style: const TextStyle(fontSize: 16),
+                          ),
                         ),
                       ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _submitForm,
-                        child: Text(
-                          widget.item == null ? 'Add Item' : 'Save Changes',
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
+      ),
     );
   }
 } 
