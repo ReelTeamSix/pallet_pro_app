@@ -129,20 +129,31 @@ class SupabaseItemRepository implements ItemRepository {
   @override
   Future<Result<Item?>> getItemById(String id) async {
     try {
+      print('Getting item with ID: $id'); // Debug logging
       final userId = _getCurrentUserId(); // Ensure user access
+      print('Current user ID: $userId'); // Debug logging
+      
       final response = await _supabaseClient
           .from(_tableName)
           .select()
           .eq('id', id)
           .eq('user_id', userId) // RLS should handle this, but explicit check is safer
           .maybeSingle();
-
+          
+      print('Query response: $response'); // Debug logging
+      
       final item = response == null ? null : Item.fromJson(_fixItemFieldNames(response));
+      if (item == null) {
+        print('Item not found with ID: $id'); // Debug logging
+        return Result.failure(NotFoundException('Item not found with ID: $id'));
+      }
       return Result.success(item);
     } on PostgrestException catch (e) {
        // TODO: Map to specific DatabaseException
+      print('Database error fetching item $id: ${e.message}'); // Debug logging
       return Result.failure(DatabaseException.fetchFailed('item', e.message));
     } catch (e) {
+      print('Unexpected error fetching item $id: $e'); // Debug logging
       return Result.failure(UnexpectedException('Unexpected error fetching item', e));
     }
   }

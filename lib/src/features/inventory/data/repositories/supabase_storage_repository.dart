@@ -1,5 +1,6 @@
 import 'dart:io'; // Needed if using File type
 import 'dart:typed_data'; // Needed if using Uint8List type
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart'; // For XFile
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/storage_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,7 +11,48 @@ class SupabaseStorageRepository implements StorageRepository {
   // Define bucket name - should match your Supabase setup
   final String _bucketName = 'item_photos';
 
-  SupabaseStorageRepository(this._supabaseClient);
+  SupabaseStorageRepository(this._supabaseClient) {
+    // Ensure bucket exists
+    _ensureBucketExists();
+  }
+
+  // Private method to ensure the bucket exists
+  Future<void> _ensureBucketExists() async {
+    try {
+      // Get list of all buckets
+      final List<Bucket> buckets = await _supabaseClient.storage.listBuckets();
+      
+      // Check if our bucket exists
+      final bool bucketExists = buckets.any((bucket) => bucket.name == _bucketName);
+      
+      if (!bucketExists) {
+        if (kDebugMode) {
+          print('Creating storage bucket: $_bucketName');
+        }
+        
+        // Create the bucket if it doesn't exist
+        // Set public access to true for easier image display
+        await _supabaseClient.storage.createBucket(
+          _bucketName, 
+          const BucketOptions(public: true)
+        );
+        
+        if (kDebugMode) {
+          print('Bucket created successfully');
+        }
+      } else {
+        if (kDebugMode) {
+          print('Bucket exists: $_bucketName');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error ensuring bucket exists: $e');
+      }
+      // Don't throw, just log - we don't want to prevent app startup
+      // The error will be caught later if we try to use the bucket
+    }
+  }
 
   String _getCurrentUserId() {
     final user = _supabaseClient.auth.currentUser;
@@ -97,24 +139,24 @@ class SupabaseStorageRepository implements StorageRepository {
 
   @override
   Future<String> createSignedPhotoUrl(String path) async {
-     // No direct user ID check here, RLS should prevent access to unauthorized paths.
     try {
-      // Set expiry duration (e.g., 1 hour)
-      const expiryDuration = Duration(hours: 1);
-
-      final signedUrl = await _supabaseClient.storage
-          .from(_bucketName)
-          .createSignedUrl(path, expiryDuration.inSeconds);
-
-      return signedUrl;
-
+      // First try to get a public URL for the image
+      final publicUrl = _supabaseClient.storage.from(_bucketName).getPublicUrl(path);
+      
+      // If that fails or returns an invalid URL, fall back to signed URL
+      if (publicUrl.isEmpty || !Uri.parse(publicUrl).isAbsolute) {
+        // Create a signed URL that expires in 1 hour (3600 seconds)
+        final signedUrl = await _supabaseClient.storage.from(_bucketName)
+            .createSignedUrl(path, 3600);
+        return signedUrl;
+      }
+      
+      return publicUrl;
     } on StorageException catch (e) {
-       // TODO: Map StorageException
-      print('Error creating signed URL for $path: ${e.message}');
+      print('Error creating signed URL for path $path: ${e.message}');
       throw Exception('Storage error creating signed URL: ${e.message}');
     } catch (e) {
-      // TODO: Map generic exceptions
-      print('Unexpected error creating signed URL for $path: $e');
+      print('Unexpected error creating signed URL for path $path: $e');
       throw Exception('Unexpected error creating signed URL: $e');
     }
   }

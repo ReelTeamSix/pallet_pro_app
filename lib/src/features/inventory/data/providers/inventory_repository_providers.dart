@@ -7,6 +7,7 @@ import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_rep
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/storage_repository.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/tag_repository.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/expense_repository.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_photo_repository.dart';
 
 // Import Implementations
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/supabase_pallet_repository.dart';
@@ -14,6 +15,7 @@ import 'package:pallet_pro_app/src/features/inventory/data/repositories/supabase
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/supabase_storage_repository.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/supabase_tag_repository.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/supabase_expense_repository.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/repositories/supabase_item_photo_repository.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/services/item_status_manager.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/services/pallet_status_manager.dart';
 import 'package:pallet_pro_app/src/features/settings/data/providers/user_settings_repository_provider.dart';
@@ -60,4 +62,12 @@ final palletStatusManagerProvider = Provider<PalletStatusManager>((ref) {
   final palletRepository = ref.watch(palletRepositoryProvider);
   final userSettingsRepository = ref.watch(userSettingsRepositoryProvider);
   return PalletStatusManager(palletRepository, userSettingsRepository);
+});
+
+/// Provider for [ItemPhotoRepository]
+final itemPhotoRepositoryProvider = Provider<ItemPhotoRepository>((ref) {
+  final supabase = ref.watch(supabaseClientProvider);
+  final storageRepository = ref.watch(storageRepositoryProvider);
+  print('Creating ItemPhotoRepository with supabase client'); // Debug logging
+  return SupabaseItemPhotoRepository(supabase, storageRepository);
 }); 

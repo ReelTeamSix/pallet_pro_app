@@ -5,22 +5,33 @@ import 'package:go_router/go_router.dart'; // Import GoRouter
 import 'package:pallet_pro_app/src/routing/app_router.dart'; // Import route names
 import 'package:flutter/foundation.dart';
 import 'dart:io';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
 import 'package:pallet_pro_app/src/global/widgets/styled_text_field.dart';
+import 'package:pallet_pro_app/src/global/widgets/inventory_item_card.dart';
+import 'package:pallet_pro_app/src/global/widgets/pallet_card.dart';
+import 'package:pallet_pro_app/src/core/utils/string_formatter.dart';
 
 import '../providers/item_list_provider.dart';
 import '../providers/pallet_list_provider.dart';
+import '../providers/simple_item_list_provider.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/pallet.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
+import 'package:pallet_pro_app/src/features/inventory/domain/entities/simple_item.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/add_edit_pallet_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/add_edit_item_screen.dart';
 // TODO: Import Pallet and Item models if needed for display
 
 // Placeholder ShimmerLoader - Replace with your actual implementation or package
 class ShimmerLoader extends StatelessWidget {
-  const ShimmerLoader({super.key});
+  final int itemCount;
+
+  const ShimmerLoader({
+    Key? key,
+    this.itemCount = 6,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +39,7 @@ class ShimmerLoader extends StatelessWidget {
       baseColor: Colors.grey[300]!,
       highlightColor: Colors.grey[100]!,
       child: ListView.builder(
-        itemCount: 6, // Placeholder count
+        itemCount: itemCount, // Placeholder count
         itemBuilder: (_, __) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
           child: Row(
@@ -85,15 +96,6 @@ class InventoryListScreen extends ConsumerStatefulWidget {
   ConsumerState<InventoryListScreen> createState() => _InventoryListScreenState();
 }
 
-// Extension to provide a way to access the notifier from screens
-// Renamed to avoid conflicts
-extension SimpleItemListProviderScreenExtension on FutureProvider<List<SimpleItem>> {
-  // Helper to get a reference to the actual StateNotifierProvider
-  StateNotifierProvider<SimpleItemListNotifier, List<SimpleItem>> get screenNotifierProvider {
-    return simpleItemListNotifierProvider;
-  }
-}
-
 class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _searchController = TextEditingController();
@@ -123,8 +125,9 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
     
     // Refresh providers when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.invalidate(itemListProvider);
-      ref.invalidate(simpleItemListProvider);
+      print('Force refreshing providers on screen init');
+      ref.read(itemListProvider.notifier).refreshItems();
+      ref.read(palletListProvider.notifier).refreshPallets();
     });
   }
   
@@ -132,8 +135,8 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
   void didChangeDependencies() {
     super.didChangeDependencies();
     // This will ensure the providers are refreshed whenever the screen becomes active again
-    ref.invalidate(itemListProvider);
-    ref.invalidate(simpleItemListProvider);
+    ref.read(itemListProvider.notifier).refreshItems();
+    ref.read(palletListProvider.notifier).refreshPallets();
   }
   
   @override
@@ -313,10 +316,19 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
                   _itemStatusFilter = selectedStatus;
                 });
                 
-                // Apply filter using Provider
-                ref.read(simpleItemListProvider.screenNotifierProvider.notifier).setFilters(
-                  statusFilter: selectedStatus,
-                );
+                // Instead of using simpleItemListProvider, we'll set status filter
+                // on the itemListProvider directly
+                if (selectedStatus != null) {
+                  // Convert the string status to enum
+                  final ItemStatus? enumStatus = _stringToItemStatus(selectedStatus);
+                  if (enumStatus != null) {
+                    ref.read(itemListProvider.notifier).setFilters(
+                      statusFilter: enumStatus,
+                    );
+                  }
+                } else {
+                  ref.read(itemListProvider.notifier).clearFilters();
+                }
                 
                 Navigator.of(context).pop();
               },
@@ -331,7 +343,7 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
                   });
                   
                   // Clear filters in provider
-                  ref.read(simpleItemListProvider.screenNotifierProvider.notifier).clearFilters();
+                  ref.read(itemListProvider.notifier).clearFilters();
                   
                   Navigator.of(context).pop();
                 },
@@ -345,16 +357,7 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
   
   // Helper methods for formatting status values
   String _formatPalletStatus(String status) {
-    switch (status) {
-      case 'in_progress':
-        return 'In Progress';
-      case 'processed':
-        return 'Processed';
-      case 'archived':
-        return 'Archived';
-      default:
-        return status.split('_').map((word) => word.substring(0, 1).toUpperCase() + word.substring(1)).join(' ');
-    }
+    return StringFormatter.snakeCaseToTitleCase(status);
   }
   
   String _formatItemStatus(String status) {
@@ -368,6 +371,123 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
       default:
         return status.split('_').map((word) => word.substring(0, 1).toUpperCase() + word.substring(1)).join(' ');
     }
+  }
+
+  // Helper to convert string status to ItemStatus enum
+  ItemStatus? _stringToItemStatus(String? status) {
+    if (status == null) return null;
+    
+    switch (status.toLowerCase()) {
+      case 'in_stock':
+        return ItemStatus.inStock;
+      case 'for_sale':
+        return ItemStatus.forSale;
+      case 'listed':
+        return ItemStatus.listed;
+      case 'sold':
+        return ItemStatus.sold;
+      default:
+        return null;
+    }
+  }
+
+  void _showAddItemToPalletDialog(BuildContext context) {
+    // Get pallets for the dropdown
+    final palletsAsync = ref.read(palletListProvider);
+    
+    palletsAsync.when(
+      loading: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Loading pallets...'))
+        );
+      },
+      error: (error, _) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading pallets: $error'))
+        );
+      },
+      data: (pallets) {
+        if (pallets.isEmpty) {
+          // No pallets, show message to create one first
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('No Pallets Available'),
+              content: const Text('You need to create a pallet before adding items.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => AddEditPalletScreen(),
+                      ),
+                    ).then((result) {
+                      if (result == true) {
+                        ref.read(palletListProvider.notifier).refreshPallets();
+                      }
+                    });
+                  },
+                  child: const Text('Create Pallet'),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
+        
+        // Have pallets, show the selection dialog
+        Pallet? selectedPallet = pallets.first;
+        
+        showDialog(
+          context: context,
+          builder: (context) => StatefulBuilder(
+            builder: (context, setState) => AlertDialog(
+              title: const Text('Select Pallet for New Item'),
+              content: DropdownButtonFormField<Pallet>(
+                value: selectedPallet,
+                items: pallets.map((pallet) => DropdownMenuItem<Pallet>(
+                  value: pallet,
+                  child: Text(pallet.name),
+                )).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    selectedPallet = value;
+                  });
+                },
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    if (selectedPallet != null) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => AddEditItemScreen(palletId: selectedPallet!.id),
+                        ),
+                      ).then((result) {
+                        if (result == true) {
+                          ref.read(itemListProvider.notifier).refreshItems();
+                        }
+                      });
+                    }
+                  },
+                  child: const Text('Continue'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildEmptyState({
@@ -416,7 +536,9 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
     final bool hasActiveFilter = _tabController.index == 0 
         ? _palletStatusFilter != null
         : _itemStatusFilter != null;
-
+    
+    print('Building InventoryListScreen, debugging providers...');
+    
     return Scaffold(
       appBar: AppBar(
         title: _isSearching
@@ -441,183 +563,102 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
               );
             },
           ),
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                _isSearching = !_isSearching;
-                if (!_isSearching) {
-                  _searchController.clear();
-                  _searchQuery = '';
-                }
-              });
-            },
-          ),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.filter_list),
-                onPressed: _showFilterDialog,
-              ),
-              if (hasActiveFilter)
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.inventory_2),
-              text: 'Pallets',
-            ),
-            Tab(
-              icon: Icon(Icons.category),
-              text: 'Items',
-            ),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _PalletsTab(searchQuery: _searchQuery, statusFilter: _palletStatusFilter),
-          _ItemsTab(searchQuery: _searchQuery, statusFilter: _itemStatusFilter),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      // Add the Floating Action Button
+      floatingActionButton: FloatingActionButton(
         onPressed: () {
           if (_tabController.index == 0) {
-            // Navigate to Add Pallet screen
+            // Add new pallet
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (context) => AddEditPalletScreen(),
               ),
             ).then((result) {
               if (result == true) {
-                // Refresh the pallet list on successful add
+                // Refresh the pallet list
                 ref.read(palletListProvider.notifier).refreshPallets();
-                
-                // Show success message
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Pallet added successfully!'))
-                );
               }
             });
           } else {
-            // For Items tab (index 1), we need to show a dialog to select which pallet to add items to
-            // Get the list of pallets
-            final palletsAsync = ref.read(palletListProvider);
-            
-            if (palletsAsync is AsyncData && palletsAsync.value?.isNotEmpty == true) {
-              // Show dialog to select a pallet
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Select Pallet'),
-                  content: SizedBox(
-                    width: double.maxFinite,
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        // List of pallets
-                        ...List.generate(
-                          palletsAsync.value?.length ?? 0,
-                          (index) {
-                            final pallet = palletsAsync.value?[index];
-                            return ListTile(
-                              title: Text(pallet?.name ?? ''),
-                              subtitle: Text(pallet?.supplier ?? 'Unknown Supplier'),
-                              onTap: () {
-                                Navigator.of(context).pop(); // Close the dialog
-                                
-                                if (pallet?.id != null) {
-                                  // Navigate to AddEditItemScreen with the selected pallet ID
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => AddEditItemScreen(
-                                        palletId: pallet!.id,
-                                      ),
-                                    ),
-                                  ).then((result) {
-                                    if (result == true) {
-                                      // Show success message
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Item added successfully!'))
-                                      );
-                                      
-                                      // Refresh items
-                                      ref.invalidate(simpleItemListProvider);
-                                    }
-                                  });
-                                } else {
-                                  // Show error if palletId is null
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Error: Invalid pallet selected'))
-                                  );
-                                }
-                              },
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                  ],
-                ),
-              );
-            } else if (palletsAsync is AsyncData && palletsAsync.value?.isEmpty == true) {
-              // No pallets exist yet, but allow adding an item without a pallet
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Add Item'),
-                  content: const Text('You need to create a pallet before adding items. Would you like to add a pallet now?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        _tabController.animateTo(0); // Switch to Pallets tab
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Switched to Pallets tab to add a pallet'))
-                        );
-                      },
-                      child: const Text('Add Pallet'),
-                    ),
-                  ],
-                ),
-              );
-            } else {
-              // Loading or error state
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Unable to load pallets. Please try again.'))
-              );
-            }
+            // Show dialog to select a pallet for the new item
+            _showAddItemToPalletDialog(context);
           }
         },
-        icon: const Icon(Icons.add),
-        label: Text(_tabController.index == 0 ? 'Add Pallet' : 'Add Item'),
+        child: Icon(_tabController.index == 0 ? Icons.add : Icons.inventory_2),
+      ),
+      body: Column(
+        children: [
+          // Custom Tab Bar with filter indicators
+          TabBar(
+            controller: _tabController,
+            labelColor: Theme.of(context).colorScheme.primary,
+            tabs: [
+              Tab(
+                text: 'Pallets',
+                icon: Badge(
+                  isLabelVisible: _palletStatusFilter != null,
+                  child: const Icon(Icons.view_comfy),
+                ),
+              ),
+              Tab(
+                text: 'Items',
+                icon: Badge(
+                  isLabelVisible: _itemStatusFilter != null,
+                  child: const Icon(Icons.inventory),
+                ),
+              ),
+            ],
+          ),
+          
+          // Filter chips that appear when a filter is active
+          if (hasActiveFilter)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                children: [
+                  const Text('Filters: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  if (_tabController.index == 0 && _palletStatusFilter != null)
+                    Chip(
+                      label: Text(_palletStatusFilter!),
+                      onDeleted: () {
+                        setState(() {
+                          _palletStatusFilter = null;
+                        });
+                      },
+                    ),
+                  if (_tabController.index == 1 && _itemStatusFilter != null)
+                    Chip(
+                      label: Text(_itemStatusFilter!),
+                      onDeleted: () {
+                        setState(() {
+                          _itemStatusFilter = null;
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+          
+          // Tab Views
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // Pallets Tab
+                _PalletsTab(),
+                
+                // Items Tab - Pass the necessary filters
+                _ItemsTab(
+                  searchQuery: _searchQuery,
+                  statusFilter: _itemStatusFilter,
+                  isTablet: MediaQuery.of(context).size.width >= 768,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -658,7 +699,7 @@ class _PalletsTab extends ConsumerWidget {
           
           // Apply search filter if set
           if (searchQuery.isNotEmpty) {
-            return pallet.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+            return (pallet.name.toLowerCase().contains(searchQuery.toLowerCase())) ||
               (pallet.supplier?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false) ||
               (pallet.source?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false);
           }
@@ -721,16 +762,7 @@ class _PalletsTab extends ConsumerWidget {
   
   // Helper method to format pallet status for display
   String _formatPalletStatus(String status) {
-    switch (status) {
-      case 'in_progress':
-        return 'In Progress';
-      case 'processed':
-        return 'Processed';
-      case 'archived':
-        return 'Archived';
-      default:
-        return status.split('_').map((word) => word.substring(0, 1).toUpperCase() + word.substring(1)).join(' ');
-    }
+    return StringFormatter.snakeCaseToTitleCase(status);
   }
   
   // Helper method to get status color
@@ -872,59 +904,19 @@ class _PalletsTab extends ConsumerWidget {
       itemCount: pallets.length,
       itemBuilder: (context, index) {
         final pallet = pallets[index];
-        return Card(
-          child: InkWell(
-            onTap: () {
-              context.goNamed(
-                RouterNotifier.palletDetail,
-                pathParameters: {'pid': pallet.id}
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.inventory_2, 
-                        color: _getStatusColor(_palletStatusToString(pallet.status)),
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(pallet.name, 
-                            style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(_palletStatusToString(pallet.status)).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _getStatusColor(_palletStatusToString(pallet.status)).withOpacity(0.5)),
-                        ),
-                        child: Text(
-                          _formatPalletStatus(_palletStatusToString(pallet.status)),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _getStatusColor(_palletStatusToString(pallet.status)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('${pallet.supplier ?? "Unknown"}'),
-                  if (pallet.source != null && pallet.source!.isNotEmpty)
-                    Text('Source: ${pallet.source}', 
-                         style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.secondary)),
-                  const Spacer(),
-                  Text('\$${pallet.cost.toStringAsFixed(2)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-          ),
+        return PalletCard(
+          id: pallet.id,
+          name: pallet.name,
+          supplier: pallet.supplier,
+          source: pallet.source,
+          cost: pallet.cost,
+          status: _palletStatusToString(pallet.status),
+          onTap: () {
+            context.goNamed(
+              RouterNotifier.palletDetail,
+              pathParameters: {'pid': pallet.id}
+            );
+          },
         );
       },
     );
@@ -932,382 +924,191 @@ class _PalletsTab extends ConsumerWidget {
 }
 
 class _ItemsTab extends ConsumerWidget {
+  const _ItemsTab({
+    required this.searchQuery,
+    required this.statusFilter,
+    required this.isTablet,
+    Key? key,
+  }) : super(key: key);
+
   final String searchQuery;
   final String? statusFilter;
-
-  const _ItemsTab({
-    this.searchQuery = '',
-    this.statusFilter,
-  });
+  final bool isTablet;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final itemsAsync = ref.watch(simpleItemListProvider);
+    print('Building _ItemsTab with searchQuery: $searchQuery, statusFilter: $statusFilter');
+    
+    // Use the AsyncValue wrapper to get proper loading/error states
+    final itemsAsync = ref.watch(itemListProvider);
     
     return itemsAsync.when(
-      loading: () => const ShimmerLoader(),
-      error: (error, stackTrace) => Center(
-        child: Text('Error loading items: $error'),
-      ),
-      data: (items) {
-        // Filter items based on search query and status filter
-        final filteredItems = items.where((item) {
-          // Apply status filter if set
-          if (statusFilter != null && item.status != statusFilter) {
-            return false;
+      loading: () => const ShimmerLoader(itemCount: 10),
+      error: (error, stackTrace) {
+        print('Error in _ItemsTab: $error');
+        print(stackTrace);
+        return ErrorDisplay(
+          message: 'Failed to load items',
+          details: error.toString(),
+          onRetry: () {
+            ref.read(itemListProvider.notifier).refreshItems();
           }
-          
-          // Apply search filter if set
-          if (searchQuery.isNotEmpty) {
-            return (item.name?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false) ||
-              (item.description?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false) ||
-              (item.condition.toLowerCase().contains(searchQuery.toLowerCase()));
-          }
-          
-          return true;
-        }).toList();
-              
-        return RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(simpleItemListProvider);
-          },
-          child: filteredItems.isEmpty
-            ? searchQuery.isNotEmpty || statusFilter != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.filter_list, size: 48, color: Colors.grey),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No matching items',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        statusFilter != null
-                            ? 'No items with status "${_formatItemStatus(statusFilter!)}"'
-                            : 'No items match "$searchQuery"',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      if (statusFilter != null)
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.clear),
-                          label: const Text('Clear Filter'),
-                          onPressed: () {
-                            ref.read(simpleItemListProvider.screenNotifierProvider.notifier).clearFilters();
-                            // We need to update the UI state in the parent widget
-                            // This is a limitation of using a ConsumerWidget instead of ConsumerStatefulWidget
-                            // In a real app, we might use a different approach
-                            // For now, let's just refresh the page
-                            ref.invalidate(simpleItemListProvider);
-                          },
-                        ),
-                    ],
-                  ),
-                )
-              : _buildEmptyItemsView(context)
-            : ResponsiveUtils.responsiveWidget(
-                context: context,
-                mobile: _buildItemsList(context, filteredItems),
-                tablet: _buildItemsGrid(context, filteredItems, 2),
-                desktop: _buildItemsGrid(context, filteredItems, 3),
-              ),
         );
       },
-    );
-  }
-  
-  // Helper method to format status for display
-  String _formatItemStatus(String status) {
-    switch (status) {
-      case 'in_stock':
-        return 'In Stock';
-      case 'listed':
-        return 'Listed';
-      case 'sold':
-        return 'Sold';
-      default:
-        return status.split('_').map((word) => word.substring(0, 1).toUpperCase() + word.substring(1)).join(' ');
-    }
-  }
-  
-  // Helper method to get status color
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'in_stock':
-        return Colors.blue;
-      case 'listed':
-        return Colors.orange;
-      case 'sold':
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
-  }
-  
-  // Helper method to get status icon
-  IconData _getStatusIcon(String status) {
-    switch (status) {
-      case 'in_stock':
-        return Icons.inventory;
-      case 'listed':
-        return Icons.storefront;
-      case 'sold':
-        return Icons.paid;
-      default:
-        return Icons.inventory;
-    }
-  }
-  
-  Widget _buildEmptyItemsView(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.category, size: 72, color: Theme.of(context).disabledColor),
-          const SizedBox(height: 16),
-          Text(
-            'No Items Yet',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Add your first item to begin tracking inventory',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('Add First Item'),
-            onPressed: () {
-              // Get reference to the riverpod container
-              final container = ProviderScope.containerOf(context);
+      data: (items) {
+        // Convert the full items to SimpleItems for display
+        final simpleItems = items.map((item) => SimpleItem(
+          id: item.id,
+          name: item.name ?? 'Unnamed Item',
+          description: item.description,
+          palletId: item.palletId,
+          condition: item.condition.name,
+          quantity: item.quantity,
+          purchasePrice: item.purchasePrice,
+          status: item.status.name,
+          storageLocation: item.storageLocation,
+          salesChannel: item.salesChannel,
+          createdAt: item.createdAt,
+        )).toList();
+        
+        print('Converted ${simpleItems.length} items for display');
+        
+        // Filter items based on search query and status filter
+        final filteredItems = simpleItems.where((item) {
+          // Apply search filter if present
+          final matchesSearch = searchQuery.isEmpty ||
+              (item.name?.toLowerCase() ?? '').contains(searchQuery.toLowerCase()) ||
+              (item.description?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false);
               
-              // Check if pallets exist
-              final palletsAsync = container.read(palletListProvider);
+          // Apply status filter if present
+          final matchesStatus = statusFilter == null || 
+              (item.status.toLowerCase() == statusFilter!.toLowerCase());
               
-              if (palletsAsync is AsyncData && palletsAsync.value?.isNotEmpty == true) {
-                // Show dialog to select a pallet or add without a pallet
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Select Pallet'),
-                    content: SizedBox(
-                      width: double.maxFinite,
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          // List of pallets
-                          ...List.generate(
-                            palletsAsync.value?.length ?? 0,
-                            (index) {
-                              final pallet = palletsAsync.value?[index];
-                              return ListTile(
-                                title: Text(pallet?.name ?? ''),
-                                subtitle: Text(pallet?.supplier ?? 'Unknown Supplier'),
-                                onTap: () {
-                                  Navigator.of(context).pop(); // Close the dialog
-                                  
-                                  if (pallet?.id != null) {
-                                    // Navigate to AddEditItemScreen with the selected pallet ID
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (context) => AddEditItemScreen(
-                                          palletId: pallet!.id,
-                                        ),
-                                      ),
-                                    ).then((result) {
-                                      if (result == true) {
-                                        // Show success message
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Item added successfully!'))
-                                        );
-                                        
-                                        // Refresh items
-                                        container.refresh(simpleItemListProvider);
-                                      }
-                                    });
-                                  }
-                                },
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                    ],
-                  ),
-                );
-              } else {
-                // No pallets exist yet, but allow adding an item without a pallet
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Add Item'),
-                    content: const Text('You need to create a pallet before adding items. Would you like to add a pallet now?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          // Switch to pallets tab
-                          (context.findAncestorStateOfType<_InventoryListScreenState>())?._tabController.animateTo(0);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Switched to Pallets tab to add a pallet'))
-                          );
-                        },
-                        child: const Text('Add Pallet'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildItemsList(BuildContext context, List<SimpleItem> items) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: _getStatusColor(item.status).withOpacity(0.2),
-              child: Icon(_getStatusIcon(item.status), color: _getStatusColor(item.status)),
-            ),
-            title: Row(
+          return matchesSearch && matchesStatus;
+        }).toList();
+        
+        print('Filtered to ${filteredItems.length} items after applying filters');
+        
+        if (filteredItems.isEmpty) {
+          // Show an empty state with filter clearing option if needed
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Expanded(child: Text(item.name ?? 'Unnamed Item')),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(item.status).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _getStatusColor(item.status).withOpacity(0.5)),
-                  ),
-                  child: Text(
-                    _formatItemStatus(item.status),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _getStatusColor(item.status),
-                    ),
-                  ),
+                const Icon(Icons.inventory_2_outlined, size: 56, color: Colors.grey),
+                const SizedBox(height: 16),
+                Text(
+                  items.isEmpty
+                    ? 'No items in inventory yet'
+                    : 'No items match your filters',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
+                if (searchQuery.isNotEmpty || statusFilter != null)
+                  const SizedBox(height: 16),
+                if (searchQuery.isNotEmpty || statusFilter != null)
+                  ElevatedButton(
+                    onPressed: () {
+                      // TODO: Implement clear filters functionality
+                      // This would typically call a method in the parent widget
+                    },
+                    child: const Text('Clear filters'),
+                  ),
               ],
             ),
-            subtitle: Text(
-              'Condition: ${item.condition}\nQty: ${item.quantity}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+          );
+        }
+        
+        // Determine grid columns based on screen size
+        final int columns = isTablet ? 3 : 2;
+        
+        return RefreshIndicator(
+          onRefresh: () async {
+            // Refresh data without invalidating providers
+            await ref.read(itemListProvider.notifier).refreshItems();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: MasonryGridView.count(
+              crossAxisCount: columns,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              itemCount: filteredItems.length,
+              itemBuilder: (context, index) {
+                final item = filteredItems[index];
+                return InventoryItemCard(
+                  id: item.id,
+                  name: item.name ?? 'Unnamed Item',
+                  description: item.description,
+                  purchasePrice: item.purchasePrice,
+                  quantity: item.quantity,
+                  condition: item.condition,
+                  status: item.status,
+                  onTap: () => _navigateToItemDetails(context, item.id),
+                );
+              },
             ),
-            trailing: Text('\$${item.purchasePrice?.toStringAsFixed(2) ?? '0.00'}',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            onTap: () {
-              context.goNamed(
-                RouterNotifier.itemDetail,
-                pathParameters: {'iid': item.id}
-              );
-            },
           ),
         );
       },
     );
   }
-  
-  Widget _buildItemsGrid(BuildContext context, List<SimpleItem> items, int crossAxisCount) {
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        childAspectRatio: 3,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return Card(
-          child: InkWell(
-            onTap: () {
-              context.goNamed(
-                RouterNotifier.itemDetail,
-                pathParameters: {'iid': item.id}
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: _getStatusColor(item.status).withOpacity(0.2),
-                    child: Icon(_getStatusIcon(item.status), color: _getStatusColor(item.status)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(item.name ?? 'Unnamed Item', 
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(item.status).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: _getStatusColor(item.status).withOpacity(0.5)),
-                              ),
-                              child: Text(
-                                _formatItemStatus(item.status),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: _getStatusColor(item.status),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text('Condition: ${item.condition}',
-                             style: const TextStyle(fontSize: 12),
-                             overflow: TextOverflow.ellipsis),
-                        Text('Qty: ${item.quantity}',
-                             style: const TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text('\$${item.purchasePrice?.toStringAsFixed(2) ?? '0.00'}',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                ],
-              ),
+
+  void _navigateToItemDetails(BuildContext context, String itemId) {
+    context.goNamed(
+      RouterNotifier.itemDetail,
+      pathParameters: {'iid': itemId},
+    );
+  }
+}
+
+class ErrorDisplay extends StatelessWidget {
+  final String message;
+  final String? details;
+  final VoidCallback? onRetry;
+
+  const ErrorDisplay({
+    Key? key,
+    required this.message,
+    this.details,
+    this.onRetry,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
             ),
-          ),
-        );
-      },
+            if (details != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  details!,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            if (onRetry != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16.0),
+                child: ElevatedButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 } 

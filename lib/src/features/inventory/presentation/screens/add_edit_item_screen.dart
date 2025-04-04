@@ -221,20 +221,33 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
           final result = await ref.read(itemListProvider.notifier).addItem(newItem);
           
           if (result.isSuccess) {
+            // Debug logging
+            print('Item created with ID: ${result.value.id}');
+            
             // Properly refresh the item list provider to update the UI
-            ref.invalidate(simpleItemListProvider);
+            ref.invalidate(itemListProvider);
             
             // Upload images if selected
             if (_selectedImages.isNotEmpty) {
-              // Compress images first
-              final compressedImages = await _compressSelectedImages();
-              
-              // Upload compressed images
-              final uploadResult = await ref.read(itemDetailNotifierProvider(result.value.id).notifier)
-                  .uploadItemPhotos(compressedImages);
-              
-              if (!uploadResult.isSuccess) {
-                _showErrorSnackBar('Item created, but there was an error uploading images');
+              try {
+                // Compress images first
+                final compressedImages = await _compressSelectedImages();
+                
+                print('Starting upload of ${compressedImages.length} images for item ${result.value.id}');
+                
+                // Upload compressed images
+                final uploadResult = await ref.read(itemDetailNotifierProvider(result.value.id).notifier)
+                    .uploadItemPhotos(compressedImages);
+                
+                if (!uploadResult.isSuccess) {
+                  print('Upload error: ${uploadResult.error?.message}');
+                  _showErrorSnackBar('Item created, but there was an error uploading images: ${uploadResult.error?.message}');
+                } else {
+                  print('Successfully uploaded ${uploadResult.value.length} images');
+                }
+              } catch (imageError) {
+                print('Exception during image upload: $imageError');
+                _showErrorSnackBar('Item created, but there was an error processing images: $imageError');
               }
             }
             
@@ -271,15 +284,25 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
             
             // Upload new images if selected
             if (_selectedImages.isNotEmpty) {
-              // Compress images first
-              final compressedImages = await _compressSelectedImages();
-              
-              // Upload compressed images
-              final uploadResult = await ref.read(itemDetailNotifierProvider(widget.item!.id).notifier)
-                  .uploadItemPhotos(compressedImages);
-              
-              if (!uploadResult.isSuccess) {
-                _showErrorSnackBar('Item updated, but there was an error uploading new images');
+              try {
+                // Compress images first
+                final compressedImages = await _compressSelectedImages();
+                
+                print('Starting upload of ${compressedImages.length} images for item ${widget.item!.id}');
+                
+                // Upload compressed images
+                final uploadResult = await ref.read(itemDetailNotifierProvider(widget.item!.id).notifier)
+                    .uploadItemPhotos(compressedImages);
+                
+                if (!uploadResult.isSuccess) {
+                  print('Upload error: ${uploadResult.error?.message}');
+                  _showErrorSnackBar('Item updated, but there was an error uploading new images: ${uploadResult.error?.message}');
+                } else {
+                  print('Successfully uploaded ${uploadResult.value.length} images');
+                }
+              } catch (imageError) {
+                print('Exception during image upload: $imageError');
+                _showErrorSnackBar('Item updated, but there was an error processing images: $imageError');
               }
             }
             
@@ -317,7 +340,6 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
       onWillPop: () async {
         // Always refresh the providers when navigating back
         ref.invalidate(itemListProvider);
-        ref.invalidate(simpleItemListProvider);
         return true; // Allow the screen to pop
       },
       child: Scaffold(

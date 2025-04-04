@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item_photo.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
@@ -13,6 +14,32 @@ import '../providers/item_detail_provider.dart';
 import 'inventory_list_screen.dart'; // For ShimmerLoader access
 import 'add_edit_item_screen.dart';
 
+// Helper extension for item status conversion
+extension ItemStatusExtension on ItemStatus {
+  String get asString {
+    switch (this) {
+      case ItemStatus.inStock: return 'in_stock';
+      case ItemStatus.forSale: return 'for_sale';
+      case ItemStatus.listed: return 'listed';
+      case ItemStatus.sold: return 'sold';
+    }
+  }
+}
+
+// Helper extension for item condition conversion
+extension ItemConditionExtension on ItemCondition {
+  String get asString {
+    switch (this) {
+      case ItemCondition.newItem: return 'New';
+      case ItemCondition.openBox: return 'Open Box';
+      case ItemCondition.usedGood: return 'Used - Good';
+      case ItemCondition.usedFair: return 'Used - Fair';
+      case ItemCondition.damaged: return 'Damaged';
+      case ItemCondition.forParts: return 'For Parts';
+    }
+  }
+}
+
 class ItemDetailScreen extends ConsumerWidget {
   final String itemId;
 
@@ -20,16 +47,13 @@ class ItemDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Use the mock provider instead of the real one for testing
-    final itemAsync = ref.watch(itemDetailProviderMock(itemId));
-    // final itemAsync = ref.watch(itemDetailProvider(itemId)); // Use the real provider
+    // Use the real provider instead of the mock
+    print('Attempting to load item with ID: $itemId');
+    final itemAsync = ref.watch(itemDetailProvider(itemId));
     
-    // For image loading (using sample images for now since we don't have ItemPhoto repository yet)
-    final sampleImageUrls = [
-      'https://picsum.photos/id/1/400/300',
-      'https://picsum.photos/id/20/400/300',
-    ];
-
+    // Create a FutureBuilder for photos
+    final photosFuture = ref.watch(itemPhotoRepositoryProvider).getItemPhotos(itemId);
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Item Details'),
@@ -56,20 +80,35 @@ class ItemDetailScreen extends ConsumerWidget {
       ),
       body: itemAsync.when(
         loading: () => const ShimmerLoader(),
-        error: (err, stack) => Center(
-          child: Text('Error loading item: $err'),
-        ),
+        error: (err, stack) {
+          print('Error loading item: $err'); // Debug logging
+          print('Stack trace: $stack'); // Debug logging
+          return Center(
+            child: Text('Error loading item: $err'),
+          );
+        },
         data: (item) {
           if (item == null) {
+            print('Item is null'); // Debug logging
             return const Center(child: Text('Item not found.'));
           }
+          
+          print('Successfully loaded item: ${item.id}'); // Debug logging
+          
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Status Action Card - no longer pass the full item object
-                _buildStatusActionCard(context, ref, item.id, item.name ?? 'Item', item.status, item.purchasePrice),
+                _buildStatusActionCard(
+                  context, 
+                  ref, 
+                  item.id, 
+                  item.name ?? 'Unnamed Item', 
+                  item.status.asString, // Convert enum to string
+                  item.purchasePrice
+                ),
                 
                 // Images
                 Card(
@@ -86,10 +125,11 @@ class ItemDetailScreen extends ConsumerWidget {
                             IconButton(
                               icon: const Icon(Icons.add_a_photo),
                               onPressed: () {
-                                // In real implementation, navigate to edit screen with the existing item
-                                // For now, show a snackbar
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Add Image feature coming in Phase 5.5'))
+                                // Navigate to edit item screen
+                                context.goNamed(
+                                  RouterNotifier.addEditItem,
+                                  pathParameters: {'pid': item.palletId},
+                                  queryParameters: {'itemId': item.id},
                                 );
                               },
                             ),
@@ -97,57 +137,99 @@ class ItemDetailScreen extends ConsumerWidget {
                         ),
                         const Divider(),
                         const SizedBox(height: 8),
-                        SizedBox(
-                          height: 200,
-                          child: sampleImageUrls.isEmpty 
-                              ? Container(
-                                  width: double.infinity,
-                                  color: Colors.grey[200],
-                                  child: const Center(
-                                    child: Text('No images available for this item'),
-                                  ),
-                                )
-                              : ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: sampleImageUrls.length,
-                                  itemBuilder: (context, index) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 8.0),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.network(
-                                          sampleImageUrls[index],
-                                          height: 200,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) {
-                                            return Container(
-                                              width: 200,
-                                              color: Colors.grey[400],
-                                              child: const Center(
-                                                child: Text('Error loading image'),
-                                              ),
-                                            );
-                                          },
-                                          loadingBuilder: (context, child, loadingProgress) {
-                                            if (loadingProgress == null) return child;
-                                            return Container(
-                                              width: 200,
-                                              color: Colors.grey[300],
-                                              child: Center(
-                                                child: CircularProgressIndicator(
-                                                  value: loadingProgress.expectedTotalBytes != null
-                                                      ? loadingProgress.cumulativeBytesLoaded / 
-                                                          loadingProgress.expectedTotalBytes!
-                                                      : null,
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    );
-                                  },
+                        FutureBuilder<Result<List<ItemPhoto>>>(
+                          future: photosFuture,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const SizedBox(
+                                height: 200,
+                                child: Center(child: CircularProgressIndicator()),
+                              );
+                            }
+                            
+                            if (snapshot.hasError) {
+                              print('Error loading photos: ${snapshot.error}'); // Debug logging
+                              return SizedBox(
+                                height: 200,
+                                child: Center(
+                                  child: Text('Error loading photos: ${snapshot.error}'),
                                 ),
+                              );
+                            }
+                            
+                            if (!snapshot.hasData || snapshot.data?.isFailure == true) {
+                              print('No photo data available'); // Debug logging
+                              return SizedBox(
+                                height: 200,
+                                child: Center(
+                                  child: Text(
+                                    snapshot.data?.isFailure == true 
+                                      ? 'Error: ${snapshot.data?.error?.message}' 
+                                      : 'No photos available'
+                                  ),
+                                ),
+                              );
+                            }
+                            
+                            final photos = snapshot.data!.value;
+                            print('Loaded ${photos.length} photos'); // Debug logging
+                            
+                            if (photos.isEmpty) {
+                              return SizedBox(
+                                height: 200,
+                                child: Center(
+                                  child: Text('No photos available for this item'),
+                                ),
+                              );
+                            }
+                            
+                            return SizedBox(
+                              height: 200,
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: photos.length,
+                                itemBuilder: (context, index) {
+                                  final photo = photos[index];
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(
+                                        photo.imageUrl,
+                                        height: 200,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          print('Error loading image: $error'); // Debug logging
+                                          return Container(
+                                            width: 200,
+                                            color: Colors.grey[400],
+                                            child: Center(
+                                              child: Text('Error loading image: $error'),
+                                            ),
+                                          );
+                                        },
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return Container(
+                                            width: 200,
+                                            color: Colors.grey[300],
+                                            child: Center(
+                                              child: CircularProgressIndicator(
+                                                value: loadingProgress.expectedTotalBytes != null
+                                                    ? loadingProgress.cumulativeBytesLoaded / 
+                                                        loadingProgress.expectedTotalBytes!
+                                                    : null,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -194,7 +276,7 @@ class ItemDetailScreen extends ConsumerWidget {
                         ListTile(
                           leading: const Icon(Icons.star),
                           title: const Text('Condition'),
-                          subtitle: Text(item.condition),
+                          subtitle: Text(item.condition.asString), // Convert enum to string
                         ),
                         ListTile(
                           leading: const Icon(Icons.attach_money),
@@ -248,7 +330,7 @@ class ItemDetailScreen extends ConsumerWidget {
                         Text('Status Information', 
                             style: Theme.of(context).textTheme.titleLarge),
                         const Divider(),
-                        _buildStatusDetails(context, item),
+                        _buildItemStatusDetails(context, item),
                       ],
                     ),
                   ),
@@ -278,7 +360,8 @@ class ItemDetailScreen extends ConsumerWidget {
     double? purchasePrice,
   ) {
     final statusColor = _getStatusColor(status);
-    final mockNotifier = ref.watch(itemDetailProviderMockWithNotifier(itemId));
+    // Use the notifier provider instead of the FutureProvider
+    final notifier = ref.watch(itemDetailNotifierProvider(itemId).notifier);
     
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -317,8 +400,8 @@ class ItemDetailScreen extends ConsumerWidget {
                       );
                       
                       if (result != null) {
-                        // Handle loading state
-                        await mockNotifier.markAsListed(
+                        // Use the real notifier method
+                        await notifier.markAsListed(
                           listingPrice: result['listingPrice'] as double,
                           listingPlatform: result['listingPlatform'] as String,
                           listingDate: result['listingDate'] as DateTime,
@@ -346,8 +429,8 @@ class ItemDetailScreen extends ConsumerWidget {
                           );
                           
                           if (result != null) {
-                            // Handle loading state
-                            await mockNotifier.markAsSold(
+                            // Use the real notifier method
+                            await notifier.markAsSold(
                               soldPrice: result['soldPrice'] as double,
                               sellingPlatform: result['sellingPlatform'] as String,
                               soldDate: result['soldDate'] as DateTime,
@@ -369,7 +452,8 @@ class ItemDetailScreen extends ConsumerWidget {
                           );
                           
                           if (confirmed) {
-                            await mockNotifier.markAsInStock();
+                            // Use the real notifier method
+                            await notifier.markAsInStock();
                           }
                         },
                       ),
@@ -399,7 +483,8 @@ class ItemDetailScreen extends ConsumerWidget {
                         );
                         
                         if (result != null) {
-                          await mockNotifier.markAsListed(
+                          // Use the real notifier method
+                          await notifier.markAsListed(
                             listingPrice: result['listingPrice'] as double,
                             listingPlatform: result['listingPlatform'] as String,
                             listingDate: result['listingDate'] as DateTime,
@@ -416,18 +501,18 @@ class ItemDetailScreen extends ConsumerWidget {
     );
   }
   
-  // Detailed status information - simplified version
-  Widget _buildStatusDetails(BuildContext context, SimpleItem item) {
+  // Helper method to build status details for Item type
+  Widget _buildItemStatusDetails(BuildContext context, Item item) {
     return Column(
       children: [
         ListTile(
           leading: Icon(
             Icons.circle,
-            color: _getStatusColor(item.status),
+            color: _getStatusColor(item.status.asString),
             size: 16,
           ),
           title: const Text('Current Status'),
-          subtitle: Text(_formatStatus(item.status)),
+          subtitle: Text(_formatStatus(item.status.asString)),
         ),
         const Divider(),
         // Note: We're removing conditional rendering based on missing fields for now

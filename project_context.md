@@ -19,13 +19,24 @@ lib/
     ├── app.dart
     ├── core/
     │   ├── exceptions/
+    │   ├── theme/
     │   └── utils/
     ├── features/
     │   ├── auth/
     │   ├── inventory/
+    │   │   ├── data/
+    │   │   │   ├── models/
+    │   │   │   └── repositories/
+    │   │   ├── domain/
+    │   │   │   └── entities/
+    │   │   └── presentation/
+    │   │       ├── providers/
+    │   │       ├── screens/
+    │   │       └── widgets/
     │   ├── reporting/
     │   └── settings/
     ├── global/
+    │   └── widgets/
     └── routing/
 ```
 
@@ -112,6 +123,14 @@ For testing and UI development:
 
 ## Recent Bug Fixes and Improvements
 
+### Image Upload and Storage
+- Added `ItemPhotoRepository` interface and `SupabaseItemPhotoRepository` implementation to properly handle image metadata
+- Fixed the image upload flow to ensure image references are saved to the database
+- Added functionality to generate proper public URLs for accessing images
+- Implemented automatic bucket creation to ensure storage is properly set up
+- Enhanced error handling and logging for image uploads
+- Fixed relationship between storage path and image URL in the database
+
 ### Type-Safety and Enum Handling
 - Added `forSale` value to `ItemStatus` enum to handle string values consistently
 - Fixed enum usage by replacing string-based comparisons with proper enum comparisons
@@ -167,11 +186,16 @@ These changes support a more accurate representation of the pallet-based invento
 * **Widget Reusability**: Created reusable components for common patterns:
   * `ImagePickerGrid` - Standardized image selection and management
   * `SalesChannelDropdown` - Consistent sales channel selection across the app
+  * `InventoryItemCard` - Reusable card for displaying inventory items
+  * `PalletCard` - Reusable card for displaying pallets
+  * `StatusChip` - Centralized status display with consistent styling
   
 * **Display Utilities**: Added formatting helpers for:
   * Currency display with proper symbols
   * Date formatting
   * Profit calculations with visual indicators
+  * Status formatting with `StringFormatter` utility
+  * Status colors with `StatusColors` utility class
   
 * **Repository Pattern Refinement**:
   * Updated repository interfaces to ensure consistency

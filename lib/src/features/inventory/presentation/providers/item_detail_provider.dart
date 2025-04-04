@@ -11,6 +11,9 @@ import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_rep
 import 'package:pallet_pro_app/src/features/inventory/data/repositories/storage_repository.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/services/item_status_manager.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/providers/item_list_provider.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/repositories/item_photo_repository.dart';
+import 'package:flutter/foundation.dart';
+import 'package:pallet_pro_app/src/features/inventory/domain/entities/simple_item.dart';
 
 /// Notifier responsible for managing the state of a single item's details.
 ///
@@ -19,12 +22,14 @@ import 'package:pallet_pro_app/src/features/inventory/presentation/providers/ite
 class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
   late ItemRepository _itemRepository;
   late StorageRepository _storageRepository;
+  late ItemPhotoRepository _itemPhotoRepository;
   late ItemStatusManager _statusManager;
 
   @override
   Future<Item?> build(String arg) async {
     _itemRepository = ref.watch(itemRepositoryProvider);
     _storageRepository = ref.watch(storageRepositoryProvider);
+    _itemPhotoRepository = ref.watch(itemPhotoRepositoryProvider);
     _statusManager = ref.watch(itemStatusManagerProvider);
     
     final itemId = arg;
@@ -46,6 +51,26 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
     try {
       // The repository method name might be different - adjust as needed
       final result = await _itemRepository.getItemById(itemId);
+      
+      if (result.isSuccess && result.value != null) {
+        // Also fetch the item's photos
+        try {
+          final photosResult = await _itemPhotoRepository.getItemPhotos(itemId);
+          if (photosResult.isSuccess) {
+            if (kDebugMode) {
+              print('Fetched ${photosResult.value.length} photos for item $itemId');
+            }
+          } else {
+            if (kDebugMode) {
+              print('Failed to fetch photos: ${photosResult.error?.message}');
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('Error fetching photos: $e');
+          }
+        }
+      }
       
       return result.fold(
         (item) => item,
@@ -92,7 +117,18 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
           file: photo,
         );
         
-        uploadedPaths.add(path);
+        // Save the photo reference in the database
+        final saveResult = await _itemPhotoRepository.saveItemPhoto(
+          itemId: item.id,
+          storagePath: path,
+        );
+        
+        if (saveResult.isSuccess) {
+          uploadedPaths.add(path);
+        } else {
+          // Log the error but continue with other photos
+          print('Error saving photo metadata: ${saveResult.error?.message}');
+        }
       }
       
       // Return the list of paths
