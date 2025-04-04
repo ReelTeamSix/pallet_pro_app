@@ -1042,7 +1042,7 @@ class _RouterObserver extends NavigatorObserver {
 }
 
 // --- NEW Stateful Shell Route Scaffold ---
-// A basic Scaffold that includes the BottomNavigationBar and the navigation shell
+// A responsive Scaffold that adapts to different screen sizes
 class ScaffoldWithNavBar extends StatelessWidget {
   const ScaffoldWithNavBar({
     required this.navigationShell,
@@ -1053,113 +1053,160 @@ class ScaffoldWithNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Determine if we should use drawer layout (web) or bottom nav (mobile)
+    final bool isWebLayout = !ResponsiveUtils.isMobile(context);
+    
     return Scaffold(
       appBar: AppBar(
         title: _buildTitleForIndex(navigationShell.currentIndex),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => GoRouter.of(context).go('/home/settings'),
+        // Remove settings icon from app bar on mobile as it will be in the bottom nav
+      ),
+      // Only show drawer on web, not on mobile
+      drawer: isWebLayout ? _buildDrawer(context) : null,
+      body: navigationShell,
+      // Only show bottom navigation on mobile, not on web
+      bottomNavigationBar: !isWebLayout ? _buildBottomNavigationBar(context) : null,
+    );
+  }
+  
+  // Create drawer for web layout
+  Widget _buildDrawer(BuildContext context) {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              color: Theme.of(context).primaryColor,
+            ),
+            child: const Text(
+              'Pallet Pro',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.dashboard),
+            title: const Text('Dashboard'),
+            onTap: () {
+              // Go to the root of the Dashboard branch
+              GoRouter.of(context).go('/home');
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.inventory),
+            title: const Text('Inventory'),
+            onTap: () {
+              GoRouter.of(context).go('/home/inventory');
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.bar_chart),
+            title: const Text('Reports'),
+            onTap: () {
+              navigationShell.goBranch(1);
+              Navigator.pop(context);
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text('Settings'),
+            onTap: () {
+              GoRouter.of(context).go('/home/settings');
+              Navigator.pop(context);
+            },
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              return ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text('Log Out', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  ref.read(authControllerProvider.notifier).signOut();
+                },
+              );
+            },
           ),
         ],
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-              ),
-              child: const Text(
-                'Pallet Pro',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.dashboard),
-              title: const Text('Dashboard'),
-              onTap: () {
-                navigationShell.goBranch(0);
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.inventory),
-              title: const Text('Inventory'),
-              onTap: () {
-                GoRouter.of(context).go('/home/inventory');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bar_chart),
-              title: const Text('Reports'),
-              onTap: () {
-                navigationShell.goBranch(1);
-                Navigator.pop(context);
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Settings'),
-              onTap: () {
-                GoRouter.of(context).go('/home/settings');
-                Navigator.pop(context);
-              },
-            ),
-            Consumer(
-              builder: (context, ref, _) {
-                return ListTile(
-                  leading: Icon(Icons.logout, color: Colors.red),
-                  title: Text('Log Out', style: TextStyle(color: Colors.red)),
-                  onTap: () {
-                    Navigator.pop(context);
-                    ref.read(authControllerProvider.notifier).signOut();
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-      body: navigationShell,
-      bottomNavigationBar: ResponsiveUtils.isMobile(context) 
-          ? BottomNavigationBar(
-              items: const <BottomNavigationBarItem>[
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.dashboard_outlined),
-                  activeIcon: Icon(Icons.dashboard),
-                  label: 'Dashboard',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.bar_chart_outlined),
-                  activeIcon: Icon(Icons.bar_chart),
-                  label: 'Reports',
-                ),
-              ],
-              currentIndex: navigationShell.currentIndex,
-              onTap: (index) {
-                navigationShell.goBranch(
-                  index,
-                  initialLocation: index == navigationShell.currentIndex,
-                );
-              },
-            )
-          : null,
     );
+  }
+  
+  // Create bottom navigation bar for mobile layout
+  Widget _buildBottomNavigationBar(BuildContext context) {
+    return BottomNavigationBar(
+      items: const <BottomNavigationBarItem>[
+        BottomNavigationBarItem(
+          icon: Icon(Icons.dashboard_outlined),
+          activeIcon: Icon(Icons.dashboard),
+          label: 'Dashboard',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.inventory_2_outlined),
+          activeIcon: Icon(Icons.inventory_2),
+          label: 'Inventory',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bar_chart_outlined),
+          activeIcon: Icon(Icons.bar_chart),
+          label: 'Reports',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.settings_outlined),
+          activeIcon: Icon(Icons.settings),
+          label: 'Settings',
+        ),
+      ],
+      currentIndex: _getCurrentIndex(context),
+      onTap: (index) => _handleNavTap(context, index),
+      type: BottomNavigationBarType.fixed, // Required for more than 3 items
+    );
+  }
+  
+  // Get the current index for the bottom nav bar
+  int _getCurrentIndex(BuildContext context) {
+    final String location = GoRouter.of(context).routeInformationProvider.value.uri.toString();
+    if (location.startsWith('/home/inventory')) {
+      return 1; // Inventory tab
+    } else if (location.startsWith('/reports')) {
+      return 2; // Reports tab
+    } else if (location.startsWith('/home/settings')) {
+      return 3; // Settings tab
+    }
+    return 0; // Default to Dashboard tab
+  }
+  
+  // Handle navigation when a bottom nav item is tapped
+  void _handleNavTap(BuildContext context, int index) {
+    switch (index) {
+      case 0: // Dashboard
+        // Use direct navigation to ensure we get to the Dashboard from any screen
+        GoRouter.of(context).go('/home');
+        break;
+      case 1: // Inventory
+        GoRouter.of(context).go('/home/inventory');
+        break;
+      case 2: // Reports
+        navigationShell.goBranch(1);
+        break;
+      case 3: // Settings
+        GoRouter.of(context).go('/home/settings');
+        break;
+    }
   }
   
   Widget _buildTitleForIndex(int index) {
     switch (index) {
       case 0:
-        return const Text('Pallet Pro'); // Changed from 'Dashboard' to avoid duplication
+        return const Text('Pallet Pro');
       case 1:
-        return const Text('Pallet Pro'); // Changed from 'Reports' to avoid duplication
+        return const Text('Pallet Pro');
       default:
         return const Text('Pallet Pro');
     }
