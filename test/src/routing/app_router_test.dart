@@ -64,7 +64,7 @@ class RouterRedirectLogicTester {
       final hasCompletedOnboarding = settings.hasCompletedOnboarding;
       
       // Not onboarded - redirect to onboarding unless already there
-      if (!hasCompletedOnboarding) {
+      if (hasCompletedOnboarding == false) {
         if (currentPath == '/onboarding') {
           return null; // No redirect
         }

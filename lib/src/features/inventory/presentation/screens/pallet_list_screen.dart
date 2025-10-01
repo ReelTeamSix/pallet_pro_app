@@ -5,18 +5,60 @@ import 'package:pallet_pro_app/src/features/inventory/data/models/pallet.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/providers/pallet_list_provider.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
 
-class PalletListScreen extends ConsumerWidget {
+class PalletListScreen extends ConsumerStatefulWidget {
   const PalletListScreen({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Use the mock provider for testing
-    final palletListAsync = ref.watch(palletListProviderMock);
+  ConsumerState<PalletListScreen> createState() => _PalletListScreenState();
+}
+
+class _PalletListScreenState extends ConsumerState<PalletListScreen> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    // Register to receive app lifecycle events
+    WidgetsBinding.instance.addObserver(this);
+    
+    // Force refresh when the screen first loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(palletListProvider);
+    });
+  }
+  
+  @override
+  void dispose() {
+    // Unregister from lifecycle events
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Refresh list when app resumes from background
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(palletListProvider);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Use the provider for pallet list data
+    final palletListAsync = ref.watch(palletListProvider);
     
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pallets'),
         actions: [
+          // Add refresh button
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.read(palletListProvider.notifier).refreshPallets();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Refreshing pallets...'), duration: Duration(seconds: 1))
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
@@ -35,12 +77,17 @@ class PalletListScreen extends ConsumerWidget {
             );
           }
           
-          return ListView.builder(
-            itemCount: pallets.length,
-            itemBuilder: (context, index) {
-              final pallet = pallets[index];
-              return PalletListItem(pallet: pallet);
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.read(palletListProvider.notifier).refreshPallets();
             },
+            child: ListView.builder(
+              itemCount: pallets.length,
+              itemBuilder: (context, index) {
+                final pallet = pallets[index];
+                return PalletListItem(pallet: pallet);
+              },
+            ),
           );
         },
       ),

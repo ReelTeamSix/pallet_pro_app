@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:test_api/test_api.dart' show unawaited;
 import 'package:mocktail/mocktail.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
 import 'package:pallet_pro_app/src/features/auth/data/providers/auth_repository_provider.dart';
@@ -792,11 +793,11 @@ void main() {
           });
           
           when(() => tokenListener(any(), any())).thenAnswer((invocation) {
-            tokenCalls.add([invocation.positionalArguments[0], invocation.positionalArguments[1]]);
+            tokenCalls.add([invocation.positionalArguments[0] as String?, invocation.positionalArguments[1] as String?]);
           });
           
           container.listen(authControllerProvider, listener, fireImmediately: true);
-          container.listen(passwordRecoveryTokenProvider, tokenListener, fireImmediately: true);
+          container.listen<String?>(passwordRecoveryTokenProvider, tokenListener, fireImmediately: true);
           
           // Wait for initial state to be built
           await container.read(authControllerProvider.future);
@@ -870,10 +871,10 @@ void main() {
           final completer = Completer<void>();
           
           // Start the updatePassword operation
-          container.read(authControllerProvider.notifier)
+          unawaited(container.read(authControllerProvider.notifier)
               .updatePassword('newPassword')
               .then((_) => completer.complete())
-              .catchError((e) => completer.completeError(e));
+              .catchError((e) => completer.completeError(e)));
           
           // Pump the container to ensure all state changes are processed
           await container.pump();

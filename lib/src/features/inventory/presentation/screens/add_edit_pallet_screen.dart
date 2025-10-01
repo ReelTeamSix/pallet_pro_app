@@ -251,15 +251,44 @@ class _AddEditPalletScreenState extends ConsumerState<AddEditPalletScreen> {
           },
         );
       } else {
-        // TODO: Phase 5.5 will implement updatePallet functionality
-        setState(() {
-          _errorMessage = 'Editing existing pallets will be implemented in Phase 5.5';
-          _isLoading = false;
-        });
+        // Update existing pallet
+        final updatedPallet = widget.pallet!.copyWith(
+          name: _nameController.text,
+          cost: cost,
+          supplier: _supplierController.text.isNotEmpty ? _supplierController.text : widget.pallet!.supplier,
+          source: _sourceController.text.isNotEmpty ? _sourceController.text : widget.pallet!.source,
+          type: widget.pallet!.type,
+          purchaseDate: _selectedDate,
+        );
+        
+        try {
+          // Use addPallet method which should handle updates if the pallet already exists
+          final result = await ref.read(palletListProvider.notifier).addPallet(updatedPallet);
+          
+          result.when(
+            success: (pallet) {
+              // Return to previous screen on success
+              if (mounted) {
+                context.pop(true); // Return true to indicate success
+              }
+            },
+            failure: (exception) {
+              setState(() {
+                _errorMessage = 'Error updating pallet: ${exception.message}';
+                _isLoading = false;
+              });
+            }
+          );
+        } catch (e) {
+          setState(() {
+            _errorMessage = 'Error: ${e.toString()}';
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Unexpected error: $e';
+        _errorMessage = 'Error: ${e.toString()}';
         _isLoading = false;
       });
     }
@@ -267,238 +296,324 @@ class _AddEditPalletScreenState extends ConsumerState<AddEditPalletScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Set up a title based on add/edit mode 
     final isEditing = widget.pallet != null;
-    final title = isEditing ? 'Edit Pallet' : 'Add Pallet';
+    final title = isEditing ? 'Edit Pallet' : 'Add New Pallet';
     
-    // Load suggestions for dropdowns
-    _loadSuggestions();
+    // Initial loading of suggestions if available
+    if (_supplierSuggestions.isEmpty || _sourceSuggestions.isEmpty) {
+      _loadSuggestions();
+    }
     
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => context.pop(false), // Return false to indicate no change
+        ),
+        actions: [
+          TextButton(
+            onPressed: _isLoading ? null : _savePallet,
+            child: Text(_isLoading ? 'Saving...' : 'Save'),
+          )
+        ],
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.all(context.spacingMd),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Name field (required)
-                StyledTextField(
-                  controller: _nameController,
-                  labelText: 'Pallet Name*',
-                  hintText: 'E.g., Electronics Pallet #1',
-                  helperText: 'A default name has been generated. Feel free to change it.',
-                  prefixIcon: const Icon(AppIcons.inventory),
-                  textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a name';
-                    }
-                    return null;
-                  },
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16.0),
+            children: [
+              // Basic info card
+              Card(
+                margin: const EdgeInsets.only(bottom: 16.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                SizedBox(height: context.spacingMd),
-                
-                // Supplier field (optional) with autocomplete
-                Autocomplete<String>(
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    if (textEditingValue.text.isEmpty) {
-                      return _supplierSuggestions;
-                    }
-                    return _supplierSuggestions.where((option) => 
-                      option.toLowerCase().contains(textEditingValue.text.toLowerCase())
-                    );
-                  },
-                  onSelected: (String selection) {
-                    _supplierController.text = selection;
-                  },
-                  fieldViewBuilder: (
-                    BuildContext context,
-                    TextEditingController controller,
-                    FocusNode focusNode,
-                    VoidCallback onFieldSubmitted,
-                  ) {
-                    // Sync the autocomplete controller with our controller
-                    controller.text = _supplierController.text;
-                    controller.addListener(() {
-                      _supplierController.text = controller.text;
-                    });
-                    
-                    return StyledTextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      labelText: 'Supplier',
-                      hintText: 'E.g., GRPL, Amazon, Walmart',
-                      helperText: 'The company you purchased the pallet from',
-                      prefixIcon: const Icon(AppIcons.business),
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (String value) {
-                        onFieldSubmitted();
-                      },
-                    );
-                  },
-                ),
-                SizedBox(height: context.spacingMd),
-                
-                // Pallet Format/Variety field (new)
-                Autocomplete<String>(
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    if (textEditingValue.text.isEmpty) {
-                      return _formatSuggestions;
-                    }
-                    return _formatSuggestions.where((option) => 
-                      option.toLowerCase().contains(textEditingValue.text.toLowerCase())
-                    );
-                  },
-                  onSelected: (String selection) {
-                    _formatController.text = selection;
-                  },
-                  fieldViewBuilder: (
-                    BuildContext context,
-                    TextEditingController controller,
-                    FocusNode focusNode,
-                    VoidCallback onFieldSubmitted,
-                  ) {
-                    // Sync the autocomplete controller with our controller
-                    controller.text = _formatController.text;
-                    controller.addListener(() {
-                      _formatController.text = controller.text;
-                    });
-                    
-                    return StyledTextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      labelText: 'Pallet Format/Type',
-                      hintText: 'E.g., Amazon Monster, Target, DHL, High Piece Count',
-                      helperText: 'The specific type or format of the pallet (as offered by supplier)',
-                      prefixIcon: const Icon(AppIcons.category),
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (String value) {
-                        onFieldSubmitted();
-                      },
-                    );
-                  },
-                ),
-                SizedBox(height: context.spacingMd),
-                
-                // Source field (optional but important) with autocomplete
-                Autocomplete<String>(
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    if (textEditingValue.text.isEmpty) {
-                      return _sourceSuggestions;
-                    }
-                    return _sourceSuggestions.where((option) => 
-                      option.toLowerCase().contains(textEditingValue.text.toLowerCase())
-                    );
-                  },
-                  onSelected: (String selection) {
-                    _sourceController.text = selection;
-                  },
-                  fieldViewBuilder: (
-                    BuildContext context,
-                    TextEditingController controller,
-                    FocusNode focusNode,
-                    VoidCallback onFieldSubmitted,
-                  ) {
-                    // Sync the autocomplete controller with our controller
-                    controller.text = _sourceController.text;
-                    controller.addListener(() {
-                      _sourceController.text = controller.text;
-                    });
-                    
-                    return StyledTextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      labelText: 'Retailer/Source',
-                      hintText: 'E.g., Amazon, Walmart, Target, Dollar General',
-                      helperText: 'The retailer where the merchandise originated from',
-                      prefixIcon: const Icon(AppIcons.storefront),
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (String value) {
-                        onFieldSubmitted();
-                      },
-                    );
-                  },
-                ),
-                SizedBox(height: context.spacingMd),
-                
-                // Cost field (required)
-                StyledTextField(
-                  controller: _costController,
-                  labelText: 'Cost*',
-                  hintText: 'E.g., 450.00',
-                  prefixIcon: const Icon(AppIcons.money),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                  ],
-                  textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a cost';
-                    }
-                    try {
-                      final cost = double.parse(value);
-                      if (cost <= 0) {
-                        return 'Cost must be greater than zero';
-                      }
-                    } catch (e) {
-                      return 'Please enter a valid number';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: context.spacingMd),
-                
-                // Date field (required)
-                GestureDetector(
-                  onTap: () => _selectDate(context),
-                  child: AbsorbPointer(
-                    child: StyledTextField(
-                      controller: _dateController,
-                      labelText: 'Purchase Date*',
-                      hintText: 'Select date',
-                      prefixIcon: const Icon(AppIcons.calendar),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please select a date';
-                        }
-                        return null;
-                      },
-                    ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: Text(
+                          'Pallet Information',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      // Name field (required)
+                      StyledTextField(
+                        controller: _nameController,
+                        labelText: 'Pallet Name*',
+                        hintText: 'E.g., Electronics Pallet #1',
+                        helperText: 'A default name has been generated. Feel free to change it.',
+                        prefixIcon: const Icon(AppIcons.inventory),
+                        textInputAction: TextInputAction.next,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a name';
+                          }
+                          return null;
+                        },
+                      ),
+                      SizedBox(height: context.spacingMd),
+                      
+                      // Supplier field (optional) with autocomplete
+                      Autocomplete<String>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return _supplierSuggestions;
+                          }
+                          return _supplierSuggestions.where((option) => 
+                            option.toLowerCase().contains(textEditingValue.text.toLowerCase())
+                          );
+                        },
+                        onSelected: (String selection) {
+                          _supplierController.text = selection;
+                        },
+                        fieldViewBuilder: (
+                          BuildContext context,
+                          TextEditingController controller,
+                          FocusNode focusNode,
+                          VoidCallback onFieldSubmitted,
+                        ) {
+                          // Sync the autocomplete controller with our controller
+                          controller.text = _supplierController.text;
+                          controller.addListener(() {
+                            _supplierController.text = controller.text;
+                          });
+                          
+                          return StyledTextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            labelText: 'Supplier',
+                            hintText: 'E.g., GRPL, Amazon, Walmart',
+                            helperText: 'The company you purchased the pallet from',
+                            prefixIcon: const Icon(AppIcons.business),
+                            textInputAction: TextInputAction.next,
+                            onFieldSubmitted: (String value) {
+                              onFieldSubmitted();
+                            },
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: context.spacingLg),
-                
-                // Error message
-                if (_errorMessage != null)
-                  Padding(
-                    padding: EdgeInsets.only(bottom: context.spacingMd),
-                    child: Text(
-                      _errorMessage!,
-                      style: TextStyle(color: context.errorColor),
-                      textAlign: TextAlign.center,
-                    ),
+              ),
+              
+              // Type and source info card
+              Card(
+                margin: const EdgeInsets.only(bottom: 16.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: Text(
+                          'Pallet Source',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      // Pallet Format/Variety field (new)
+                      Autocomplete<String>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return _formatSuggestions;
+                          }
+                          return _formatSuggestions.where((option) => 
+                            option.toLowerCase().contains(textEditingValue.text.toLowerCase())
+                          );
+                        },
+                        onSelected: (String selection) {
+                          _formatController.text = selection;
+                        },
+                        fieldViewBuilder: (
+                          BuildContext context,
+                          TextEditingController controller,
+                          FocusNode focusNode,
+                          VoidCallback onFieldSubmitted,
+                        ) {
+                          // Sync the autocomplete controller with our controller
+                          controller.text = _formatController.text;
+                          controller.addListener(() {
+                            _formatController.text = controller.text;
+                          });
+                          
+                          return StyledTextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            labelText: 'Pallet Format/Type',
+                            hintText: 'E.g., Amazon Monster, Target, DHL, High Piece Count',
+                            helperText: 'The specific type or format of the pallet (as offered by supplier)',
+                            prefixIcon: const Icon(AppIcons.category),
+                            textInputAction: TextInputAction.next,
+                            onFieldSubmitted: (String value) {
+                              onFieldSubmitted();
+                            },
+                          );
+                        },
+                      ),
+                      SizedBox(height: context.spacingMd),
+                      
+                      // Source field (optional but important) with autocomplete
+                      Autocomplete<String>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return _sourceSuggestions;
+                          }
+                          return _sourceSuggestions.where((option) => 
+                            option.toLowerCase().contains(textEditingValue.text.toLowerCase())
+                          );
+                        },
+                        onSelected: (String selection) {
+                          _sourceController.text = selection;
+                        },
+                        fieldViewBuilder: (
+                          BuildContext context,
+                          TextEditingController controller,
+                          FocusNode focusNode,
+                          VoidCallback onFieldSubmitted,
+                        ) {
+                          // Sync the autocomplete controller with our controller
+                          controller.text = _sourceController.text;
+                          controller.addListener(() {
+                            _sourceController.text = controller.text;
+                          });
+                          
+                          return StyledTextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            labelText: 'Retailer/Source',
+                            hintText: 'E.g., Amazon, Walmart, Target, Dollar General',
+                            helperText: 'The retailer where the merchandise originated from',
+                            prefixIcon: const Icon(AppIcons.storefront),
+                            textInputAction: TextInputAction.next,
+                            onFieldSubmitted: (String value) {
+                              onFieldSubmitted();
+                            },
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                
-                // Save button
-                PrimaryButton(
-                  text: isEditing ? 'Update Pallet' : 'Add Pallet',
-                  onPressed: _isLoading ? null : _savePallet,
-                  isLoading: _isLoading,
                 ),
-                
-                // Cancel button
-                SizedBox(height: context.spacingMd),
-                TextButton(
-                  onPressed: _isLoading ? null : () => context.pop(),
-                  child: const Text('Cancel'),
+              ),
+              
+              // Cost and date card
+              Card(
+                margin: const EdgeInsets.only(bottom: 16.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: Text(
+                          'Purchase Details',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      // Cost field (required)
+                      StyledTextField(
+                        controller: _costController,
+                        labelText: 'Cost*',
+                        hintText: 'E.g., 450.00',
+                        prefixIcon: const Icon(AppIcons.money),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                        ],
+                        textInputAction: TextInputAction.next,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a cost';
+                          }
+                          try {
+                            final cost = double.parse(value);
+                            if (cost <= 0) {
+                              return 'Cost must be greater than zero';
+                            }
+                          } catch (e) {
+                            return 'Please enter a valid number';
+                          }
+                          return null;
+                        },
+                      ),
+                      SizedBox(height: context.spacingMd),
+                      
+                      // Date field (required)
+                      GestureDetector(
+                        onTap: () => _selectDate(context),
+                        child: AbsorbPointer(
+                          child: StyledTextField(
+                            controller: _dateController,
+                            labelText: 'Purchase Date*',
+                            hintText: 'Select date',
+                            prefixIcon: const Icon(AppIcons.calendar),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please select a date';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Error message
+              if (_errorMessage != null)
+                Container(
+                  padding: EdgeInsets.all(12.0),
+                  margin: EdgeInsets.only(bottom: context.spacingMd),
+                  decoration: BoxDecoration(
+                    color: context.errorColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: context.errorColor),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(color: context.errorColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              
+              // Save button
+              SizedBox(height: context.spacingMd),
+              PrimaryButton(
+                onPressed: _isLoading ? null : _savePallet,
+                isLoading: _isLoading,
+                text: 'Save Pallet',
+              ),
+              SizedBox(height: context.spacingLg),
+            ],
           ),
         ),
       ),

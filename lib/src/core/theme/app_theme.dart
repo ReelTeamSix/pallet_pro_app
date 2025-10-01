@@ -172,7 +172,7 @@ class AppTheme {
       foregroundColor: _onPrimaryLight,
       elevation: elevationLow,
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: _surfaceLight,
       elevation: elevationLow,
       shape: RoundedRectangleBorder(
@@ -252,7 +252,7 @@ class AppTheme {
         borderRadius: BorderRadius.circular(borderRadiusCircular),
       ),
     ),
-    tabBarTheme: const TabBarTheme(
+    tabBarTheme: const TabBarThemeData(
       labelColor: _primaryLight,
       unselectedLabelColor: Colors.grey,
       indicatorColor: _primaryLight,
@@ -270,7 +270,7 @@ class AppTheme {
       ),
       behavior: SnackBarBehavior.floating,
     ),
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       backgroundColor: _surfaceLight,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(borderRadiusMd),
@@ -300,7 +300,7 @@ class AppTheme {
       foregroundColor: _onSurfaceDark,
       elevation: elevationLow,
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: _surfaceDark,
       elevation: elevationLow,
       shape: RoundedRectangleBorder(
@@ -380,7 +380,7 @@ class AppTheme {
         borderRadius: BorderRadius.circular(borderRadiusCircular),
       ),
     ),
-    tabBarTheme: const TabBarTheme(
+    tabBarTheme: const TabBarThemeData(
       labelColor: _primaryDark,
       unselectedLabelColor: Colors.grey,
       indicatorColor: _primaryDark,
@@ -398,7 +398,7 @@ class AppTheme {
       ),
       behavior: SnackBarBehavior.floating,
     ),
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       backgroundColor: _surfaceDark,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(borderRadiusMd),

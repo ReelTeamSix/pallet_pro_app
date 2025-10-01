@@ -9,48 +9,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class SupabaseStorageRepository implements StorageRepository {
   final SupabaseClient _supabaseClient;
   // Define bucket name - should match your Supabase setup
-  final String _bucketName = 'item_photos';
+  final String _bucketName = 'item-photos';
 
   SupabaseStorageRepository(this._supabaseClient) {
-    // Ensure bucket exists
-    _ensureBucketExists();
-  }
-
-  // Private method to ensure the bucket exists
-  Future<void> _ensureBucketExists() async {
-    try {
-      // Get list of all buckets
-      final List<Bucket> buckets = await _supabaseClient.storage.listBuckets();
-      
-      // Check if our bucket exists
-      final bool bucketExists = buckets.any((bucket) => bucket.name == _bucketName);
-      
-      if (!bucketExists) {
-        if (kDebugMode) {
-          print('Creating storage bucket: $_bucketName');
-        }
-        
-        // Create the bucket if it doesn't exist
-        // Set public access to true for easier image display
-        await _supabaseClient.storage.createBucket(
-          _bucketName, 
-          const BucketOptions(public: true)
-        );
-        
-        if (kDebugMode) {
-          print('Bucket created successfully');
-        }
-      } else {
-        if (kDebugMode) {
-          print('Bucket exists: $_bucketName');
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error ensuring bucket exists: $e');
-      }
-      // Don't throw, just log - we don't want to prevent app startup
-      // The error will be caught later if we try to use the bucket
+    // No longer trying to create the bucket - it should be pre-created by an admin
+    if (kDebugMode) {
+      print('Storage repository initialized - using bucket: $_bucketName');
     }
   }
 
@@ -82,11 +46,40 @@ class SupabaseStorageRepository implements StorageRepository {
     final storagePath = _constructStoragePath(userId, itemId, fileName);
 
     try {
+      // Verify the item exists in the database first
+      final itemCheck = await _supabaseClient
+          .from('items')
+          .select('id')
+          .eq('id', itemId)
+          .eq('user_id', userId)
+          .maybeSingle();
+          
+      if (itemCheck == null) {
+        throw Exception('Cannot upload photo: Item $itemId not found or not accessible');
+      }
+
       // Read file bytes
       final fileBytes = await file.readAsBytes();
       final fileExtension = file.name.split('.').last.toLowerCase();
-      // Determine MIME type
-      final mimeType = 'image/$fileExtension'; // Basic type, might need refinement
+      
+      // Properly determine MIME type - ensure jpg is handled as jpeg
+      String mimeType;
+      if (fileExtension == 'jpg' || fileExtension == 'jpeg') {
+        mimeType = 'image/jpeg';  // Always use image/jpeg for jpg files
+      } else if (fileExtension == 'png') {
+        mimeType = 'image/png';
+      } else if (fileExtension == 'gif') {
+        mimeType = 'image/gif';
+      } else if (fileExtension == 'webp') {
+        mimeType = 'image/webp';
+      } else {
+        // Default to jpeg for unsupported types to avoid errors
+        mimeType = 'image/jpeg';
+      }
+      
+      if (kDebugMode) {
+        print('Uploading file with extension $fileExtension and MIME type $mimeType');
+      }
 
       // Use uploadBinary for better control over MIME type
       await _supabaseClient.storage.from(_bucketName).uploadBinary(
@@ -100,16 +93,25 @@ class SupabaseStorageRepository implements StorageRepository {
             ),
           );
 
+      if (kDebugMode) {
+        print('Successfully uploaded image to path: $storagePath');
+      }
+
       // After successful upload, return the path used.
       // The actual URL might be constructed later or using createSignedUrl.
       return storagePath;
 
     } on StorageException catch (e) {
-      // TODO: Map StorageException to a custom exception
+      if (e.statusCode == 403) {
+        print('Permission denied uploading photo. RLS policy may be blocking access: ${e.message}');
+        throw Exception('Permission denied while uploading photo. Please check that the bucket exists and RLS policies are correctly set.');
+      } else if (e.message.toLowerCase().contains('bucket not found')) {
+        print('Error: Bucket $_bucketName does not exist. Please create it in the Supabase dashboard.');
+        throw Exception('Storage error: Bucket not found. This needs to be created by an administrator.');
+      }
       print('Error uploading photo $storagePath: ${e.message}');
       throw Exception('Storage error uploading photo: ${e.message}');
     } catch (e) {
-      // TODO: Map generic exceptions
       print('Unexpected error uploading photo $storagePath: $e');
       throw Exception('Unexpected error uploading photo: $e');
     }

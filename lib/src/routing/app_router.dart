@@ -28,6 +28,8 @@ import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.d
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide UserSettings;
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/providers/pallet_detail_provider.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/screens/add_edit_pallet_screen.dart';
 
 /// The router provider.
 // Use Provider instead of NotifierProvider for simpler router instance creation
@@ -110,6 +112,12 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   // Add Item Route - placed in the proper hierarchy
   static const addEditItem = 'add-edit-item'; // Will be used with parent route
   static const addItemToPallet = '/inventory/pallet/:pid/add-item'; // Used for direct navigation
+  static const addEditItemStandalone = 'addEditItemStandalone'; // Name for the standalone route
+  
+  // New routes
+  static const addEditPallet = '/inventory/pallet/add-edit'; // For adding new pallets or editing existing ones
+  static const editPallet = '/inventory/pallet/:pid/edit'; // For editing existing pallets
+  static const editItem = '/inventory/item/:iid/edit'; // For editing existing items
 
   @override
   void build() {
@@ -842,6 +850,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                                         );
                                       },
                                       routes: [
+                                        // TODO: Add route for adding/editing items, potentially nested under pallet detail?
                                         GoRoute(
                                           path: addEditItem, // Relative path: /home/inventory/pallet/:pid/add-edit-item
                                           name: addItemToPallet, // Named route for direct navigation
@@ -873,9 +882,68 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                                           child: ItemDetailScreen(itemId: itemId!),
                                         );
                                       },
-                                      // TODO: Add route for adding/editing items, potentially nested under pallet detail?
                                     ),
-                                     // TODO: Add route for adding/editing pallets
+                                    // Add a standalone route for adding items directly from inventory list
+                                    GoRoute(
+                                      path: 'pallet/add-edit', // Relative path: /home/inventory/pallet/add-edit
+                                      name: addEditPallet,
+                                      pageBuilder: (context, state) {
+                                        return NoTransitionPage<void>(
+                                          key: state.pageKey,
+                                          child: const AddEditPalletScreen(),
+                                        );
+                                      },
+                                    ),
+                                    // Add route for standalone item creation
+                                    GoRoute(
+                                      path: 'item/add', // Relative path: /home/inventory/item/add
+                                      name: addEditItemStandalone,
+                                      pageBuilder: (context, state) {
+                                        final palletId = state.uri.queryParameters['palletId'];
+                                        return NoTransitionPage<void>(
+                                          key: state.pageKey,
+                                          child: AddEditItemScreen(
+                                            palletId: palletId,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    GoRoute(
+                                      path: 'pallet/:pid/edit', // Relative path: /home/inventory/pallet/:pid/edit
+                                      name: editPallet,
+                                      pageBuilder: (context, state) {
+                                        final pid = state.pathParameters['pid']!;
+                                        
+                                        return NoTransitionPage<void>(
+                                          key: state.pageKey,
+                                          child: Builder(
+                                            builder: (context) {
+                                              return Consumer(
+                                                builder: (context, ref, _) {
+                                                  final palletAsync = ref.watch(palletDetailProvider(pid));
+                                                  return palletAsync.when(
+                                                    data: (pallet) {
+                                                      if (pallet == null) {
+                                                        return const Scaffold(
+                                                          body: Center(child: Text('Pallet not found')),
+                                                        );
+                                                      }
+                                                      return AddEditPalletScreen(pallet: pallet);
+                                                    },
+                                                    loading: () => const Scaffold(
+                                                      body: Center(child: CircularProgressIndicator()),
+                                                    ),
+                                                    error: (error, _) => Scaffold(
+                                                      body: Center(child: Text('Error: $error')),
+                                                    ),
+                                                  );
+                                                }
+                                              );
+                                            }
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ],
                                 ),
                               ]

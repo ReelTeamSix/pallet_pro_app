@@ -11,8 +11,9 @@ import 'package:pallet_pro_app/src/features/inventory/data/services/item_status_
 /// It fetches items using the [ItemRepository] and handles loading, data,
 /// and error states. Currently fetches all items, may be refined later.
 class ItemListNotifier extends AsyncNotifier<List<Item>> {
-  late final ItemRepository _itemRepository;
-  late final ItemStatusManager _statusManager;
+  // Change from late final to nullable with initialization in constructor
+  ItemRepository? _itemRepository;
+  ItemStatusManager? _statusManager;
 
   // Current filter states
   ItemStatus? _statusFilter;
@@ -27,15 +28,27 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
 
   @override
   Future<List<Item>> build() async {
-    _itemRepository = ref.watch(itemRepositoryProvider);
-    _statusManager = ref.watch(itemStatusManagerProvider);
+    // Initialize repositories and services if not already initialized
+    if (_itemRepository == null) {
+      _itemRepository = ref.watch(itemRepositoryProvider);
+    }
+    
+    if (_statusManager == null) {
+      _statusManager = ref.watch(itemStatusManagerProvider);
+    }
+    
     // Initial fetch of items
     return _fetchItems();
   }
 
   Future<List<Item>> _fetchItems() async {
+    // Make sure repository is initialized
+    if (_itemRepository == null) {
+      _itemRepository = ref.read(itemRepositoryProvider);
+    }
+    
     // Apply current filters
-    final result = await _itemRepository.getAllItems(
+    final result = await _itemRepository!.getAllItems(
       statusFilter: _statusFilter,
       storageLocationFilter: _storageLocationFilter,
       salesChannelFilter: _salesChannelFilter,
@@ -107,7 +120,10 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
   /// Updates an item.
   Future<Result<Item>> updateItem(Item item) async {
     state = const AsyncValue.loading();
-    final result = await _itemRepository.updateItem(item);
+    if (_itemRepository == null) {
+      _itemRepository = ref.read(itemRepositoryProvider);
+    }
+    final result = await _itemRepository!.updateItem(item);
     
     return result.when(
       success: (updatedItem) async {
@@ -124,7 +140,10 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
   /// Adds a new item.
   Future<Result<Item>> addItem(Item item) async {
     state = const AsyncValue.loading();
-    final result = await _itemRepository.createItem(item);
+    if (_itemRepository == null) {
+      _itemRepository = ref.read(itemRepositoryProvider);
+    }
+    final result = await _itemRepository!.createItem(item);
     
     return result.when(
       success: (createdItem) async {
@@ -148,7 +167,11 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
   }) async {
     state = const AsyncValue.loading();
     
-    final result = await _statusManager.markAsListed(
+    if (_statusManager == null) {
+      _statusManager = ref.read(itemStatusManagerProvider);
+    }
+    
+    final result = await _statusManager!.markAsListed(
       itemId: itemId,
       listingPrice: listingPrice,
       listingPlatform: listingPlatform,
@@ -175,7 +198,11 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
   }) async {
     state = const AsyncValue.loading();
     
-    final result = await _statusManager.markAsSold(
+    if (_statusManager == null) {
+      _statusManager = ref.read(itemStatusManagerProvider);
+    }
+    
+    final result = await _statusManager!.markAsSold(
       itemId: itemId,
       soldPrice: soldPrice,
       sellingPlatform: sellingPlatform,
@@ -197,7 +224,11 @@ class ItemListNotifier extends AsyncNotifier<List<Item>> {
   Future<Result<Item>> markItemAsInStock(String itemId) async {
     state = const AsyncValue.loading();
     
-    final result = await _statusManager.markAsInStock(itemId);
+    if (_statusManager == null) {
+      _statusManager = ref.read(itemStatusManagerProvider);
+    }
+    
+    final result = await _statusManager!.markAsInStock(itemId);
     
     // Refresh item list if successful
     if (result.isSuccess) {

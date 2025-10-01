@@ -165,17 +165,14 @@ class PalletDetailScreen extends ConsumerWidget {
                                   onPressed: pallet.status == PalletStatus.processed 
                                     ? null  // Disable if pallet is processed
                                     : () {
-                                        // Navigate to add item screen
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (context) => AddEditItemScreen(
-                                              palletId: palletId,
-                                            ),
-                                          ),
+                                        // Navigate to add item screen using GoRouter
+                                        context.pushNamed(
+                                          RouterNotifier.addItemToPallet,
+                                          pathParameters: {'pid': pallet.id},
                                         ).then((added) {
                                           if (added == true) {
                                             // Refresh the screen and all item providers
-                                            ref.invalidate(palletDetailProvider(palletId));
+                                            ref.invalidate(palletDetailProvider(pallet.id));
                                             ref.invalidate(itemListProvider);
                                             
                                             // Show success message
@@ -387,13 +384,10 @@ class PalletDetailScreen extends ConsumerWidget {
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () {
-                        // Navigate to add item screen
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => AddEditItemScreen(
-                              palletId: pallet.id,
-                            ),
-                          ),
+                        // Navigate to add item screen using GoRouter
+                        context.pushNamed(
+                          RouterNotifier.addItemToPallet,
+                          pathParameters: {'pid': pallet.id},
                         ).then((added) {
                           if (added == true) {
                             // Refresh the screen and all item providers
@@ -544,5 +538,168 @@ class PalletDetailScreen extends ConsumerWidget {
       default:
         return 'Even Distribution';
     }
+  }
+
+  // Method to handle the process pallet action
+  void _processPallet(BuildContext context, WidgetRef ref, Pallet pallet) {
+    if (pallet.status == PalletStatus.processed) {
+      // Already processed, show info dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Pallet Already Processed'),
+          content: const Text(
+            'This pallet has already been processed. '
+            'Processing allocates costs and finalizes the pallet inventory.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => context.pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
+    // Confirm processing
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Process Pallet?'),
+        content: const Text(
+          'Processing will finalize this pallet and allocate costs to all items. '
+          'You won\'t be able to add more items after processing. '
+          'Continue?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => context.pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              // Close the dialog
+              context.pop();
+              
+              // Show loading indicator
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const AlertDialog(
+                  content: Row(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(width: 16),
+                      Text('Processing pallet...'),
+                    ],
+                  ),
+                ),
+              );
+              
+              // Process the pallet using available methods in the notifier
+              await ref.read(palletDetailNotifierProvider(pallet.id).notifier).markAsProcessed();
+              
+              if (context.mounted) {
+                // Close loading dialog
+                context.pop();
+                
+                // Refresh the pallet detail
+                ref.invalidate(palletDetailProvider(pallet.id));
+                
+                // Show success message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Pallet processed successfully'))
+                );
+              }
+            },
+            child: const Text('Process'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Method to archive a pallet
+  void _archivePallet(BuildContext context, WidgetRef ref, Pallet pallet) {
+    // Can only archive processed pallets
+    if (pallet.status != PalletStatus.processed) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Cannot Archive'),
+          content: const Text(
+            'Only processed pallets can be archived. '
+            'Process this pallet first before archiving.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => context.pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
+    // Confirm archiving
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Archive Pallet?'),
+        content: const Text(
+          'Archiving will move this pallet to the archive section. '
+          'The pallet and its items will still be accessible but won\'t appear in the active inventory. '
+          'Continue?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => context.pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              // Close the dialog
+              context.pop();
+              
+              // Show loading indicator
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const AlertDialog(
+                  content: Row(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(width: 16),
+                      Text('Archiving pallet...'),
+                    ],
+                  ),
+                ),
+              );
+              
+              // Archive the pallet using available methods in the notifier
+              await ref.read(palletDetailNotifierProvider(pallet.id).notifier).markAsArchived();
+              
+              if (context.mounted) {
+                // Close loading dialog
+                context.pop();
+                
+                // Refresh and navigate back to inventory list
+                ref.invalidate(palletListProvider);
+                context.pop();
+                
+                // Show success message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Pallet archived successfully'))
+                );
+              }
+            },
+            child: const Text('Archive'),
+          ),
+        ],
+      ),
+    );
   }
 } 

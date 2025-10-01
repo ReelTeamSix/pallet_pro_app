@@ -68,9 +68,8 @@ class ItemDetailScreen extends ConsumerWidget {
                 onPressed: () {
                   // Navigate to edit screen
                   context.goNamed(
-                    RouterNotifier.addEditItem,
-                    pathParameters: {'pid': item.palletId},
-                    queryParameters: {'itemId': item.id},
+                    RouterNotifier.editItem,
+                    pathParameters: {'iid': item.id},
                   );
                 },
               );
@@ -127,9 +126,8 @@ class ItemDetailScreen extends ConsumerWidget {
                               onPressed: () {
                                 // Navigate to edit item screen
                                 context.goNamed(
-                                  RouterNotifier.addEditItem,
-                                  pathParameters: {'pid': item.palletId},
-                                  queryParameters: {'itemId': item.id},
+                                  RouterNotifier.editItem,
+                                  pathParameters: {'iid': item.id},
                                 );
                               },
                             ),

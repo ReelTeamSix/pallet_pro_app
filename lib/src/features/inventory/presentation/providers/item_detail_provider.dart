@@ -92,10 +92,27 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
   /// This method handles uploading photos to the storage repository
   /// and returns the list of storage paths for the uploaded photos.
   Future<Result<List<String>>> uploadItemPhotos(List<XFile> photos) async {
-    final item = state.value;
+    // Try to get item from state first
+    Item? item = state.value;
+    
+    // If item is not in state, try to fetch it directly from repository
+    if (item == null) {
+      final result = await _itemRepository.getItemById(arg);
+      if (result.isSuccess && result.value != null) {
+        item = result.value;
+      } else {
+        // If still can't find item, return failure
+        return Result.failure(
+          UnexpectedException('Cannot upload photos: Item not found or not accessible yet'),
+        );
+      }
+    }
+
+    // At this point item should be non-null, but let's add an extra safety check
+    // to satisfy the null safety requirements
     if (item == null) {
       return Result.failure(
-        UnexpectedException('Cannot upload photos: Item not found'),
+        UnexpectedException('Cannot upload photos: Item is null after retrieval attempt'),
       );
     }
 
@@ -110,7 +127,7 @@ class ItemDetailNotifier extends AutoDisposeFamilyAsyncNotifier<Item?, String> {
         final fileExtension = originalFilename.split('.').last;
         final fileName = 'photo_${timestamp}.$fileExtension';
         
-        // Upload the photo to storage
+        // Upload the photo to storage - now we can safely use item.id
         final path = await _storageRepository.uploadItemPhoto(
           itemId: item.id,
           fileName: fileName,
