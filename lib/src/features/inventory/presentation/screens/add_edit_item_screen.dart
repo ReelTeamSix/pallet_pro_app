@@ -78,8 +78,8 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
     if (widget.item != null) {
       _selectedCondition = widget.item!.condition;
       
-      // TODO: Fetch existing image paths using ItemPhotoRepository
-      // For now, using empty list
+      // Load existing photos when editing
+      _loadExistingPhotos();
     }
   }
   
@@ -240,6 +240,23 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
       _imagesToDelete.add(_existingImagePaths[index]);
       _existingImagePaths.removeAt(index);
     });
+  }
+
+  /// Load existing photos for editing
+  Future<void> _loadExistingPhotos() async {
+    if (widget.item == null) return;
+    
+    try {
+      final photosResult = await ref.read(itemPhotoRepositoryProvider).getItemPhotos(widget.item!.id);
+      if (photosResult.isSuccess && mounted) {
+        setState(() {
+          _existingImagePaths.clear();
+          _existingImagePaths.addAll(photosResult.value!.map((photo) => photo.imageUrl));
+        });
+      }
+    } catch (e) {
+      print('Error loading existing photos: $e');
+    }
   }
   
   void _showErrorSnackBar(String message) {
@@ -671,6 +688,7 @@ class _AddEditItemScreenState extends ConsumerState<AddEditItemScreen> {
                           onTakePhoto: _takePicture,
                           onRemoveImage: _removeImage,
                           onRemoveExistingImage: _markExistingImageForDeletion,
+                          maxPhotos: _maxPhotosPerItem,
                         ),
                       ],
                     ),

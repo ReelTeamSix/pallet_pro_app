@@ -29,6 +29,7 @@ import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide UserSettings;
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/providers/pallet_detail_provider.dart';
+import 'package:pallet_pro_app/src/features/inventory/presentation/providers/item_detail_provider.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/add_edit_pallet_screen.dart';
 
 /// The router provider.
@@ -87,7 +88,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   final DateTime _appStartTime = DateTime.now();
   // Timestamp for the last successful authentication (initial or resume)
   DateTime? _lastAuthCompletionTime;
-  static const Duration _authCooldownDuration = Duration(seconds: 1);
+  static const Duration _authCooldownDuration = Duration(minutes: 5);
   static const Duration _maxSplashWaitTime = Duration(seconds: 3);
   Timer? _splashTimeoutTimer;
   final _routeObserver = _RouterObserver();
@@ -944,6 +945,45 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                                         );
                                       },
                                     ),
+                                    GoRoute(
+                                      path: 'item/:iid/edit', // Relative path: /home/inventory/item/:iid/edit
+                                      name: editItem,
+                                      pageBuilder: (context, state) {
+                                        final itemId = state.pathParameters['iid']!;
+                                        
+                                        return NoTransitionPage<void>(
+                                          key: state.pageKey,
+                                          child: Builder(
+                                            builder: (context) {
+                                              return Consumer(
+                                                builder: (context, ref, _) {
+                                                  final itemAsync = ref.watch(itemDetailProvider(itemId));
+                                                  return itemAsync.when(
+                                                    data: (item) {
+                                                      if (item == null) {
+                                                        return const Scaffold(
+                                                          body: Center(child: Text('Item not found')),
+                                                        );
+                                                      }
+                                                      return AddEditItemScreen(
+                                                        palletId: item.palletId,
+                                                        item: item,
+                                                      );
+                                                    },
+                                                    loading: () => const Scaffold(
+                                                      body: Center(child: CircularProgressIndicator()),
+                                                    ),
+                                                    error: (error, _) => Scaffold(
+                                                      body: Center(child: Text('Error: $error')),
+                                                    ),
+                                                  );
+                                                }
+                                              );
+                                            }
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ],
                                 ),
                               ]
@@ -1043,9 +1083,9 @@ class RouterNotifier extends Notifier<void> implements Listenable {
           _wasResumed = false; // Reset flag, auth is recent
        }
      } else if (state == AppLifecycleState.paused) {
-       debugPrint("RouterNotifier: App Paused. Resetting initial auth flag.");
-       // Reset the initial auth flag when paused, so it needs re-check on resume
-       _initialAuthDone = false;
+       debugPrint("RouterNotifier: App Paused. Preserving auth state for image picker/short pauses.");
+       // Don't reset initial auth flag on pause - this prevents biometric auth when returning from image picker
+       // Only reset on actual app termination (detached/hidden)
         // Preserve post-auth target when pausing
        final targetBeforePause = _postAuthTarget;
        debugPrint('RouterNotifier: Preserving post-auth target during pause: $targetBeforePause');

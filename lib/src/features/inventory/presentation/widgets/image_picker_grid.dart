@@ -11,6 +11,7 @@ class ImagePickerGrid extends StatelessWidget {
   final Function() onTakePhoto;
   final Function(int) onRemoveImage;
   final Function(int) onRemoveExistingImage;
+  final int maxPhotos;
   
   const ImagePickerGrid({
     Key? key,
@@ -20,41 +21,106 @@ class ImagePickerGrid extends StatelessWidget {
     required this.onTakePhoto,
     required this.onRemoveImage,
     required this.onRemoveExistingImage,
+    this.maxPhotos = 3,
   }) : super(key: key);
   
   @override
   Widget build(BuildContext context) {
-    // Calculate total items (existing + new + add buttons)
-    final int totalItems = existingImageUrls.length + selectedImages.length + 2;
-    // Calculate grid columns based on width
-    final int columns = MediaQuery.of(context).size.width > 600 ? 4 : 3;
+    final int totalPhotos = existingImageUrls.length + selectedImages.length;
+    final int remainingSlots = maxPhotos - totalPhotos;
+    final bool canAddMore = remainingSlots > 0;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Photos',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Photos',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: remainingSlots > 0 
+                    ? Colors.green.shade100 
+                    : Colors.red.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$totalPhotos of $maxPhotos',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: remainingSlots > 0 
+                      ? Colors.green.shade700 
+                      : Colors.red.shade700,
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            ElevatedButton.icon(
-              onPressed: onPickImages,
-              icon: const Icon(Icons.photo_library),
-              label: const Text('Gallery'),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: canAddMore ? onPickImages : null,
+                icon: const Icon(Icons.photo_library),
+                label: const Text('Gallery'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: canAddMore 
+                      ? Theme.of(context).primaryColor 
+                      : Colors.grey,
+                ),
+              ),
             ),
-            ElevatedButton.icon(
-              onPressed: onTakePhoto,
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('Camera'),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: canAddMore ? onTakePhoto : null,
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Camera'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: canAddMore 
+                      ? Theme.of(context).primaryColor 
+                      : Colors.grey,
+                ),
+              ),
             ),
           ],
         ),
+        if (!canAddMore) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade300),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info, color: Colors.orange.shade700, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Maximum of $maxPhotos photos allowed. Remove some to add more.',
+                    style: TextStyle(
+                      color: Colors.orange.shade700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         if (existingImageUrls.isEmpty && selectedImages.isEmpty)
           Container(
@@ -71,28 +137,22 @@ class ImagePickerGrid extends StatelessWidget {
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
               childAspectRatio: 1,
             ),
-            itemCount: totalItems,
+            itemCount: existingImageUrls.length + selectedImages.length,
             itemBuilder: (context, index) {
               // First show existing images
               if (index < existingImageUrls.length) {
                 return _buildExistingImageItem(index);
               }
               // Then show newly selected images
-              else if (index < existingImageUrls.length + selectedImages.length) {
+              else {
                 final newIndex = index - existingImageUrls.length;
                 return _buildNewImageItem(newIndex);
-              }
-              // Finally show add buttons
-              else {
-                return index == totalItems - 2
-                    ? _buildAddImageButton(context, true) // Gallery
-                    : _buildAddImageButton(context, false); // Camera
               }
             },
           ),

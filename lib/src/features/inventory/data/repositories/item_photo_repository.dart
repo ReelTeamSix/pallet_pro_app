@@ -23,4 +23,10 @@ abstract class ItemPhotoRepository {
 
   /// Deletes all photos for an item
   Future<Result<void>> deleteAllItemPhotos(String itemId);
+
+  /// Sets a photo as the primary photo for an item
+  Future<Result<void>> setPrimaryPhoto({
+    required String itemId,
+    required String photoId,
+  });
 } 

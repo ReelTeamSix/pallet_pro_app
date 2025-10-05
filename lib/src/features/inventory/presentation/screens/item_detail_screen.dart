@@ -5,14 +5,12 @@ import 'package:pallet_pro_app/src/core/utils/result.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item_photo.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
-import 'package:pallet_pro_app/src/features/inventory/data/repositories/storage_repository.dart';
 import 'package:pallet_pro_app/src/global/utils/dialog_service.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
 
-import '../providers/item_list_provider.dart'; // For SimpleItem model
 import '../providers/item_detail_provider.dart';
-import 'inventory_list_screen.dart'; // For ShimmerLoader access
-import 'add_edit_item_screen.dart';
+import 'inventory_list_screen.dart';
+import '../widgets/photo_management_dialog.dart';
 
 // Helper extension for item status conversion
 extension ItemStatusExtension on ItemStatus {
@@ -22,6 +20,15 @@ extension ItemStatusExtension on ItemStatus {
       case ItemStatus.forSale: return 'for_sale';
       case ItemStatus.listed: return 'listed';
       case ItemStatus.sold: return 'sold';
+    }
+  }
+  
+  String get displayName {
+    switch (this) {
+      case ItemStatus.inStock: return 'In Stock';
+      case ItemStatus.forSale: return 'For Sale';
+      case ItemStatus.listed: return 'Listed';
+      case ItemStatus.sold: return 'Sold';
     }
   }
 }
@@ -47,484 +54,710 @@ class ItemDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Use the real provider instead of the mock
-    print('Attempting to load item with ID: $itemId');
     final itemAsync = ref.watch(itemDetailProvider(itemId));
     
-    // Create a FutureBuilder for photos
-    final photosFuture = ref.watch(itemPhotoRepositoryProvider).getItemPhotos(itemId);
-    
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Item Details'),
-        actions: [
-          itemAsync.when(
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-            data: (item) {
-              if (item == null) return const SizedBox.shrink();
-              return IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: () {
-                  // Navigate to edit screen
-                  context.goNamed(
-                    RouterNotifier.editItem,
-                    pathParameters: {'iid': item.id},
-                  );
-                },
-              );
-            },
-          ),
-        ],
-      ),
       body: itemAsync.when(
         loading: () => const ShimmerLoader(),
-        error: (err, stack) {
-          print('Error loading item: $err'); // Debug logging
-          print('Stack trace: $stack'); // Debug logging
-          return Center(
-            child: Text('Error loading item: $err'),
-          );
-        },
+        error: (err, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text('Error loading item', 
+                style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text('$err', 
+                style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+        ),
         data: (item) {
           if (item == null) {
-            print('Item is null'); // Debug logging
             return const Center(child: Text('Item not found.'));
           }
           
-          print('Successfully loaded item: ${item.id}'); // Debug logging
-          
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Status Action Card - no longer pass the full item object
-                _buildStatusActionCard(
-                  context, 
-                  ref, 
-                  item.id, 
-                  item.name ?? 'Unnamed Item', 
-                  item.status.asString, // Convert enum to string
-                  item.purchasePrice
+          return CustomScrollView(
+            slivers: [
+              // Custom app bar with image
+              _buildAppBar(context, ref, item),
+              
+              // Main content
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Item name and basic info
+                    _buildItemHeader(context, item),
+                    
+                    // Status and quick actions
+                    _buildStatusCard(context, ref, item),
+                    
+                    // Pricing information (contextual based on status)
+                    if (_shouldShowPricing(item))
+                      _buildPricingCard(context, item),
+                    
+                    // Additional details (collapsible)
+                    _buildDetailsSection(context, ref, item),
+                    
+                    const SizedBox(height: 80), // Bottom padding for FAB
+                  ],
                 ),
-                
-                // Images
-                Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Images', style: Theme.of(context).textTheme.titleLarge),
-                            IconButton(
-                              icon: const Icon(Icons.add_a_photo),
-                              onPressed: () {
-                                // Navigate to edit item screen
-                                context.goNamed(
-                                  RouterNotifier.editItem,
-                                  pathParameters: {'iid': item.id},
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        FutureBuilder<Result<List<ItemPhoto>>>(
-                          future: photosFuture,
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) {
-                              return const SizedBox(
-                                height: 200,
-                                child: Center(child: CircularProgressIndicator()),
-                              );
-                            }
-                            
-                            if (snapshot.hasError) {
-                              print('Error loading photos: ${snapshot.error}'); // Debug logging
-                              return SizedBox(
-                                height: 200,
-                                child: Center(
-                                  child: Text('Error loading photos: ${snapshot.error}'),
-                                ),
-                              );
-                            }
-                            
-                            if (!snapshot.hasData || snapshot.data?.isFailure == true) {
-                              print('No photo data available'); // Debug logging
-                              return SizedBox(
-                                height: 200,
-                                child: Center(
-                                  child: Text(
-                                    snapshot.data?.isFailure == true 
-                                      ? 'Error: ${snapshot.data?.error?.message}' 
-                                      : 'No photos available'
-                                  ),
-                                ),
-                              );
-                            }
-                            
-                            final photos = snapshot.data!.value;
-                            print('Loaded ${photos.length} photos'); // Debug logging
-                            
-                            if (photos.isEmpty) {
-                              return SizedBox(
-                                height: 200,
-                                child: Center(
-                                  child: Text('No photos available for this item'),
-                                ),
-                              );
-                            }
-                            
-                            return SizedBox(
-                              height: 200,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: photos.length,
-                                itemBuilder: (context, index) {
-                                  final photo = photos[index];
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.network(
-                                        photo.imageUrl,
-                                        height: 200,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          print('Error loading image: $error'); // Debug logging
-                                          return Container(
-                                            width: 200,
-                                            color: Colors.grey[400],
-                                            child: Center(
-                                              child: Text('Error loading image: $error'),
-                                            ),
-                                          );
-                                        },
-                                        loadingBuilder: (context, child, loadingProgress) {
-                                          if (loadingProgress == null) return child;
-                                          return Container(
-                                            width: 200,
-                                            color: Colors.grey[300],
-                                            child: Center(
-                                              child: CircularProgressIndicator(
-                                                value: loadingProgress.expectedTotalBytes != null
-                                                    ? loadingProgress.cumulativeBytesLoaded / 
-                                                        loadingProgress.expectedTotalBytes!
-                                                    : null,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                // Item details
-                Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Item Information',
-                            style: Theme.of(context).textTheme.titleLarge),
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        ListTile(
-                          leading: const Icon(Icons.inventory_2),
-                          title: const Text('Name'),
-                          subtitle: Text(item.name ?? 'Not specified'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.description),
-                          title: const Text('Description'),
-                          subtitle: Text(item.description ?? 'Not specified'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.location_on),
-                          title: const Text('Storage Location'),
-                          subtitle: Text(item.storageLocation ?? 'Not specified'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.storefront),
-                          title: const Text('Sales Channel'),
-                          subtitle: Text(item.salesChannel ?? 'Not specified'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.numbers),
-                          title: const Text('Quantity'),
-                          subtitle: Text('${item.quantity}'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.star),
-                          title: const Text('Condition'),
-                          subtitle: Text(item.condition.asString), // Convert enum to string
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.attach_money),
-                          title: const Text('Purchase Price'),
-                          subtitle: Text(item.purchasePrice != null
-                              ? '\$${item.purchasePrice!.toStringAsFixed(2)}'
-                              : 'Not specified'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                // Pallet association
-                Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Pallet Association', 
-                            style: Theme.of(context).textTheme.titleLarge),
-                        const Divider(),
-                        ListTile(
-                          leading: const Icon(Icons.category),
-                          title: const Text('Pallet ID'),
-                          subtitle: Text(item.palletId),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.open_in_new),
-                            onPressed: () {
-                              context.goNamed(
-                                RouterNotifier.palletDetail,
-                                pathParameters: {'pid': item.palletId}
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                // Status and dates
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Status Information', 
-                            style: Theme.of(context).textTheme.titleLarge),
-                        const Divider(),
-                        _buildItemStatusDetails(context, item),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                // Footer with ID
-                Padding(
-                  padding: const EdgeInsets.only(top: 16.0),
-                  child: Text('Item ID: ${item.id}', 
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
-                ),
-              ],
-            ),
+              ),
+            ],
           );
         },
+      ),
+      floatingActionButton: itemAsync.maybeWhen(
+        data: (item) => item != null ? _buildFloatingActions(context, ref, item) : null,
+        orElse: () => null,
       ),
     );
   }
 
-  // Card showing status and providing action buttons based on current status
-  Widget _buildStatusActionCard(
-    BuildContext context, 
-    WidgetRef ref, 
-    String itemId, 
-    String itemName,
-    String status,
-    double? purchasePrice,
-  ) {
-    final statusColor = _getStatusColor(status);
-    // Use the notifier provider instead of the FutureProvider
-    final notifier = ref.watch(itemDetailNotifierProvider(itemId).notifier);
+  /// App bar with hero image
+  Widget _buildAppBar(BuildContext context, WidgetRef ref, Item item) {
+    final photosFuture = ref.watch(itemPhotoRepositoryProvider).getItemPhotos(item.id);
+    
+    return SliverAppBar(
+      expandedHeight: 250,
+      pinned: true,
+      flexibleSpace: FlexibleSpaceBar(
+        background: FutureBuilder<Result<List<ItemPhoto>>>(
+          future: photosFuture,
+          builder: (context, snapshot) {
+            if (snapshot.hasData && 
+                snapshot.data!.isSuccess && 
+                snapshot.data!.value!.isNotEmpty) {
+              final photos = snapshot.data!.value!;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  PageView.builder(
+                    itemCount: photos.length,
+                    itemBuilder: (context, index) {
+                      return Image.network(
+                        photos[index].imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                          Container(
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.image, size: 64, color: Colors.grey),
+                          ),
+                      );
+                    },
+                  ),
+                  // Gradient overlay
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      height: 100,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Colors.black.withOpacity(0.7),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Photo count indicator
+                  if (photos.length > 1)
+                    Positioned(
+                      bottom: 16,
+                      right: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.photo_library, size: 16, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${photos.length}',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            }
+            
+            // No photos - show placeholder
+            return Container(
+              color: Colors.grey[300],
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.image, size: 64, color: Colors.grey[500]),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No photos',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.edit),
+          onPressed: () {
+            context.goNamed(
+              RouterNotifier.editItem,
+              pathParameters: {'iid': item.id},
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Item name, condition, quantity
+  Widget _buildItemHeader(BuildContext context, Item item) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Item name
+          Text(
+            item.name ?? 'Unnamed Item',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // Condition and quantity chips
+          Wrap(
+            spacing: 8,
+            children: [
+              Chip(
+                avatar: const Icon(Icons.star, size: 18),
+                label: Text(item.condition.asString),
+                backgroundColor: _getConditionColor(item.condition).withOpacity(0.2),
+                labelStyle: TextStyle(
+                  color: _getConditionColor(item.condition),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Chip(
+                avatar: const Icon(Icons.inventory_2, size: 18),
+                label: Text('Qty: ${item.quantity}'),
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                labelStyle: const TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          
+          // Description if available
+          if (item.description != null && item.description!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              item.description!,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+          
+          // Storage location if available
+          if (item.storageLocation != null && item.storageLocation!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  item.storageLocation!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Status card with action buttons
+  Widget _buildStatusCard(BuildContext context, WidgetRef ref, Item item) {
+    final statusColor = _getStatusColor(item.status.asString);
+    final notifier = ref.watch(itemDetailNotifierProvider(item.id).notifier);
     
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Status indicator
             Row(
               children: [
-                Icon(Icons.circle, color: statusColor, size: 16),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Text(
-                  'Status: ${_formatStatus(status)}',
+                  item.status.displayName,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: statusColor,
                     fontWeight: FontWeight.bold,
+                    color: statusColor,
                   ),
                 ),
               ],
             ),
+            
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                // Show different action buttons based on current status
-                if (status == "in_stock")
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.storefront),
-                    label: const Text('List for Sale'),
-                    onPressed: () async {
-                      final result = await DialogService.showListItemDialog(
-                        context: context,
-                        itemName: itemName,
-                        suggestedPrice: purchasePrice != null ? purchasePrice * 1.5 : 0.0,
-                      );
-                      
-                      if (result != null) {
-                        // Use the real notifier method
-                        await notifier.markAsListed(
-                          listingPrice: result['listingPrice'] as double,
-                          listingPlatform: result['listingPlatform'] as String,
-                          listingDate: result['listingDate'] as DateTime,
-                        );
-                      }
-                    },
-                  ),
-                  
-                if (status == "listed")
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.paid),
-                        label: const Text('Mark Sold'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: () async {
-                          final result = await DialogService.showSoldItemDialog(
-                            context: context,
-                            itemName: itemName,
-                            listingPrice: 0.0, // Placeholder until model updated
-                            listingPlatform: 'Unknown', // Placeholder
-                          );
-                          
-                          if (result != null) {
-                            // Use the real notifier method
-                            await notifier.markAsSold(
-                              soldPrice: result['soldPrice'] as double,
-                              sellingPlatform: result['sellingPlatform'] as String,
-                              soldDate: result['soldDate'] as DateTime,
-                            );
-                          }
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.undo),
-                        label: const Text('Unlist'),
-                        onPressed: () async {
-                          final confirmed = await DialogService.showConfirmationDialog(
-                            context: context,
-                            title: 'Unlist Item',
-                            message: 'Are you sure you want to remove this item from sale and mark it as in stock?',
-                            confirmText: 'Unlist',
-                            cancelText: 'Cancel',
-                          );
-                          
-                          if (confirmed) {
-                            // Use the real notifier method
-                            await notifier.markAsInStock();
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  
-                if (status == "sold")
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.undo),
-                    label: const Text('Mark as Listed Again'),
-                    onPressed: () async {
-                      final confirmed = await DialogService.showConfirmationDialog(
-                        context: context,
-                        title: 'Revert Sale',
-                        message: 'Are you sure you want to revert this item\'s status from sold back to listed?',
-                        confirmText: 'Revert to Listed',
-                        cancelText: 'Cancel',
-                      );
-                      
-                      if (confirmed) {
-                        // We would need to keep the listing data when marking as sold to reuse here
-                        // For now, we'll just show the listing dialog again
-                        final result = await DialogService.showListItemDialog(
-                          context: context,
-                          itemName: itemName,
-                          suggestedPrice: purchasePrice != null ? purchasePrice * 1.5 : 0.0,
-                        );
-                        
-                        if (result != null) {
-                          // Use the real notifier method
-                          await notifier.markAsListed(
-                            listingPrice: result['listingPrice'] as double,
-                            listingPlatform: result['listingPlatform'] as String,
-                            listingDate: result['listingDate'] as DateTime,
-                          );
-                        }
-                      }
-                    },
-                  ),
-              ],
-            ),
+            
+            // Action buttons based on status
+            _buildStatusActions(context, ref, item, notifier),
           ],
         ),
       ),
     );
   }
-  
-  // Helper method to build status details for Item type
-  Widget _buildItemStatusDetails(BuildContext context, Item item) {
-    return Column(
-      children: [
-        ListTile(
-          leading: Icon(
-            Icons.circle,
-            color: _getStatusColor(item.status.asString),
-            size: 16,
+
+  /// Status-specific action buttons
+  Widget _buildStatusActions(
+    BuildContext context,
+    WidgetRef ref,
+    Item item,
+    dynamic notifier,
+  ) {
+    switch (item.status) {
+      case ItemStatus.inStock:
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.sell),
+            label: const Text('List for Sale'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            onPressed: () async {
+              final result = await DialogService.showListItemDialog(
+                context: context,
+                itemName: item.name ?? 'Unnamed Item',
+                suggestedPrice: item.purchasePrice != null ? item.purchasePrice! * 1.5 : 0.0,
+              );
+              
+              if (result != null) {
+                await notifier.markAsListed(
+                  listingPrice: result['listingPrice'] as double,
+                  listingPlatform: result['listingPlatform'] as String,
+                  listingDate: result['listingDate'] as DateTime,
+                );
+              }
+            },
           ),
-          title: const Text('Current Status'),
-          subtitle: Text(_formatStatus(item.status.asString)),
+        );
+        
+      case ItemStatus.listed:
+        return Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.check_circle),
+                label: const Text('Mark Sold'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: () async {
+                  final result = await DialogService.showSoldItemDialog(
+                    context: context,
+                    itemName: item.name ?? 'Unnamed Item',
+                    listingPrice: 0.0,
+                    listingPlatform: 'Unknown',
+                  );
+                  
+                  if (result != null) {
+                    await notifier.markAsSold(
+                      soldPrice: result['soldPrice'] as double,
+                      sellingPlatform: result['sellingPlatform'] as String,
+                      soldDate: result['soldDate'] as DateTime,
+                    );
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.remove_circle_outline),
+                label: const Text('Unlist'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: () async {
+                  final confirmed = await DialogService.showConfirmationDialog(
+                    context: context,
+                    title: 'Unlist Item',
+                    message: 'Remove this item from sale?',
+                    confirmText: 'Unlist',
+                    cancelText: 'Cancel',
+                  );
+                  
+                  if (confirmed) {
+                    await notifier.markAsInStock();
+                  }
+                },
+              ),
+            ),
+          ],
+        );
+        
+      case ItemStatus.sold:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.celebration, color: Colors.green),
+                const SizedBox(width: 8),
+                Text(
+                  'Item sold!',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.green,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.undo),
+                label: const Text('Revert to Listed'),
+                onPressed: () async {
+                  final confirmed = await DialogService.showConfirmationDialog(
+                    context: context,
+                    title: 'Revert Sale',
+                    message: 'Mark this item as listed again?',
+                    confirmText: 'Revert',
+                    cancelText: 'Cancel',
+                  );
+                  
+                  if (confirmed) {
+                    final result = await DialogService.showListItemDialog(
+                      context: context,
+                      itemName: item.name ?? 'Unnamed Item',
+                      suggestedPrice: item.purchasePrice != null ? item.purchasePrice! * 1.5 : 0.0,
+                    );
+                    
+                    if (result != null) {
+                      await notifier.markAsListed(
+                        listingPrice: result['listingPrice'] as double,
+                        listingPlatform: result['listingPlatform'] as String,
+                        listingDate: result['listingDate'] as DateTime,
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+          ],
+        );
+        
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  /// Pricing card (shown contextually)
+  Widget _buildPricingCard(BuildContext context, Item item) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pricing',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Purchase price (always shown if available)
+            if (item.purchasePrice != null)
+              _buildPriceRow(
+                context,
+                'Purchase Price',
+                item.purchasePrice!,
+                Icons.shopping_cart,
+                Colors.blue,
+              ),
+            
+            // Listing price (shown when listed or sold)
+            if (item.listingPrice != null && 
+                (item.status == ItemStatus.listed || item.status == ItemStatus.sold))
+              _buildPriceRow(
+                context,
+                'Listed At',
+                item.listingPrice!,
+                Icons.local_offer,
+                Colors.orange,
+              ),
+            
+            // Sold price (shown when sold)
+            if (item.soldPrice != null && item.status == ItemStatus.sold)
+              _buildPriceRow(
+                context,
+                'Sold For',
+                item.soldPrice!,
+                Icons.monetization_on,
+                Colors.green,
+              ),
+            
+            // Profit/Loss (shown when sold)
+            if (item.status == ItemStatus.sold && 
+                item.purchasePrice != null && 
+                item.soldPrice != null) ...[
+              const Divider(height: 24),
+              _buildProfitRow(context, item),
+            ],
+          ],
         ),
-        const Divider(),
-        // Note: We're removing conditional rendering based on missing fields for now
-        // We'll add those back in once the model is updated
-        ListTile(
-          leading: const Icon(Icons.calendar_today),
-          title: const Text('Added Date'),
-          subtitle: Text(item.createdAt?.toString().split(' ')[0] ?? 'Not specified'),
+      ),
+    );
+  }
+
+  /// Price row
+  Widget _buildPriceRow(
+    BuildContext context,
+    String label,
+    double price,
+    IconData icon,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          Text(
+            '\$${price.toStringAsFixed(2)}',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Profit/Loss row
+  Widget _buildProfitRow(BuildContext context, Item item) {
+    final profit = item.soldPrice! - item.purchasePrice!;
+    final isProfit = profit >= 0;
+    final color = isProfit ? Colors.green : Colors.red;
+    
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isProfit ? Icons.trending_up : Icons.trending_down,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isProfit ? 'Profit' : 'Loss',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+          Text(
+            '${isProfit ? '+' : '-'}\$${profit.abs().toStringAsFixed(2)}',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Additional details section (expandable)
+  Widget _buildDetailsSection(BuildContext context, WidgetRef ref, Item item) {
+    return ExpansionTile(
+      leading: const Icon(Icons.info_outline),
+      title: const Text('Additional Details'),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              // Sales channel
+              if (item.salesChannel != null)
+                _buildDetailRow(
+                  context,
+                  'Sales Channel',
+                  item.salesChannel!,
+                  Icons.storefront,
+                ),
+              
+              // Pallet link
+              _buildDetailRow(
+                context,
+                'From Pallet',
+                'View Pallet Details',
+                Icons.category,
+                onTap: () {
+                  context.goNamed(
+                    RouterNotifier.palletDetail,
+                    pathParameters: {'pid': item.palletId},
+                  );
+                },
+              ),
+              
+              // Created date
+              if (item.createdAt != null)
+                _buildDetailRow(
+                  context,
+                  'Added',
+                  _formatDate(item.createdAt!),
+                  Icons.calendar_today,
+                ),
+              
+              // Listing date
+              if (item.listingDate != null)
+                _buildDetailRow(
+                  context,
+                  'Listed',
+                  _formatDate(item.listingDate!),
+                  Icons.schedule,
+                ),
+              
+              // Sold date
+              if (item.soldDate != null)
+                _buildDetailRow(
+                  context,
+                  'Sold',
+                  _formatDate(item.soldDate!),
+                  Icons.check_circle,
+                ),
+            ],
+          ),
         ),
       ],
     );
   }
-  
+
+  /// Detail row
+  Widget _buildDetailRow(
+    BuildContext context,
+    String label,
+    String value,
+    IconData icon, {
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: Colors.grey[600]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: onTap != null ? Theme.of(context).primaryColor : null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onTap != null)
+              Icon(Icons.chevron_right, color: Colors.grey[400]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Floating action button
+  Widget _buildFloatingActions(BuildContext context, WidgetRef ref, Item item) {
+    return FloatingActionButton.extended(
+      onPressed: () => _showPhotoManagementDialog(context, ref, item.id),
+      icon: const Icon(Icons.add_a_photo),
+      label: const Text('Manage Photos'),
+    );
+  }
+
   // Helper methods
+  bool _shouldShowPricing(Item item) {
+    return item.purchasePrice != null || 
+           item.listingPrice != null || 
+           item.soldPrice != null;
+  }
+
   Color _getStatusColor(String status) {
     switch (status) {
       case 'in_stock':
@@ -537,60 +770,73 @@ class ItemDetailScreen extends ConsumerWidget {
         return Colors.grey;
     }
   }
-  
-  String _formatStatus(String status) {
-    switch (status) {
-      case 'in_stock':
-        return 'In Stock';
-      case 'listed':
-        return 'Listed for Sale';
-      case 'sold':
-        return 'Sold';
-      default:
-        return status.split('_').map((word) => word.substring(0, 1).toUpperCase() + word.substring(1)).join(' ');
+
+  Color _getConditionColor(ItemCondition condition) {
+    switch (condition) {
+      case ItemCondition.newItem:
+        return Colors.green;
+      case ItemCondition.openBox:
+        return Colors.lightGreen;
+      case ItemCondition.usedGood:
+        return Colors.blue;
+      case ItemCondition.usedFair:
+        return Colors.orange;
+      case ItemCondition.damaged:
+        return Colors.red;
+      case ItemCondition.forParts:
+        return Colors.grey;
     }
   }
-  
-  double _getSuggestedPrice(Item item) {
-    // Simple logic to suggest a price: cost + 50% markup
-    if (item.purchasePrice != null) {
-      return item.purchasePrice! * 1.5;
-    }
-    return 0.0;
-  }
-  
-  IconData _getProfitIcon(Item item) {
-    if (item.purchasePrice == null || item.soldPrice == null) return Icons.info_outline;
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
     
-    double profit = item.soldPrice! - item.purchasePrice!;
-    if (profit > 0) {
-      return Icons.trending_up;
-    } else if (profit < 0) {
-      return Icons.trending_down;
+    if (difference.inDays == 0) {
+      return 'Today';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
     } else {
-      return Icons.drag_handle;
+      return '${date.month}/${date.day}/${date.year}';
     }
   }
-  
-  Color _getProfitColor(Item item) {
-    if (item.purchasePrice == null || item.soldPrice == null) return Colors.grey;
+
+  /// Show the photo management dialog
+  Future<void> _showPhotoManagementDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String itemId,
+  ) async {
+    final photosResult = await ref.read(itemPhotoRepositoryProvider).getItemPhotos(itemId);
     
-    double profit = item.soldPrice! - item.purchasePrice!;
-    if (profit > 0) {
-      return Colors.green;
-    } else if (profit < 0) {
-      return Colors.red;
-    } else {
-      return Colors.grey;
+    if (photosResult.isFailure) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading photos: ${photosResult.error?.message}')),
+        );
+      }
+      return;
+    }
+
+    final currentPhotos = photosResult.value ?? [];
+
+    if (context.mounted) {
+      await showDialog(
+        context: context,
+        builder: (context) => PhotoManagementDialog(
+          itemId: itemId,
+          existingPhotos: currentPhotos,
+          onSave: () {
+            ref.invalidate(itemDetailProvider(itemId));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Photos updated successfully!')),
+            );
+          },
+          onCancel: () => Navigator.of(context).pop(),
+        ),
+      );
     }
   }
-  
-  String _calculateProfitLoss(Item item) {
-    if (item.purchasePrice == null || item.soldPrice == null) return 'Unknown';
-    
-    double profit = item.soldPrice! - item.purchasePrice!;
-    return profit >= 0 
-        ? '+\$${profit.toStringAsFixed(2)}' 
-        : '-\$${profit.abs().toStringAsFixed(2)}';
-  }
-} 
+}

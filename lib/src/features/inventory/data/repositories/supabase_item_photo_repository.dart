@@ -140,4 +140,35 @@ class SupabaseItemPhotoRepository implements ItemPhotoRepository {
       return Result.failure(UnexpectedException('Unexpected error deleting item photos', e));
     }
   }
+
+  @override
+  Future<Result<void>> setPrimaryPhoto({
+    required String itemId,
+    required String photoId,
+  }) async {
+    try {
+      final userId = _getCurrentUserId();
+      
+      // First, unset all primary photos for this item
+      await _supabaseClient
+          .from(_tableName)
+          .update({'is_primary': false})
+          .eq('item_id', itemId)
+          .eq('user_id', userId);
+
+      // Then set the specified photo as primary
+      await _supabaseClient
+          .from(_tableName)
+          .update({'is_primary': true})
+          .eq('id', photoId)
+          .eq('item_id', itemId)
+          .eq('user_id', userId);
+
+      return const Result.success(null);
+    } on PostgrestException catch (e) {
+      return Result.failure(DatabaseException.updateFailed('item photo primary status', e.message));
+    } catch (e) {
+      return Result.failure(UnexpectedException('Unexpected error setting primary photo', e));
+    }
+  }
 } 
