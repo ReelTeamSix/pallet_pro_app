@@ -25,6 +25,7 @@ import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
 import 'package:pallet_pro_app/src/features/inventory/domain/entities/simple_item.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/add_edit_pallet_screen.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/screens/add_edit_item_screen.dart';
+import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 // TODO: Import Pallet and Item models if needed for display
 
 // Placeholder ShimmerLoader - Replace with your actual implementation or package
@@ -93,7 +94,10 @@ class ShimmerLoader extends StatelessWidget {
 }
 
 class InventoryListScreen extends ConsumerStatefulWidget {
-  const InventoryListScreen({super.key});
+  /// Optional filter to apply on screen load (e.g., "stale" for stale items)
+  final String? initialFilter;
+  
+  const InventoryListScreen({super.key, this.initialFilter});
 
   @override
   ConsumerState<InventoryListScreen> createState() => _InventoryListScreenState();
@@ -121,12 +125,61 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
       });
     });
     
+    // Apply initial filter if provided (e.g., stale items)
+    if (widget.initialFilter == 'stale') {
+      // Switch to items tab and apply stale filter
+      _tabController.index = 1;
+      // The actual filtering will be done in the repository/provider
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showStaleItemsFilter();
+      });
+    }
+    
     // Refresh providers when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       print('Force refreshing providers on screen init');
       ref.read(itemListProvider.notifier).refreshItems();
       ref.read(palletListProvider.notifier).refreshPallets();
     });
+  }
+  
+  /// Show only stale items - called when navigating from stale inventory alert
+  void _showStaleItemsFilter() {
+    // Get stale threshold from settings
+    final settings = ref.read(userSettingsControllerProvider);
+    final staleThresholdDays = settings.when(
+      data: (s) => s?.staleThresholdDays ?? 14,
+      loading: () => 14,
+      error: (_, __) => 14,
+    );
+    
+    // Calculate the date threshold
+    final thresholdDate = DateTime.now().subtract(Duration(days: staleThresholdDays));
+    
+    // Apply filter to show only items created before threshold that aren't sold
+    _itemStatusFilter = 'stale_custom';
+    ref.read(itemListProvider.notifier).setFilters(
+      statusFilter: null, // We'll filter by date instead
+    );
+    
+    // Show a snackbar to inform the user
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Showing items stale for $staleThresholdDays+ days'),
+          action: SnackBarAction(
+            label: 'Clear',
+            onPressed: () {
+              setState(() {
+                _itemStatusFilter = null;
+              });
+              ref.read(itemListProvider.notifier).clearFilters();
+            },
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
   
   @override
@@ -571,6 +624,7 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> with 
     
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false, // Remove back arrow for consistent navigation
         title: _isSearching
             ? StyledTextField(
                 controller: _searchController,
@@ -898,9 +952,25 @@ class _ItemsTab extends ConsumerWidget {
             (item.name?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false) ||
             (item.description?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false);
           
-          // Status filter
-          final matchesStatus = statusFilter == null || 
-            item.status.toString().split('.').last == statusFilter;
+          // Status filter - special handling for "stale_custom"
+          bool matchesStatus = true;
+          if (statusFilter == 'stale_custom') {
+            // Show only items that are NOT sold and were created more than threshold days ago
+            final isNotSold = item.status != ItemStatus.sold;
+            final createdAt = item.createdAt;
+            // Get stale threshold
+            final staleThresholdDays = ref.read(userSettingsControllerProvider).when(
+              data: (s) => s?.staleThresholdDays ?? 14,
+              loading: () => 14,
+              error: (_, __) => 14,
+            );
+            final thresholdDate = DateTime.now().subtract(Duration(days: staleThresholdDays));
+            final isStale = createdAt != null && createdAt.isBefore(thresholdDate);
+            
+            matchesStatus = isNotSold && isStale;
+          } else if (statusFilter != null) {
+            matchesStatus = item.status.toString().split('.').last == statusFilter;
+          }
           
           return matchesSearch && matchesStatus;
         }).toList();

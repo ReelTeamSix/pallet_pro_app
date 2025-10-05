@@ -47,6 +47,51 @@ lib/
 - **Notifier** pattern for state handling
 - **Service** pattern for business logic
 
+## Recent Session Updates (October 2025) - Dashboard & Inventory UI Polish
+
+### Dashboard & Stale Inventory Improvements
+**Completed**: October 5, 2025
+
+1. **Stale Inventory Alert System**
+   - Fixed database query to use `created_at` instead of non-existent `aquired_date`
+   - Changed filter from `for_sale` only to all unsold items (in_stock, listed, for_sale)
+   - Moved alert to top of dashboard for maximum visibility
+   - Enhanced visual prominence with larger icons, bolder borders, elevation
+   - Implemented one-tap navigation to filtered inventory view
+   - Added reseller-specific language ("Death Pile Alert")
+
+2. **Stale Items Filtering**
+   - Added `initialFilter` parameter to `InventoryListScreen`
+   - Implemented query parameter support in router (`/home/inventory?filter=stale`)
+   - Created custom filter logic for stale items (respects user's threshold setting)
+   - Auto-switches to Items tab when navigating from stale alert
+   - Shows informative snackbar with clear action
+   - Filters by creation date and non-sold status
+
+3. **UI/UX Polish**
+   - Fixed duplicate warning icons in alerts (removed emoji, kept Material Icon)
+   - Improved light mode contrast (increased card border opacity 0.1 → 0.2)
+   - Fixed dark mode contrast on Analytics page (theme-aware colors instead of hardcoded)
+   - Improved date selector contrast in Reports screen (bold borders, lighter backgrounds)
+   - Centered StatCard content for professional dashboard aesthetic
+   - Removed back arrow from inventory screen for consistent bottom nav UX
+
+4. **Design System Integration**
+   - All changes use theme-aware colors and design tokens
+   - Consistent spacing, sizing, and elevation throughout
+   - Proper text hierarchy with theme typography
+   - Added card borders to all cards for better separation
+
+**Files Modified**:
+- `dashboard_screen.dart` - Alert positioning, visibility, navigation
+- `reports_screen.dart` - Dark mode contrast, date selector styling
+- `inventory_list_screen.dart` - Filter parameter, stale logic, no back arrow
+- `supabase_item_repository.dart` - Fixed query field and logic
+- `design_system.dart` - Centered StatCard content
+- `app_router.dart` - Query parameter support
+
+**Documentation**: `docs/DASHBOARD_UI_FIXES_COMPLETE.md`
+
 ## Recent Enhancements - KISS/DRY Improvements
 
 ### 1. Centralized Status Management
@@ -212,4 +257,83 @@ These changes support a more accurate representation of the pallet-based invento
   * Better alignment between database schema and application models
   * Improved error handling and type safety
 
-These updates strengthen the application's foundation, making it more reliable, maintainable, and aligned with the actual business workflow of pallet-based inventory management. 
+These updates strengthen the application's foundation, making it more reliable, maintainable, and aligned with the actual business workflow of pallet-based inventory management.
+
+## Recent Session Updates (October 2025)
+
+### UI/UX Redesign & Polish
+* **Dashboard Redesign**: Transformed into a command center with:
+  * User personalization (greeting by name with time-based messages)
+  * Financial overview card showing net profit and margin
+  * Stale inventory alerts with actionable links
+  * Quick action cards for common tasks
+  * Recent pallets section
+  * Modern card-based layouts
+
+* **Reports/Analytics Screen**: Comprehensive analytics dashboard with:
+  * Time period selector (7/30/90 days, all-time)
+  * Financial metrics grid (inventory value, revenue, profit, costs)
+  * Quick stats overview (items by status)
+  * Top performers section (best selling, highest profit, fastest selling, best margin)
+  * Fun facts section with interesting business insights
+  * Pull-to-refresh functionality
+
+* **Overflow Fixes**: Eliminated all UI overflow issues by:
+  * Optimizing card padding and sizing
+  * Adding proper text constraints (maxLines, overflow handling)
+  * Using responsive sizing with FittedBox
+  * Implementing mainAxisSize.min on columns
+
+### Design System Enhancement
+* **Centralized Design Tokens** (`AppDesignTokens`):
+  * Icon sizes: `iconXs` (14px) → `iconXxl` (48px)
+  * Font sizes: `fontXs` (11px) → `fontXxl` (24px)
+  * Container sizes: `containerS` (48px) → `containerL` (64px)
+  * Opacity values: `opacityLight` (0.1), `opacityMedium` (0.3), `opacityHeavy` (0.7)
+
+* **DRY Refactoring**: Eliminated 33 hardcoded values across Dashboard and Reports screens
+* **Professional Polish**: Consistent spacing, visual hierarchy, and professional appearance
+* **Zero Hardcoded Values**: All UI sizing/spacing/colors use design tokens
+
+### Analytics Implementation
+* **Data Models**:
+  * `AnalyticsData` - Comprehensive analytics model
+  * `BestItem`, `TimeSeriesData`, `ChannelPerformance`, `PalletSourcePerformance`
+  * `TimePeriod` enum (7/30/90 days, all-time, custom)
+  * `TimeResolution` enum (day, week, month, year)
+
+* **Repository Methods** (in `ItemRepository`):
+  * `getFinancialSummary()` - Aggregate financial metrics
+  * `getTimeSeries()` - Revenue/cost/profit over time
+  * `getPalletSourcePerformance()` - Metrics by pallet source
+  * `getSalesChannelPerformance()` - Metrics by sales channel
+  * `getBestPerformer()` - Find best item by metric
+  * `getBestDay()` - Find most profitable day
+
+* **Providers**:
+  * `analyticsProvider` - Main analytics data with time filtering
+  * `timeSeriesProvider` - Time series chart data
+  * `palletSourcePerformanceProvider` - Pallet source metrics
+
+### Photo Management Enhancement
+* **Interactive Photo Management**:
+  * `PhotoManagementDialog` - Dedicated dialog for managing item photos
+  * `PhotoManagementService` - Centralized photo logic (upload, delete, compress)
+  * `ImagePreviewDialog` - Full-screen preview with actions
+  * `ImagePickerGrid` - Improved photo selection with 3-photo limit
+  * Set primary photo functionality
+  * Visual feedback for photo limits
+
+* **Image Workflow**:
+  * Client-side compression before upload
+  * Bulk photo capture support
+  * Interactive photo replacement
+  * Photo restoration (undo delete)
+  * Display previously added photos in detail/edit screens
+
+### Code Quality Improvements
+* **Zero Hardcoded Values**: All UI uses design system tokens
+* **Consistent Error Handling**: Standardized Result type usage
+* **Type Safety**: Proper enum usage throughout
+* **DRY Principles**: No code duplication
+* **Maintainable**: Clear separation of concerns 

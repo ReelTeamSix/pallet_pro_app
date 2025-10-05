@@ -235,13 +235,16 @@ class SupabaseItemRepository implements ItemRepository {
       final userId = _getCurrentUserId();
       final thresholdDate = DateTime.now().subtract(staleThreshold);
 
+      // Find items that are NOT sold and have been sitting for too long
+      // This includes: in_stock, listed, and for_sale
+      // Uses created_at since acquired_date was removed from schema
       final response = await _supabaseClient
           .from(_tableName)
           .select()
           .eq('user_id', userId)
-          .eq('status', _statusToDbString(ItemStatus.forSale))
-          .lt('aquired_date', thresholdDate.toIso8601String())
-          .order('aquired_date', ascending: true);
+          .neq('status', _statusToDbString(ItemStatus.sold)) // Exclude sold items
+          .lt('created_at', thresholdDate.toIso8601String())
+          .order('created_at', ascending: true);
 
       final items = response.map((json) => Item.fromJson(_fixItemFieldNames(json))).toList();
       return Result.success(items);
@@ -566,10 +569,7 @@ class SupabaseItemRepository implements ItemRepository {
         query = query.lte('sold_date', endDate.toIso8601String());
       }
       
-      query = query.order('sold_date', ascending: true);
-      
-      final response = await query;
-      final items = response as List<dynamic>;
+      final items = await query.order('sold_date', ascending: true) as List<dynamic>;
       
       // Group by date resolution client-side
       final Map<String, Map<String, dynamic>> grouped = {};

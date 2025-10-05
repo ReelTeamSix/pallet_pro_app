@@ -143,17 +143,18 @@ class _PalletListScreenState extends ConsumerState<PalletListScreen>
 
   /// App bar with search
   Widget _buildAppBar(BuildContext context) {
+    final onPrimary = Theme.of(context).colorScheme.onPrimary;
+    
     return SliverAppBar(
-      floating: true,
-      snap: true,
+      pinned: true,
       title: TextField(
         decoration: InputDecoration(
           hintText: 'Search pallets...',
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+          hintStyle: TextStyle(color: onPrimary.withOpacity(0.7)),
           border: InputBorder.none,
-          prefixIcon: const Icon(Icons.search, color: Colors.white),
+          prefixIcon: Icon(Icons.search, color: onPrimary),
         ),
-        style: const TextStyle(color: Colors.white),
+        style: TextStyle(color: onPrimary),
         onChanged: (value) {
           setState(() {
             _searchQuery = value;

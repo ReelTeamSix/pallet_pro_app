@@ -25,6 +25,7 @@ import 'package:pallet_pro_app/src/features/onboarding/presentation/screens/onbo
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/screens/settings_screen.dart';
 import 'package:pallet_pro_app/src/features/settings/data/models/user_settings.dart';
+import 'package:pallet_pro_app/src/features/analytics/presentation/screens/reports_screen.dart';
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide UserSettings;
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
@@ -106,6 +107,7 @@ class RouterNotifier extends Notifier<void> implements Listenable {
   static const biometricAuth = '/biometric-auth';
   static const home = '/home';
   static const settings = '/settings';
+  static const reports = '/reports';
   // Inventory Routes
   static const inventoryList = '/inventory';
   static const palletDetail = '/inventory/pallet/:pid'; // pid = pallet id
@@ -832,11 +834,14 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                                 GoRoute(
                                   path: inventoryList, // Relative path: /home/inventory
                                   name: inventoryList, // Use the constant name
-                                  pageBuilder: (context, state) => _buildPageWithTransition(
-                                    context: context,
-                                    state: state,
-                                    child: const InventoryListScreen(),
-                                  ),
+                                  pageBuilder: (context, state) {
+                                    final filter = state.uri.queryParameters['filter'];
+                                    return _buildPageWithTransition(
+                                      context: context,
+                                      state: state,
+                                      child: InventoryListScreen(initialFilter: filter),
+                                    );
+                                  },
                                   routes: [
                                     GoRoute(
                                       path: palletDetail, // Relative path: /home/inventory/pallet/:pid
@@ -990,16 +995,13 @@ class RouterNotifier extends Notifier<void> implements Listenable {
                          ),
                      ],
                  ),
-                  // Branch 2: Placeholder for maybe Analytics/Reports later
+                  // Branch 2: Analytics/Reports
                  StatefulShellBranch(
                      routes: [
                          GoRoute(
-                           path: '/reports', // Example placeholder
+                           path: '/reports',
                            name: 'reports',
-                           builder: (context, state) => Scaffold(
-                             appBar: AppBar(title: const Text('Reports')),
-                             body: Center(child: Text('Reports Screen (Placeholder)')),
-                           ),
+                           builder: (context, state) => const ReportsScreen(),
                          ),
                       ],
                  ),

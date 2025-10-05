@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:pallet_pro_app/src/routing/app_router.dart';
 import 'package:pallet_pro_app/src/global/widgets/design_system.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/providers/pallet_list_provider.dart';
 import 'package:pallet_pro_app/src/features/inventory/presentation/providers/item_list_provider.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/pallet.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
+import 'package:pallet_pro_app/src/features/inventory/data/providers/inventory_repository_providers.dart';
+import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
+import 'package:pallet_pro_app/src/features/auth/presentation/providers/auth_controller.dart';
 
 /// Dashboard - Command Center for Pallet Resale Business
 /// 
@@ -18,91 +22,54 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          // App bar with gradient
-          _buildAppBar(context),
-          
-          // Main content
-          SliverToBoxAdapter(
-            child: MaxWidthContainer(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: MaxWidthContainer(
+            child: ResponsivePadding(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ResponsivePadding(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Welcome message
-                        _buildWelcomeSection(context),
-                        
-                        const SizedBox(height: AppDesignTokens.spacingL),
-                        
-                        // Quick actions
-                        _buildQuickActions(context),
-                        
-                        const SizedBox(height: AppDesignTokens.spacingL),
-                        
-                        // Stats overview
-                        _buildStatsOverview(context, ref),
-                        
-                        const SizedBox(height: AppDesignTokens.spacingL),
-                        
-                        // Recent activity
-                        _buildRecentActivity(context, ref),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: AppDesignTokens.spacingM),
+                  
+                  // Welcome message
+                  _buildWelcomeSection(context, ref),
+                  
+                  const SizedBox(height: AppDesignTokens.spacingL),
+                  
+                  // Stale Inventory Alert (if any) - Critical!
+                  _buildStaleInventoryAlert(context, ref),
+                  
+                  // Financial Overview Card
+                  _buildFinancialOverview(context, ref),
+                  
+                  const SizedBox(height: AppDesignTokens.spacingL),
+                  
+                  // Quick actions
+                  _buildQuickActions(context),
+                  
+                  const SizedBox(height: AppDesignTokens.spacingL),
+                  
+                  // Stats overview
+                  _buildStatsOverview(context, ref),
+                  
+                  const SizedBox(height: AppDesignTokens.spacingL),
+                  
+                  // Recent activity
+                  _buildRecentActivity(context, ref),
+                  
+                  const SizedBox(height: AppDesignTokens.spacingXxl),
                 ],
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  /// Custom app bar with gradient
-  Widget _buildAppBar(BuildContext context) {
-    return SliverAppBar(
-      expandedHeight: 120,
-      floating: false,
-      pinned: true,
-      flexibleSpace: FlexibleSpaceBar(
-        title: const Text(
-          'Pallet Pro',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 24,
-          ),
-        ),
-        background: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Theme.of(context).primaryColor,
-                Theme.of(context).primaryColor.withOpacity(0.7),
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.settings),
-          onPressed: () {
-            // Navigate to settings
-            context.goNamed(RouterNotifier.settings);
-          },
-        ),
-      ],
-    );
-  }
-
-  /// Welcome section
-  Widget _buildWelcomeSection(BuildContext context) {
+  /// Welcome section with user personalization
+  Widget _buildWelcomeSection(BuildContext context, WidgetRef ref) {
+    final authAsync = ref.watch(authControllerProvider);
     final hour = DateTime.now().hour;
     final greeting = hour < 12
         ? 'Good Morning'
@@ -110,23 +77,73 @@ class DashboardScreen extends ConsumerWidget {
             ? 'Good Afternoon'
             : 'Good Evening';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          greeting,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-        ),
-        const SizedBox(height: AppDesignTokens.spacingXs),
-        Text(
-          'Ready to manage your pallet inventory?',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppDesignTokens.neutral600,
-              ),
-        ),
-      ],
+    return authAsync.when(
+      data: (user) {
+        String displayName = '';
+        if (user != null && user.email != null) {
+          // Extract name from email (before @)
+          displayName = user.email!.split('@').first;
+          // Capitalize first letter
+          if (displayName.isNotEmpty) {
+            displayName = displayName[0].toUpperCase() + displayName.substring(1);
+          }
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              displayName.isNotEmpty ? '$greeting, $displayName' : greeting,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: AppDesignTokens.spacingS),
+            Text(
+              'Here\'s your business overview',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: AppDesignTokens.neutral600,
+                  ),
+            ),
+          ],
+        );
+      },
+      loading: () => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            greeting,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: AppDesignTokens.spacingS),
+          Text(
+            'Here\'s your business overview',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppDesignTokens.neutral600,
+                ),
+          ),
+        ],
+      ),
+      error: (_, __) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            greeting,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: AppDesignTokens.spacingS),
+          Text(
+            'Here\'s your business overview',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppDesignTokens.neutral600,
+                ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -165,7 +182,7 @@ class DashboardScreen extends ConsumerWidget {
               title: 'List Items',
               subtitle: 'For sale',
               color: AppDesignTokens.statusListed,
-              onTap: () => context.goNamed(RouterNotifier.inventoryList),
+              onTap: () => context.go(RouterNotifier.inventoryList),
             ),
             _buildQuickActionCard(
               context,
@@ -173,12 +190,7 @@ class DashboardScreen extends ConsumerWidget {
               title: 'Analytics',
               subtitle: 'View reports',
               color: AppDesignTokens.success,
-              onTap: () {
-                // TODO: Navigate to analytics when implemented
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Analytics coming soon!')),
-                );
-              },
+              onTap: () => context.go(RouterNotifier.reports),
             ),
           ],
         ),
@@ -197,38 +209,51 @@ class DashboardScreen extends ConsumerWidget {
   }) {
     return Card(
       elevation: AppDesignTokens.elevation2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppDesignTokens.radiusM),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppDesignTokens.radiusM),
         child: Padding(
-          padding: const EdgeInsets.all(AppDesignTokens.spacingM),
+          padding: const EdgeInsets.all(AppDesignTokens.spacingS),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: AppDesignTokens.containerS,
+                height: AppDesignTokens.containerS,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: color, size: 28),
+                child: Icon(icon, color: color, size: AppDesignTokens.iconM),
               ),
               const SizedBox(height: AppDesignTokens.spacingS),
               Text(
                 title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: AppDesignTokens.spacingXs),
               Text(
                 subtitle,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: AppDesignTokens.neutral600,
+                      fontSize: AppDesignTokens.fontXs,
                     ),
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -273,37 +298,42 @@ class DashboardScreen extends ConsumerWidget {
                       label: 'Active Pallets',
                       value: '$inProgress',
                       color: AppDesignTokens.statusInProgress,
-                      onTap: () => context.go(RouterNotifier.inventoryList),
+                      onTap: () => context.go('/home/inventory'),
                     ),
                     StatCard(
                       icon: Icons.check_circle,
                       label: 'Processed',
                       value: '$processed',
                       color: AppDesignTokens.statusProcessed,
+                      onTap: () => context.go('/home/inventory'),
                     ),
                     StatCard(
                       icon: Icons.warehouse,
                       label: 'In Stock',
                       value: '$inStock',
                       color: AppDesignTokens.statusInStock,
+                      onTap: () => context.go('/home/inventory'),
                     ),
                     StatCard(
                       icon: Icons.storefront,
                       label: 'Listed',
                       value: '$listed',
                       color: AppDesignTokens.statusListed,
+                      onTap: () => context.go('/home/inventory'),
                     ),
                     StatCard(
                       icon: Icons.monetization_on,
                       label: 'Sold',
                       value: '$sold',
                       color: AppDesignTokens.statusSold,
+                      onTap: () => context.go('/home/inventory'),
                     ),
                     StatCard(
                       icon: Icons.attach_money,
                       label: 'Total Items',
                       value: '${items.length}',
                       color: AppDesignTokens.info,
+                      onTap: () => context.go('/home/inventory'),
                     ),
                   ],
                 );
@@ -326,7 +356,7 @@ class DashboardScreen extends ConsumerWidget {
           title: 'Recent Pallets',
           subtitle: 'Latest additions',
           action: TextButton(
-            onPressed: () => context.go(RouterNotifier.inventoryList),
+            onPressed: () => context.go('/home/inventory'),
             child: const Text('View All'),
           ),
         ),
@@ -383,6 +413,13 @@ class DashboardScreen extends ConsumerWidget {
 
     return Card(
       elevation: AppDesignTokens.elevation1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppDesignTokens.radiusM),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
       child: InkWell(
         onTap: () {
           context.goNamed(
@@ -397,13 +434,13 @@ class DashboardScreen extends ConsumerWidget {
             children: [
               // Icon with status color
               Container(
-                width: 48,
-                height: 48,
+                width: AppDesignTokens.containerS,
+                height: AppDesignTokens.containerS,
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
+                  color: statusColor.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(AppDesignTokens.radiusS),
                 ),
-                child: Icon(Icons.inventory_2, color: statusColor, size: 24),
+                child: Icon(Icons.inventory_2, color: statusColor, size: AppDesignTokens.iconM),
               ),
               const SizedBox(width: AppDesignTokens.spacingM),
               
@@ -472,6 +509,392 @@ class DashboardScreen extends ConsumerWidget {
       case PalletStatus.archived:
         return 'Archived';
     }
+  }
+
+  /// Financial Overview Card with Real Analytics
+  Widget _buildFinancialOverview(BuildContext context, WidgetRef ref) {
+    final repository = ref.read(itemRepositoryProvider);
+    
+    return FutureBuilder(
+      future: repository.getFinancialSummary(
+        startDate: DateTime.now().subtract(const Duration(days: 30)),
+        endDate: DateTime.now(),
+      ),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildFinancialLoadingCard(context);
+        }
+        
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isFailure) {
+          return _buildFinancialEmptyCard(context);
+        }
+        
+        final result = snapshot.data!;
+        final data = result.value as Map<String, dynamic>;
+        
+        return _buildFinancialCard(context, data);
+      },
+    );
+  }
+
+  Widget _buildFinancialCard(BuildContext context, Map<String, dynamic> data) {
+    final netProfit = (data['total_profit'] as num?)?.toDouble() ?? 0.0;
+    final actualRevenue = (data['actual_revenue'] as num?)?.toDouble() ?? 0.0;
+    final inventoryValue = (data['inventory_value'] as num?)?.toDouble() ?? 0.0;
+    final avgMargin = (data['avg_margin'] as num?)?.toDouble() ?? 0.0;
+    
+    final isProfitable = netProfit >= 0;
+    
+    return Card(
+      elevation: AppDesignTokens.elevation2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppDesignTokens.radiusL),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppDesignTokens.radiusL),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isProfitable
+                ? [
+                    AppDesignTokens.success.withOpacity(0.15),
+                    AppDesignTokens.success.withOpacity(0.25),
+                  ]
+                : [
+                    AppDesignTokens.warning.withOpacity(0.15),
+                    AppDesignTokens.warning.withOpacity(0.25),
+                  ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppDesignTokens.spacingL),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Icon(
+                    isProfitable ? Icons.trending_up : Icons.show_chart,
+                    color: isProfitable ? AppDesignTokens.success : AppDesignTokens.warning,
+                    size: AppDesignTokens.iconL,
+                  ),
+                  const SizedBox(width: AppDesignTokens.spacingS),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Financial Overview',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Last 30 Days',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.analytics),
+                    onPressed: () => context.go(RouterNotifier.reports),
+                    tooltip: 'View Full Analytics',
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: AppDesignTokens.spacingL),
+              
+              // Net Profit - Large Display
+              Container(
+                padding: const EdgeInsets.all(AppDesignTokens.spacingM),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppDesignTokens.radiusM),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Net Profit',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                    ),
+                    const SizedBox(height: AppDesignTokens.spacingXs),
+                    Text(
+                      '\$${netProfit.toStringAsFixed(2)}',
+                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: isProfitable ? AppDesignTokens.success : AppDesignTokens.warning,
+                      ),
+                    ),
+                    if (avgMargin > 0) ...[
+                      const SizedBox(height: AppDesignTokens.spacingXs),
+                      Text(
+                        '${avgMargin.toStringAsFixed(1)}% margin',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: AppDesignTokens.spacingM),
+              
+              // Financial Breakdown
+              _buildFinancialRow(
+                context,
+                'Revenue',
+                actualRevenue,
+                Icons.attach_money,
+                AppDesignTokens.success,
+              ),
+              const SizedBox(height: AppDesignTokens.spacingS),
+              _buildFinancialRow(
+                context,
+                'Inventory Value',
+                inventoryValue,
+                Icons.inventory_2,
+                AppDesignTokens.info,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFinancialRow(
+    BuildContext context,
+    String label,
+    double amount,
+    IconData icon,
+    Color color,
+  ) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(AppDesignTokens.radiusS),
+          ),
+          child: Icon(icon, size: 20, color: color),
+        ),
+        const SizedBox(width: AppDesignTokens.spacingM),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        Text(
+          '\$${amount.toStringAsFixed(2)}',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFinancialLoadingCard(BuildContext context) {
+    return Card(
+      elevation: AppDesignTokens.elevation2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppDesignTokens.radiusL),
+      ),
+      child: Container(
+        height: 280,
+        padding: const EdgeInsets.all(AppDesignTokens.spacingL),
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFinancialEmptyCard(BuildContext context) {
+    return Card(
+      elevation: AppDesignTokens.elevation2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppDesignTokens.radiusL),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(AppDesignTokens.spacingL),
+        child: Column(
+          children: [
+            Icon(
+              Icons.insights, 
+              size: 48, 
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
+            ),
+            const SizedBox(height: AppDesignTokens.spacingM),
+            Text(
+              'No Financial Data Yet',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: AppDesignTokens.spacingS),
+            Text(
+              'Add items and mark them as sold to see financial insights',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Stale Inventory Alert
+  Widget _buildStaleInventoryAlert(BuildContext context, WidgetRef ref) {
+    final settingsAsync = ref.watch(userSettingsControllerProvider);
+    final repository = ref.read(itemRepositoryProvider);
+    
+    return settingsAsync.when(
+      data: (settings) {
+        if (settings == null) {
+          return const SizedBox.shrink();
+        }
+        final threshold = Duration(days: settings.staleThresholdDays);
+        
+        return FutureBuilder(
+          future: repository.getStaleItems(staleThreshold: threshold),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox.shrink();
+            }
+            
+            if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isFailure) {
+              return const SizedBox.shrink();
+            }
+            
+            final staleItems = snapshot.data!.value as List;
+            
+            if (staleItems.isEmpty) {
+              return const SizedBox.shrink();
+            }
+            
+            // Use theme-aware colors for better light/dark mode support
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final backgroundColor = isDark 
+                ? AppDesignTokens.warning.withOpacity(0.15)
+                : const Color(0xFFFFF4E6); // Light warm cream color
+            final borderColor = isDark
+                ? AppDesignTokens.warning
+                : const Color(0xFFE65100); // Darker orange for better contrast
+            final textColor = isDark
+                ? AppDesignTokens.warning
+                : const Color(0xFFE65100); // Darker orange for light mode
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: AppDesignTokens.spacingL),
+              child: Card(
+                elevation: AppDesignTokens.elevation3,
+                color: backgroundColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppDesignTokens.radiusL),
+                  side: BorderSide(
+                    color: borderColor,
+                    width: 2,
+                  ),
+                ),
+              child: InkWell(
+                onTap: () {
+                  // Navigate to inventory filtered by stale items only
+                  context.go('/home/inventory?filter=stale');
+                },
+                  borderRadius: BorderRadius.circular(AppDesignTokens.radiusL),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppDesignTokens.spacingL),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppDesignTokens.spacingM),
+                          decoration: BoxDecoration(
+                            color: isDark 
+                                ? AppDesignTokens.warning.withOpacity(0.2)
+                                : const Color(0xFFFFE0B2), // Light orange tint
+                            borderRadius: BorderRadius.circular(AppDesignTokens.radiusM),
+                          ),
+                          child: Icon(
+                            Icons.inventory_2,
+                            color: textColor,
+                            size: AppDesignTokens.iconXl,
+                          ),
+                        ),
+                        const SizedBox(width: AppDesignTokens.spacingM),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    color: textColor,
+                                    size: AppDesignTokens.iconM,
+                                  ),
+                                  const SizedBox(width: AppDesignTokens.spacingXs),
+                                  Text(
+                                    'Death Pile Alert',
+                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: AppDesignTokens.spacingS),
+                              Text(
+                                '${staleItems.length} items stagnant for ${settings.staleThresholdDays}+ days',
+                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: AppDesignTokens.spacingXs),
+                              Text(
+                                'Review pricing or relisting strategy now →',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: textColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          color: textColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
   }
 }
 

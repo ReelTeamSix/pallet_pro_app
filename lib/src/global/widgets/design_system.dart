@@ -60,6 +60,32 @@ class AppDesignTokens {
   static const Color neutral700 = Color(0xFF616161);
   static const Color neutral800 = Color(0xFF424242);
   static const Color neutral900 = Color(0xFF212121);
+
+  // Icon sizes
+  static const double iconXs = 14.0;
+  static const double iconS = 18.0;
+  static const double iconM = 24.0;
+  static const double iconL = 28.0;
+  static const double iconXl = 32.0;
+  static const double iconXxl = 48.0;
+
+  // Font sizes (complementing theme)
+  static const double fontXs = 11.0;
+  static const double fontS = 12.0;
+  static const double fontM = 14.0;
+  static const double fontL = 16.0;
+  static const double fontXl = 20.0;
+  static const double fontXxl = 24.0;
+
+  // Container sizes for action cards/buttons
+  static const double containerS = 48.0;
+  static const double containerM = 56.0;
+  static const double containerL = 64.0;
+
+  // Opacity values
+  static const double opacityLight = 0.1;
+  static const double opacityMedium = 0.3;
+  static const double opacityHeavy = 0.7;
 }
 
 // =============================================================================
@@ -351,13 +377,21 @@ class StatCard extends StatelessWidget {
 
     return Card(
       elevation: AppDesignTokens.elevation2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppDesignTokens.radiusM),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppDesignTokens.radiusM),
         child: Padding(
           padding: const EdgeInsets.all(AppDesignTokens.spacingM),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(icon, color: cardColor, size: 32),
               const SizedBox(height: AppDesignTokens.spacingS),
@@ -367,6 +401,7 @@ class StatCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       color: cardColor,
                     ),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppDesignTokens.spacingXs),
               Text(
