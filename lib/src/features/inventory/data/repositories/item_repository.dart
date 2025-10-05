@@ -47,4 +47,65 @@ abstract class ItemRepository {
 
   // Add other specific methods like search, batch updates, etc.
   // Future<double> calculateItemProfit(String itemId); // Example for business logic
+  
+  // ============================================================================
+  // ANALYTICS METHODS
+  // ============================================================================
+  
+  /// Gets aggregated financial summary for analytics dashboard
+  /// Returns metrics like total inventory value, revenue, profit, etc.
+  /// 
+  /// [startDate] and [endDate] filter by created_at timestamp
+  /// Returns Map with keys: inventory_value, potential_revenue, actual_revenue, 
+  /// total_profit, in_stock_count, listed_count, sold_count, avg_profit, avg_margin
+  Future<Result<Map<String, dynamic>>> getFinancialSummary({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+  
+  /// Gets time series data for charts (revenue, cost, profit over time)
+  /// 
+  /// [resolution] determines grouping: 'day', 'week', 'month', 'year'
+  /// Returns list of maps with keys: date, revenue, cost, profit, items_sold
+  Future<Result<List<Map<String, dynamic>>>> getTimeSeries({
+    required String resolution, // 'day', 'week', 'month', 'year'
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+  
+  /// Gets performance metrics by pallet source (Amazon, Walmart, etc.)
+  /// 
+  /// Returns list of maps with keys: source, total_pallets, total_cost, 
+  /// total_revenue, profit, roi
+  Future<Result<List<Map<String, dynamic>>>> getPalletSourcePerformance({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+  
+  /// Gets performance metrics by sales channel (Marketplace, Facebook Group, etc.)
+  /// 
+  /// Returns map keyed by channel name with values: items_sold, revenue, 
+  /// avg_price, avg_time_to_sell
+  Future<Result<Map<String, Map<String, dynamic>>>> getSalesChannelPerformance({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+  
+  /// Gets the best performing item for a given metric
+  /// 
+  /// [metric] can be: 'revenue', 'profit', 'speed', 'margin'
+  /// Returns single item or null if no sold items exist
+  Future<Result<Item?>> getBestPerformer({
+    required String metric,
+    DateTime? startDate,
+    DateTime? endDate,
+  });
+  
+  /// Gets the best day for sales
+  /// 
+  /// Returns map with keys: date, profit, items_sold, revenue
+  Future<Result<Map<String, dynamic>?>> getBestDay({
+    DateTime? startDate,
+    DateTime? endDate,
+  });
 } 
