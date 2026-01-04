@@ -159,11 +159,16 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   /// Builds the horizontal filter chip bar.
   Widget _buildFilterChips() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: context.spacingMd,
         vertical: context.spacingSm,
       ),
+      // Add a subtle background that complements the app bar
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -191,7 +196,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                               ? 'archived'
                               : 'unknown',
                 ).withValues(alpha: 0.2),
-                checkmarkColor: Theme.of(context).colorScheme.primary,
+                checkmarkColor: colorScheme.primary,
               ),
             );
           }).toList(),
@@ -244,8 +249,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             title: 'No Pallets Yet',
             message:
                 'Add your first pallet to get started tracking your profit.',
-            buttonText: 'Add Pallet',
-            onPressed: () => _showAddDialog(false),
+            // FAB handles the add action, no button needed here
           );
         }
 
@@ -357,8 +361,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             icon: AppIcons.item,
             title: 'No Items Yet',
             message: 'Add items to your pallets to track individual sales.',
-            buttonText: 'Add Item',
-            onPressed: () => _showAddDialog(true),
+            // FAB handles the add action, no button needed here
           );
         }
 
@@ -438,8 +441,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     required IconData icon,
     required String title,
     required String message,
-    required String buttonText,
-    required VoidCallback onPressed,
+    String? buttonText,
+    VoidCallback? onPressed,
   }) {
     return Center(
       child: Padding(
@@ -460,12 +463,17 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               style: context.bodyMedium,
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: context.spacingLg),
-            ElevatedButton.icon(
-              onPressed: onPressed,
-              icon: const Icon(Icons.add),
-              label: Text(buttonText),
-            ),
+            // Only show button if provided (don't show when FAB handles the action)
+            if (buttonText != null && onPressed != null) ...[
+              SizedBox(height: context.spacingLg),
+              ElevatedButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.add),
+                label: Text(buttonText),
+              ),
+            ] else
+              // Add spacing at bottom to account for FAB
+              SizedBox(height: context.spacingXl * 2),
           ],
         ),
       ),
