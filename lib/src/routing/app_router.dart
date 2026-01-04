@@ -1208,31 +1208,9 @@ class AppShell extends ConsumerWidget {
           }
         },
         child: Scaffold(
-          // Use Builder to get context below the Scaffold for sign-out SnackBar etc.
-          body: Builder(
-            builder: (scaffoldBodyContext) {
-              // The AppBar no longer needs Settings/Logout actions.
-              return Column(
-                children: [
-                  AppBar(
-                    title: const Text('Pallet Pro'),
-                    // No back button automatically if it's a top-level route in Shell
-                    // No leading hamburger icon needed for BottomNav
-                    actions: const [
-                      // Remove Sign Out button from mobile layout AppBar
-                      // IconButton(
-                      //   icon: const Icon(Icons.logout),
-                      //   tooltip: 'Sign Out',
-                      //   // Use scaffoldBodyContext for ScaffoldMessenger access within _signOut
-                      //   onPressed: () => _signOut(scaffoldBodyContext, ref),
-                      // ),
-                    ],
-                  ),
-                  Expanded(child: child), // Main content takes remaining space
-                ],
-              );
-            },
-          ),
+          // Let child screens provide their own AppBar
+          // This prevents the double header issue (AppShell + Screen AppBar)
+          body: child,
           // Updated BottomNavigationBar
           bottomNavigationBar: BottomNavigationBar(
             // Set type to fixed when there are more items to prevent shifting

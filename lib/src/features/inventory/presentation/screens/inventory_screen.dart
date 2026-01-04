@@ -6,7 +6,6 @@ import 'package:flutter/services.dart'; // For haptic feedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pallet_pro_app/src/core/theme/app_icons.dart';
-import 'package:pallet_pro_app/src/core/theme/status_colors.dart';
 import 'package:pallet_pro_app/src/core/theme/theme_extensions.dart';
 import 'package:pallet_pro_app/src/core/utils/responsive_utils.dart';
 import 'package:pallet_pro_app/src/features/inventory/data/models/item.dart';
@@ -68,33 +67,33 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     // Determine if we should use drawer layout (same logic as AppShell)
     final bool useDrawerLayout =
         kIsWeb || !Platform.isIOS && !Platform.isAndroid;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: _isSearching
             ? TextField(
                 controller: _searchController,
-                decoration: const InputDecoration(
+                style: TextStyle(color: colorScheme.onPrimary),
+                decoration: InputDecoration(
                   hintText: 'Search inventory...',
+                  hintStyle: TextStyle(
+                    color: colorScheme.onPrimary.withValues(alpha: 0.7),
+                  ),
                   border: InputBorder.none,
                 ),
                 autofocus: true,
                 onChanged: (value) {
-                  // TODO: Implement search functionality
                   setState(() {});
                 },
               )
             : const Text('Inventory'),
         actions: [
-          IconButton(
-            icon: const Icon(AppIcons.scan),
-            tooltip: 'Scan/Add Item',
-            onPressed: () {
-              context.go('/scan');
-            },
-          ),
+          // Single search button - cleaner look
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
+            tooltip: _isSearching ? 'Close' : 'Search',
             onPressed: () {
               setState(() {
                 _isSearching = !_isSearching;
@@ -104,104 +103,85 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               });
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () {
-              // TODO: Show filter options
-            },
-          ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Theme.of(context).appBarTheme.foregroundColor,
-          unselectedLabelColor: Theme.of(
-            context,
-          ).appBarTheme.foregroundColor?.withValues(alpha: 0.7),
-          indicatorColor: Theme.of(context).appBarTheme.foregroundColor,
-          tabs: const [
-            Tab(text: 'Pallets'),
-            Tab(text: 'Items'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(96), // TabBar + Filter chips
+          child: Column(
+            children: [
+              // TabBar
+              TabBar(
+                controller: _tabController,
+                labelColor: theme.appBarTheme.foregroundColor,
+                unselectedLabelColor: theme.appBarTheme.foregroundColor
+                    ?.withValues(alpha: 0.7),
+                indicatorColor: theme.appBarTheme.foregroundColor,
+                tabs: const [
+                  Tab(text: 'Pallets'),
+                  Tab(text: 'Items'),
+                ],
+              ),
+              // Filter chips integrated into app bar area
+              Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: ItemFilter.values.map((filter) {
+                      final isSelected = _selectedFilter == filter;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          label: Text(
+                            filter.label,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? colorScheme.onPrimary
+                                  : colorScheme.onPrimary.withValues(alpha: 0.8),
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            HapticFeedback.selectionClick();
+                            setState(() {
+                              _selectedFilter = filter;
+                            });
+                          },
+                          backgroundColor: colorScheme.primary.withValues(alpha: 0.3),
+                          selectedColor: colorScheme.primaryContainer,
+                          checkmarkColor: colorScheme.onPrimaryContainer,
+                          side: BorderSide.none,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          // Filter chips row (per UI/UX Guidelines Section 15)
-          _buildFilterChips(),
-          // Tab content
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                // Pallets tab
-                _buildPalletsTab(),
-                // Items tab
-                _buildItemsTab(),
-              ],
-            ),
-          ),
+          _buildPalletsTab(),
+          _buildItemsTab(),
         ],
       ),
-      // Extended FAB (per UI/UX Guidelines Section 15)
+      // Extended FAB
       floatingActionButton: useDrawerLayout
-          ? null // Don't show FAB on web/desktop
+          ? null
           : FloatingActionButton.extended(
               onPressed: () {
-                // Show dialog to add new pallet or item based on current tab
                 final isItemsTab = _tabController.index == 1;
                 _showAddDialog(isItemsTab);
               },
               icon: const Icon(Icons.add),
               label: Text(_tabController.index == 1 ? 'Add Item' : 'Add Pallet'),
             ),
-    );
-  }
-
-  /// Builds the horizontal filter chip bar.
-  Widget _buildFilterChips() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.spacingMd,
-        vertical: context.spacingSm,
-      ),
-      // Add a subtle background that complements the app bar
-      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: ItemFilter.values.map((filter) {
-            final isSelected = _selectedFilter == filter;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilterChip(
-                key: ValueKey('filter_${filter.name}'),
-                label: Text(filter.label),
-                selected: isSelected,
-                onSelected: (selected) {
-                  // Haptic feedback on selection (per UI/UX Guidelines)
-                  HapticFeedback.selectionClick();
-                  setState(() {
-                    _selectedFilter = filter;
-                  });
-                },
-                selectedColor: StatusColors.forItemStatus(
-                  filter == ItemFilter.forSale
-                      ? 'for_sale'
-                      : filter == ItemFilter.sold
-                          ? 'sold'
-                          : filter == ItemFilter.archived
-                              ? 'archived'
-                              : 'unknown',
-                ).withValues(alpha: 0.2),
-                checkmarkColor: colorScheme.primary,
-              ),
-            );
-          }).toList(),
-        ),
-      ),
     );
   }
 
@@ -444,35 +424,69 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     String? buttonText,
     VoidCallback? onPressed,
   }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(context.spacingLg),
+        padding: EdgeInsets.all(context.spacingXl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 80, color: Colors.grey),
-            SizedBox(height: context.spacingMd),
+            // More visually appealing icon with gradient background
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    colorScheme.primaryContainer.withValues(alpha: 0.6),
+                    colorScheme.secondaryContainer.withValues(alpha: 0.4),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(60),
+              ),
+              child: Icon(
+                icon,
+                size: 56,
+                color: colorScheme.primary,
+              ),
+            ),
+            SizedBox(height: context.spacingLg),
             Text(
               title,
-              style: context.headlineSmall,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurface,
+              ),
               textAlign: TextAlign.center,
             ),
             SizedBox(height: context.spacingSm),
             Text(
               message,
-              style: context.bodyMedium,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
             ),
-            // Only show button if provided (don't show when FAB handles the action)
+            // Only show button if provided
             if (buttonText != null && onPressed != null) ...[
               SizedBox(height: context.spacingLg),
-              ElevatedButton.icon(
+              FilledButton.icon(
                 onPressed: onPressed,
-                icon: const Icon(Icons.add),
+                icon: const Icon(Icons.add_rounded),
                 label: Text(buttonText),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                ),
               ),
             ] else
-              // Add spacing at bottom to account for FAB
+              // Space for FAB
               SizedBox(height: context.spacingXl * 2),
           ],
         ),
