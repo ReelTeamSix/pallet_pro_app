@@ -17,11 +17,12 @@ import 'package:pallet_pro_app/src/global/widgets/item_card.dart';
 import 'package:pallet_pro_app/src/global/widgets/pallet_card.dart';
 
 /// Filter options for inventory items.
+/// Note: ItemStatus has forSale, sold, archived - no 'inStock' value.
 enum ItemFilter {
   all('All'),
-  inStock('In Stock'),
-  listed('Listed'),
-  sold('Sold');
+  forSale('For Sale'),
+  sold('Sold'),
+  archived('Archived');
 
   const ItemFilter(this.label);
   final String label;
@@ -182,12 +183,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   });
                 },
                 selectedColor: StatusColors.forItemStatus(
-                  filter == ItemFilter.inStock
-                      ? 'in_stock'
-                      : filter == ItemFilter.listed
-                          ? 'listed'
-                          : filter == ItemFilter.sold
-                              ? 'sold'
+                  filter == ItemFilter.forSale
+                      ? 'for_sale'
+                      : filter == ItemFilter.sold
+                          ? 'sold'
+                          : filter == ItemFilter.archived
+                              ? 'archived'
                               : 'unknown',
                 ).withValues(alpha: 0.2),
                 checkmarkColor: Theme.of(context).colorScheme.primary,
@@ -299,12 +300,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         if (_selectedFilter != ItemFilter.all) {
           filteredItems = items.where((item) {
             switch (_selectedFilter) {
-              case ItemFilter.inStock:
-                return item.status == ItemStatus.inStock;
-              case ItemFilter.listed:
+              case ItemFilter.forSale:
                 return item.status == ItemStatus.forSale;
               case ItemFilter.sold:
                 return item.status == ItemStatus.sold;
+              case ItemFilter.archived:
+                return item.status == ItemStatus.archived;
               case ItemFilter.all:
                 return true;
             }
