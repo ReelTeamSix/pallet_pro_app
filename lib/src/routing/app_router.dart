@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // For SystemNavigator
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pallet_pro_app/src/core/exceptions/app_exceptions.dart';
@@ -1187,23 +1188,37 @@ class AppShell extends ConsumerWidget {
         onPopInvokedWithResult: (bool didPop, dynamic result) {
           if (didPop) return;
           
-          // Check if we're on a main tab (not a nested route)
-          final isMainTab = currentLocation == '/home' ||
-              currentLocation == '/inventory' ||
+          // Check if we're on the dashboard/home
+          final isOnDashboard = currentLocation == '/home';
+          
+          // Check if we're on another main tab (not nested route)
+          final isOtherMainTab = currentLocation == '/inventory' ||
               currentLocation == '/sales' ||
               currentLocation == '/analytics' ||
               currentLocation == '/settings';
           
-          if (isMainTab) {
-            // Show a message that back again will exit
+          if (isOnDashboard) {
+            // On dashboard - show exit confirmation or exit on double tap
+            // Use a simple approach: show snackbar with action
+            ScaffoldMessenger.of(context).clearSnackBars();
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Press back again to exit'),
-                duration: Duration(seconds: 2),
+              SnackBar(
+                content: const Text('Press back again to exit'),
+                duration: const Duration(seconds: 2),
+                action: SnackBarAction(
+                  label: 'EXIT',
+                  onPressed: () {
+                    // This will allow the app to close
+                    SystemNavigator.pop();
+                  },
+                ),
               ),
             );
+          } else if (isOtherMainTab) {
+            // On another main tab - navigate to dashboard first
+            GoRouter.of(context).go('/home');
           } else {
-            // Allow navigation back within the app
+            // On a nested route - pop back normally
             GoRouter.of(context).pop();
           }
         },
