@@ -1261,30 +1261,55 @@ class SplashScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final from = GoRouterState.of(context).uri.queryParameters['from'];
     final isError = from == 'settings_error';
-
+    final colorScheme = Theme.of(context).colorScheme;
+    
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface),
+        decoration: BoxDecoration(color: colorScheme.surface),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // App logo or icon could go here
-              Icon(
-                isError ? Icons.error_outline : Icons.inventory_2_outlined,
-                size: 80,
-                color: isError 
-                    ? Theme.of(context).colorScheme.error 
-                    : Theme.of(context).colorScheme.primary,
-              ),
+              // Modern logo with gradient background
+              if (isError)
+                Icon(
+                  Icons.error_outline,
+                  size: 80,
+                  color: colorScheme.error,
+                )
+              else
+                Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        colorScheme.primaryContainer.withValues(alpha: 0.6),
+                        colorScheme.secondaryContainer.withValues(alpha: 0.3),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(60),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Image.asset(
+                      'assets/images/pallet_icon.png',
+                      fit: BoxFit.contain,
+                      colorBlendMode: BlendMode.srcIn,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 32),
               Text(
                 isError ? 'Settings Error' : 'Pallet Pro',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: isError ? Theme.of(context).colorScheme.error : null,
+                  color: isError ? colorScheme.error : colorScheme.primary,
                 ),
               ),
               const SizedBox(height: 16),

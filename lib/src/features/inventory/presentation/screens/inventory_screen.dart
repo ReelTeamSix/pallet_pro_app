@@ -225,7 +225,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             );
           }
           return _buildEmptyState(
-            icon: AppIcons.pallet,
+            imagePath: 'assets/images/pallet_icon.png',
             title: 'No Pallets Yet',
             message:
                 'Add your first pallet to get started tracking your profit.',
@@ -418,7 +418,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   }
 
   Widget _buildEmptyState({
-    required IconData icon,
+    IconData? icon,
+    String? imagePath,
     required String title,
     required String message,
     String? buttonText,
@@ -427,33 +428,65 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     
+    // Build the icon/image widget
+    Widget iconWidget;
+    if (imagePath != null) {
+      // Use custom image
+      iconWidget = Container(
+        width: 140,
+        height: 140,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              colorScheme.primaryContainer.withValues(alpha: 0.4),
+              colorScheme.secondaryContainer.withValues(alpha: 0.2),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(70),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Image.asset(
+            imagePath,
+            fit: BoxFit.contain,
+            colorBlendMode: BlendMode.srcIn,
+            color: colorScheme.primary,
+          ),
+        ),
+      );
+    } else {
+      // Use icon with gradient background
+      iconWidget = Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              colorScheme.primaryContainer.withValues(alpha: 0.6),
+              colorScheme.secondaryContainer.withValues(alpha: 0.4),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(60),
+        ),
+        child: Icon(
+          icon ?? Icons.inventory_2_outlined,
+          size: 56,
+          color: colorScheme.primary,
+        ),
+      );
+    }
+    
     return Center(
       child: Padding(
         padding: EdgeInsets.all(context.spacingXl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // More visually appealing icon with gradient background
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    colorScheme.primaryContainer.withValues(alpha: 0.6),
-                    colorScheme.secondaryContainer.withValues(alpha: 0.4),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(60),
-              ),
-              child: Icon(
-                icon,
-                size: 56,
-                color: colorScheme.primary,
-              ),
-            ),
+            iconWidget,
             SizedBox(height: context.spacingLg),
             Text(
               title,
