@@ -1,23 +1,24 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:pallet_pro_app/src/core/theme/app_theme.dart';
-import 'package:pallet_pro_app/src/routing/app_router.dart';
 import 'package:pallet_pro_app/src/features/settings/presentation/providers/user_settings_controller.dart';
+import 'package:pallet_pro_app/src/routing/app_router.dart';
 
-// Renamed provider and changed to derive state from userSettingsControllerProvider
+// Cache the last known theme mode to prevent flicker during logout
+final _cachedThemeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
+
+// Provider that derives theme from settings but caches the last value
 final themeModeProvider = Provider<ThemeMode>((ref) {
   // Watch the settings controller's AsyncValue state
   final settingsAsyncValue = ref.watch(userSettingsControllerProvider);
 
-  // Default to system theme if settings are loading, error, or null
   final settings = settingsAsyncValue.valueOrNull;
-  ThemeMode currentThemeMode = ThemeMode.system; // Default
-
+  
+  // If settings are available, calculate and cache the theme mode
   if (settings != null) {
+    ThemeMode currentThemeMode;
     switch (settings.theme) {
       case 'dark':
         currentThemeMode = ThemeMode.dark;
@@ -30,10 +31,19 @@ final themeModeProvider = Provider<ThemeMode>((ref) {
         currentThemeMode = ThemeMode.system;
         break;
     }
+    
+    // Update the cache with the current theme
+    // Use Future.microtask to avoid modifying providers during build
+    Future.microtask(() {
+      ref.read(_cachedThemeModeProvider.notifier).state = currentThemeMode;
+    });
+    
+    return currentThemeMode;
   }
   
-  // Return the calculated theme mode
-  return currentThemeMode;
+  // If settings are null (logged out or loading), return cached theme
+  // This prevents flicker when user logs out
+  return ref.read(_cachedThemeModeProvider);
 });
 
 /// The main application widget.
@@ -47,27 +57,27 @@ class App extends ConsumerStatefulWidget {
 
 class _AppState extends ConsumerState<App> {
   Timer? _splashSafetyTimer;
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     // Additional safety measure - if we're stuck on splash for too long, force navigation
     // This timer logic is largely handled within the RouterNotifier now.
     // Consider removing this if redundant.
     // if (kIsWeb) {
     //   _splashSafetyTimer = Timer(const Duration(seconds: 4), () {
     //     debugPrint('App: Splash safety timer expired, forcing navigation to login');
-    //     
+    //
     //     // Get router and attempt to go to login directly
     //     final router = ref.read(routerProvider);
-    //     
+    //
     //     // The redirect logic in RouterNotifier should handle splash timeouts.
     //     // router.go('/login?from=app_safety_timer'); // Example direct navigation
     //   });
     // }
   }
-  
+
   @override
   void dispose() {
     _splashSafetyTimer?.cancel();

@@ -122,12 +122,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Reset the prepared state if login fails
       ref.read(routerNotifierProvider.notifier).resetPostAuthTarget();
       if (mounted) {
+        final errorMsg = e is AppException
+            ? e.message
+            : 'Failed to sign in. Please check your credentials.';
+        
         setState(() {
           _isLoading = false;
-          _errorMessage = e is AppException
-              ? e.message
-              : 'Failed to sign in: $e';
+          _errorMessage = errorMsg;
         });
+        
+        // Also show a snackbar to ensure visibility
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     } finally {
       if (mounted && _isLoading) {

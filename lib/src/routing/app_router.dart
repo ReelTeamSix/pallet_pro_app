@@ -1297,7 +1297,9 @@ class SplashScreen extends ConsumerWidget {
               Icon(
                 isError ? Icons.error_outline : Icons.inventory_2_outlined,
                 size: 80,
-                color: isError ? Theme.of(context).colorScheme.error : Colors.blue,
+                color: isError 
+                    ? Theme.of(context).colorScheme.error 
+                    : Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(height: 32),
               Text(
